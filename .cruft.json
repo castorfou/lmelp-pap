@@ -1,0 +1,18 @@
+{
+  "template": "https://github.com/castorfou/PyFoundry.git",
+  "commit": "8e6f97d895f270f5d77fd9562ec0e22e0f5a3776",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "lmelp pap",
+      "project_slug": "lmelp-pap",
+      "description": "Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)",
+      "python_version": "3.12",
+      "github_username": "castorfou",
+      "use_node": "y",
+      "_template": "https://github.com/castorfou/PyFoundry.git",
+      "_commit": "8e6f97d895f270f5d77fd9562ec0e22e0f5a3776"
+    }
+  },
+  "directory": null
+}

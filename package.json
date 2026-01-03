@@ -1,0 +1,13 @@
+{
+  "name": "lmelp-pap",
+  "version": "1.0.0",
+  "description": "Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)",
+  "scripts": {
+    "dev": "echo 'Add your development scripts here'",
+    "build": "echo 'Add your build scripts here'"
+  },
+  "keywords": ["data-science", "python", "node"],
+  "author": "castorfou",
+  "license": "MIT",
+  "devDependencies": {}
+}
