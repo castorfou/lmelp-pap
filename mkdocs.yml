@@ -1,5 +1,5 @@
 site_name: lmelp pap
-site_description: Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)
+site_description: Le Masque & La Plume - Projet d'Archivage Patrimonial (1955-2016)
 site_url: https://castorfou.github.io/lmelp-pap
 use_directory_urls: true
 
@@ -62,6 +62,7 @@ plugins:
   - git-revision-date-localized:
       enable_creation_date: true
       type: timeago
+  - include-markdown
 
 extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
