@@ -213,3 +213,49 @@ query = 'intitle:"index of" "Masque et la Plume" 1984 mp3'
 Souhaitez-vous que je vous aide à **structurer le schéma de données (SQL ou JSON)** pour votre Master Index, ou que je commence par **rechercher les scripts/outils existants** qui ont déjà tenté de scraper les archives de France Inter avant 2016 ?
 
 > peux-tu commence par rechercher les scripts/outils existants qui ont déjà tenté de scraper les archives de France Inter avant 2016 ?
+
+En tant que data scientist, vous savez que la difficulté d'un tel projet réside dans la **volatilité des architectures web** et l'obsolescence des flux RSS. Mes recherches confirment qu'il n'existe pas un outil "clef en main" unique pour le *Masque et la Plume* historique, mais plusieurs briques logicielles que vous pouvez agréger dans votre projet GitHub.
+
+Voici l'état de l'art technique pour votre collecte :
+
+### 1. Les Extracteurs de Métadonnées (Master Index)
+
+Pour constituer votre base de données, deux outils se distinguent :
+
+* **ahasverus/radiofrance (R package) :** C'est sans doute l'outil le plus robuste pour extraire les métadonnées historiques. Il est capable de crawler les APIs de Radio France pour récupérer dates, titres et durées. Même si vous travaillez en Python, sa logique de requête peut être portée ou utilisée via `rpy2`.
+* **Les notices INA (BeautifulSoup/Selenium) :** Le site `ina.fr` contient des notices documentaires textuelles pour presque chaque émission. Un scraper ciblant la collection "Le Masque et la Plume" avec un filtre sur le genre "Critique littéraire" permettrait de générer votre "vérité terrain" (Ground Truth).
+
+### 2. L'acquisition Audio (Phonothèque)
+
+Pour le téléchargement automatisé, deux pistes sérieuses émergent :
+
+* **yt-dlp (Extractor `radiofrance.py`) :** Contrairement à ce qu'on pourrait penser, `yt-dlp` n'est pas limité à YouTube. Il possède un extracteur dédié à Radio France qui gère les URLs modernes mais aussi certaines structures plus anciennes (`maison.radiofrance.fr`).
+* *Note technique :* L'ancien format d'URL était souvent du type `radiofrance-podcast.net/podcast09/rss_[ID].xml`.
+
+
+* **Wayback Machine CDX API :** Pour les fichiers audio qui ont disparu des serveurs de Radio France mais qui ont été indexés, vous pouvez utiliser l'API CDX d'Internet Archive pour l'URL `http://radiofrance-podcast.net/podcast09/*`. Cela permet de retrouver des liens directs vers des fichiers `.mp3` encore hébergés sur les serveurs de sauvegarde de l'Archive.
+
+### 3. Anatomie des anciennes URLs (Pour vos regex)
+
+Avant 2016, les URLs suivaient généralement ce pattern qu'il faudra intégrer à vos scripts de découverte :
+
+* **Web :** `franceinter.fr/emission-le-masque-et-la-plume-[titre-ou-date]`
+* **Audio (RSS) :** `radiofrance-podcast.net/podcast09/rss_10006.xml` (Le code `10006` était historiquement lié au Masque).
+
+### Structure suggérée pour votre dossier `/scripts` :
+
+1. `discovery_cdx.py` : Utilise l'API Internet Archive pour lister tous les snapshots de fichiers MP3 liés au flux RSS 10006.
+2. `metadata_ina_scraper.py` : Aspire les métadonnées textuelles pour créer le mapping `Date <-> Œuvres`.
+3. `downloader_manager.py` : Wrapper autour de `yt-dlp` pour gérer les reprises en cas de coupure.
+
+---
+
+### Une ressource visuelle pour votre projet
+
+Cette vidéo explique comment utiliser `yt-dlp` pour archiver des contenus radio et podcasts, ce qui est directement applicable à votre module de téléchargement.
+
+[Maîtriser yt-dlp pour l'archivage radio](https://www.youtube.com/watch?v=Ea30AUHuegE)
+
+Cette ressource est pertinente car elle détaille les options de ligne de commande nécessaires pour extraire uniquement l'audio et gérer les métadonnées (tagging ID3) de manière automatisée, une étape cruciale pour votre artefact de "Phonothèque".
+
+**Souhaitez-vous que je vous aide à rédiger le script Python de base pour interroger l'API CDX d'Internet Archive sur ces anciennes URLs ?**
