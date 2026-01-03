@@ -8,6 +8,16 @@ Cette page détaille la stack technique utilisée pour la documentation du proje
 *   **Exemple** : Commande `mkdocs serve` pour visualiser le site en local avec rechargement automatique.
 *   **Documentation** : [https://www.mkdocs.org/](https://www.mkdocs.org/)
 
+Lancement
+```bash
+mkdocs serve
+```
+
+Lancement sur port 8001
+```bash
+mkdocs serve -a localhost:8001
+```
+
 ## MkDocs Material
 
 *   **Usage** : Thème de référence pour MkDocs. Il offre un design moderne (Material Design), responsive, et de nombreuses fonctionnalités natives (recherche instantanée, mode sombre, etc.).

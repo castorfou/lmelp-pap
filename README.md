@@ -1,6 +1,6 @@
 # lmelp pap
 
-Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)
+Le Masque & La Plume : **Projet d'Archivage Patrimonial (1955-2016)**
 
 
 ## 📝 Présentation du projet
