@@ -41,8 +41,13 @@ Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)
 ## Environnement de Développement
 
 ### Prérequis
-- VS Code avec l'extension Dev Containers
 - Docker
+- VS Code avec extensions:
+  - Dev Containers
+  - Python (ms-python.python)
+  - Jupyter (ms-toolsai.jupyter)
+  - Copilot Chat
+  - Ruff formatter
 
 ### Installation
 1. Ouvrir le projet dans VS Code
@@ -53,14 +58,17 @@ Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)
 Les dépendances sont gérées via `uv` et définies dans `pyproject.toml`:
 
 ```bash
-# Installer/synchroniser les dépendances
-uv pip sync
+# Sync des dépendances
+uv sync --active --all-extras
 
-# Ajouter une nouvelle dépendance
-uv add package-name
+# Tests
+uv run --active pytest
 
-# Ajouter une dépendance de développement
-uv add --dev package-name
+# Documentation
+uv run --active mkdocs build --strict
+
+# Precommit
+pre-commit run --all-files
 ```
 
 ## Qualité du Code

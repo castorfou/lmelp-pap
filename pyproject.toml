@@ -20,7 +20,7 @@ classifiers = [
 
 dependencies = [
     "ipykernel",
-    "ipywidgets", 
+    "ipywidgets",
     "python-dotenv",
     "gitpython",
     "pandas",
@@ -41,8 +41,10 @@ dev = [
     "click==8.2.1", # https://github.com/mkdocs/mkdocs/issues/4032
     "mkdocstrings[python]",
     "mkdocs-include-markdown-plugin",
-    "mkdocs-awesome-pages-plugin",
-    "pymdown-extensions"
+    "mkdocs-awesome-nav",
+    "pymdown-extensions",
+    "mkdocs-rtd-dropdown",
+    "nbdev>=2.4.6"
 ]
 
 [project.urls]
@@ -102,7 +104,7 @@ line-length = 88
 # Fichiers à exclure
 extend-exclude = [
     "data/*",
-    "models/*", 
+    "models/*",
     "logs/*",
     ".jupyter/*",
 ]
@@ -139,6 +141,12 @@ classmethod-decorators = ["classmethod", "pydantic.validator"]
 python_version = "3.12"
 platform = "linux"
 
+# Chemins à analyser : exclure src/ car déjà dans sys.path via editable install
+files = ["tests"]
+
+# Ne pas chercher de namespace packages pour éviter la détection en double
+namespace_packages = false
+
 # Niveau de vérification
 warn_return_any = true
 warn_unused_configs = true
@@ -149,7 +157,7 @@ warn_unreachable = true
 
 # Configuration stricte progressive
 disallow_any_generics = false        # Autorisé au début
-disallow_untyped_calls = false       # Autorisé au début  
+disallow_untyped_calls = false       # Autorisé au début
 disallow_untyped_defs = false        # Autorisé au début
 disallow_incomplete_defs = true      # Fonctions partiellement typées interdites
 disallow_untyped_decorators = false  # Autorisé au début
@@ -164,7 +172,7 @@ follow_imports = "normal"
 [[tool.mypy.overrides]]
 module = [
     "matplotlib.*",
-    "seaborn.*", 
+    "seaborn.*",
     "sklearn.*",
     "scipy.*",
     "plotly.*",
@@ -177,6 +185,14 @@ module = "notebooks.*"
 ignore_errors = true
 
 # Configuration tests
-[[tool.mypy.overrides]] 
-module = "tests.*"
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+    "pytest",
+]
+ignore_missing_imports = true
 disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+pythonpath = "."
+testpaths = ["tests"]

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# PyFoundry - Configuration de l'environnement de développement
+# lmelp pap - Configuration de l'environnement de développement
 # =============================================================================
 set -e
 
@@ -15,7 +15,16 @@ update_system() {
     export DEBIAN_FRONTEND=noninteractive
     # Empêcher tzdata de poser des questions et utiliser la timezone UTC par défaut
     export TZ="Etc/UTC"
-    ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime 2>/dev/null || true
+
+    echo "Configuration de la source APT Yarn..."
+    sudo mkdir -p /etc/apt/keyrings
+    if [ ! -f /etc/apt/keyrings/yarn.gpg ]; then
+        echo "Installation de la clé GPG Yarn..."
+        curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg \
+            | sudo gpg --dearmor -o /etc/apt/keyrings/yarn.gpg
+    fi
+    echo "deb [signed-by=/etc/apt/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian stable main" \
+        | sudo tee /etc/apt/sources.list.d/yarn.list > /dev/null
 
     sudo apt-get update -qq
 
@@ -29,6 +38,19 @@ update_system() {
     echo "Système mis à jour"
 }
 
+# outil pour ajouter une ligne dans .zshrc si elle n'existe pas déjà
+ensure_zshrc_line() {
+    local line="$1"
+    local zshrc="$HOME/.zshrc"
+    if [ ! -f "$zshrc" ]; then
+        touch "$zshrc"
+    fi
+    if ! grep -Fxq "$line" "$zshrc" 2>/dev/null; then
+        echo "$line" >> "$zshrc"
+    fi
+}
+
+
 # Vérification et installation d'uv (priorité: devcontainer feature, fallback: installation manuelle)
 ensure_uv() {
     echo "Vérification de uv..."
@@ -36,7 +58,7 @@ ensure_uv() {
         echo "✅ uv disponible ($(uv --version))"
         return 0
     fi
-    
+
     echo "❌ Échec d'installation d'uv"
     echo "   Vérifiez votre connexion Docker/ghcr.io (docker login ghcr.io)"
     exit 1
@@ -46,42 +68,34 @@ ensure_uv() {
 create_python_environment() {
     echo "Configuration de l'environnement Python $PYTHON_VERSION ..."
 
-    echo "Création de l'environnement virtuel..."
-    uv venv .venv --python $PYTHON_VERSION
-    
-    source .venv/bin/activate
-    echo "Installation des dépendances..."
-    uv pip install -e .
-    
-    if [[ -f "pyproject.toml" ]] && grep -q "\[project.optional-dependencies\]" pyproject.toml; then
-        echo "Installation des dépendances de développement..."
-        uv pip install -e ".[dev]"
+    echo "Création de l'environnement virtuel dans /home/vscode/.venv"
+    VENV_HOME="/home/vscode/.venv"
+    if [ -d "$VENV_HOME" ]; then
+        echo "Un venv existe déjà à $VENV_HOME, je l'utilise."
+    else
+        uv venv "$VENV_HOME" --python $PYTHON_VERSION
     fi
-    
-    echo "Génération du fichier de verrouillage..."
-    uv pip freeze > requirements.lock
-    
-    echo "Configuration de l'activation automatique..."
-    PROJECT_PATH=$(pwd)
-    for shell_config in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        if [[ -f "$shell_config" ]] && ! grep -q "source $PROJECT_PATH/.venv/bin/activate" "$shell_config"; then
-            echo "source $PROJECT_PATH/.venv/bin/activate" >> "$shell_config"
-        fi
-    done
-    
+
+    # Activer l'environnement créé dans $HOME/.venv
+    source "$VENV_HOME/bin/activate"
+    echo "Installation des dépendances..."
+    # Utiliser --active pour cibler l'environnement virtuel activé (hors du dossier projet)
+    uv sync --active --all-extras
+
     echo "Environnement Python configuré"
+
 }
 
 
 # Configuration Node.js et npm
 setup_node() {
     echo "Configuration Node.js..."
-    
+
     # Vérification de l'installation de Node.js
     if command -v node &> /dev/null; then
         echo "✅ Node.js disponible ($(node --version))"
         echo "✅ npm disponible ($(npm --version))"
-        
+
         # Création d'un package.json basique s'il n'existe pas
         if [ ! -f "package.json" ]; then
             echo "Création du fichier package.json..."
@@ -102,7 +116,7 @@ setup_node() {
 EOF
             echo "✅ package.json créé"
         fi
-        
+
         echo "Configuration npm terminée"
     else
         echo "⚠️  Node.js non disponible - vérifiez la configuration devcontainer"
@@ -110,25 +124,32 @@ EOF
 }
 
 
-# Configuration Git et GitHub
+# Configuration Git
 setup_git() {
     echo "Configuration Git..."
-    
-    # Initialisation du dépôt si pas encore fait
     if [ ! -d ".git" ]; then
         echo "Initialisation du dépôt Git..."
-        git init --initial-branch=main
-        
-        # Création du commit initial
-        echo "Création du commit initial..."
-        git add .
-        git commit -m "Initial commit: PyFoundry project setup
+        git init
+        git branch -M main
 
-Project: lmelp pap
-Template: PyFoundry v0.3
-Features: ruff, mypy, pre-commit hooks"
+        # Configuration de l'utilisateur si non défini (pour éviter l'échec du commit)
+        if [ -z "$(git config --global user.email)" ]; then
+            echo "Configuration d'un utilisateur Git par défaut..."
+            git config user.email "default@michelin.com"
+            git config user.name "Default User"
+        fi
+
+        git add .
+        git commit -m "Initial commit"
+        echo "✅ Dépôt Git initialisé et premier commit effectué"
+    else
+        echo "Dépôt Git déjà existant"
     fi
-    
+}
+
+# Configuration pre-commit
+setup_pre-commit() {
+
     # Configuration pre-commit si disponible
     if [ -f ".pre-commit-config.yaml" ]; then
         echo "Configuration des hooks pre-commit..."
@@ -136,16 +157,16 @@ Features: ruff, mypy, pre-commit hooks"
             echo "Mise à jour des hooks vers les dernières versions..."
             pre-commit autoupdate
             pre-commit install
-            
+
             echo "Pré-installation des environnements pre-commit..."
             # Force l'installation des environnements maintenant pour éviter les délais futurs
             pre-commit install-hooks
-            
+
             # Commiter les changements de pre-commit autoupdate + corrections formatage
             if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
                 echo "Commit des mises à jour et corrections pre-commit..."
                 git add .pre-commit-config.yaml
-                
+
                 # Correction du formatage par les hooks peut générer des changements
                 if ! git commit -m "chore: update pre-commit hooks to latest versions" 2>/dev/null; then
                     # Si le commit échoue à cause des hooks, ajouter les corrections
@@ -154,13 +175,21 @@ Features: ruff, mypy, pre-commit hooks"
                     git commit -m "chore: update pre-commit hooks and fix formatting" || true
                 fi
             fi
-            
+
             echo "✅ Pre-commit hooks installés et mis à jour"
         else
             echo "⚠️  pre-commit non installé, ignoré"
         fi
     fi
-    
+}
+
+
+# Configuration GitHub
+setup_github() {
+    echo "Configuration GitHub..."
+
+
+
     # Configuration du remote GitHub si username fourni
     if [ "castorfou" != "votre-username" ]; then
 
@@ -173,13 +202,13 @@ Features: ruff, mypy, pre-commit hooks"
 
         echo "Configuration du remote GitHub : $remote_url"
         git remote get-url origin >/dev/null 2>&1 || git remote add origin "$remote_url"
-        
+
         # Configuration de l'upstream pour la branche main
         git branch --set-upstream-to=origin/main main 2>/dev/null || true
-        
+
         # Configuration automatique des upstream pour futures branches (local au projet)
         git config push.autoSetupRemote true
-        
+
         # Configuration de l'authentification GitHub avec gh CLI
         if command -v gh &> /dev/null; then
             echo "Configuration de l'authentification GitHub..."
@@ -192,7 +221,7 @@ Features: ruff, mypy, pre-commit hooks"
                 echo "   → Entrez manuellement l'URL et le code dans votre navigateur host."
                 echo ""
                 gh auth login --git-protocol https --web
-                
+
                 # Configuration du credential helper après authentification (local au projet)
                 if gh auth status &>/dev/null; then
                     echo "Configuration du credential helper Git..."
@@ -204,12 +233,61 @@ Features: ruff, mypy, pre-commit hooks"
                 echo "✅ Déjà authentifié sur GitHub"
             fi
         fi
-        
+
         echo "✅ Remote GitHub configuré"
     fi
-    
-    echo "Configuration Git terminée"
 }
+
+# Helper: update MkDocs repo_url from Git remote
+run_mkdocs_repo_url_update() {
+    if [ -f "${WORKSPACE_FOLDER}/.devcontainer/scripts/update_mkdocs_repo_url.sh" ]; then
+        chmod +x "${WORKSPACE_FOLDER}/.devcontainer/scripts/update_mkdocs_repo_url.sh" || true
+        ( cd "${WORKSPACE_FOLDER}" && ./.devcontainer/scripts/update_mkdocs_repo_url.sh ) \
+            || echo "[postCreate] update_mkdocs_repo_url.sh exited with non-zero status"
+        echo "✅ mkdocs_repo_url configurée"
+    else
+        echo "[postCreate] ${WORKSPACE_FOLDER}/.devcontainer/scripts/update_mkdocs_repo_url.sh not found"
+    fi
+}
+
+# config zsh
+config_zsh() {
+    echo "Configuration de zsh..."
+    # Ajouter des configurations zsh spécifiques si nécessaire
+
+    local p10k_source=".devcontainer/resources/.p10k.zsh"
+    if [ -f "$p10k_source" ]; then
+        echo "Copie du thème Powerlevel10k vers $HOME/.p10k.zsh..."
+        cp "$p10k_source" "$HOME/.p10k.zsh"
+        chmod 0644 "$HOME/.p10k.zsh"
+    else
+        echo "⚠️  Thème Powerlevel10k introuvable : $p10k_source"
+    fi
+
+    cd ~
+    rm -rf .oh-my-zsh
+
+    sudo apt install -y fonts-powerline
+
+    # get last version at https://github.com/deluan/zsh-in-docker
+    sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.2.1/zsh-in-docker.sh)" -- \
+        -p git \
+        -p python \
+        -p history \
+        -p 'history-substring-search' \
+        -p 'virtualenv' \
+        -p https://github.com/zsh-users/zsh-autosuggestions \
+        -p https://github.com/zsh-users/zsh-completions
+
+    ensure_zshrc_line '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh'
+
+    ensure_zshrc_line 'export PATH="$HOME/.local/bin:$PATH"'
+
+    ensure_zshrc_line 'source /home/vscode/.venv/bin/activate'
+
+    echo "✅ zsh configuré"
+}
+
 
 # Exécution des étapes
 update_system
@@ -217,6 +295,10 @@ ensure_uv
 create_python_environment
 setup_node
 setup_git
+setup_github
+setup_pre-commit
+config_zsh
+run_mkdocs_repo_url_update
 
 echo ""
 echo "=================================================================="

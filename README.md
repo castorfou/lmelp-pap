@@ -3,6 +3,12 @@
 Le Masque & La Plume : **Projet d'Archivage Patrimonial (1955-2016)**
 
 
+## pyfoundry-template
+
+Ce projet a été instancié depuis un template.
+
+Toutes les infos sur ce template et la façon de l'utiliser sont dans sa [documentation](https://castorfou.github.io/PyFoundry/).
+
 ## 📝 Présentation du projet
 
 Ce projet a pour mission de reconstituer la mémoire sonore et textuelle du **Masque et la Plume**, la doyenne des émissions de radio française (créée en 1955 par François-Régis Bastide et Michel Polac), avec une focalisation spécifique sur les émissions dédiées à la **littérature**.
@@ -41,12 +47,12 @@ Une collection d'enregistrements audio (MP3) sourcés via des collectionneurs pr
 
 _Mise à jour automatique des métriques de complétude du projet._
 
-| Décennie | Métadonnées (Index) | Audio (Collecte) | Statut |
-| --- | --- | --- | --- |
-| **1955 - 1969** | ░░░░░░░░░░ 0% | ░░░░░░░░░░ 0% | 🔍 Recherche |
-| **1970 - 1989** | ░░░░░░░░░░ 0% | ░░░░░░░░░░ 0% | 🔍 Recherche |
-| **1990 - 2005** | ░░░░░░░░░░ 0% | ░░░░░░░░░░ 0% | 🔍 Recherche |
-| **2006 - 2016** | ▓▓▓▓▓▓▓▓▓▓ 10% | ▓▓▓▓▓▓▓▓▓▓ 5% | 🏗️ En cours |
+| Décennie        | Métadonnées (Index) | Audio (Collecte) | Statut      |
+| --------------- | ------------------- | ---------------- | ----------- |
+| **1955 - 1969** | ░░░░░░░░░░ 0%       | ░░░░░░░░░░ 0%    | 🔍 Recherche |
+| **1970 - 1989** | ░░░░░░░░░░ 0%       | ░░░░░░░░░░ 0%    | 🔍 Recherche |
+| **1990 - 2005** | ░░░░░░░░░░ 0%       | ░░░░░░░░░░ 0%    | 🔍 Recherche |
+| **2006 - 2016** | ▓▓▓▓▓▓▓▓▓▓ 10%      | ▓▓▓▓▓▓▓▓▓▓ 5%    | 🏗️ En cours  |
 
 * * *
 
