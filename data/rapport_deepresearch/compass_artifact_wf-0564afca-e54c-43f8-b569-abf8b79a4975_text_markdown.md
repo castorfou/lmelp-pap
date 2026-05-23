@@ -46,17 +46,17 @@
 
 ## Détails — classement des sources par qualité/exploitabilité
 
-| Rang | Source | Période couverte | Type de données | Densité | Structure | Scrapable ? | Audio téléchargeable ? |
-|---|---|---|---|---|---|---|---|
-| 1 | catalogue.ina.fr (HTML) | 1956-2016 (lacunes années 50-60) | date, durée, thématique, animateur, descripteurs, résumé | Très haute (DL 1995→) | Notice tabulaire | Oui via partage de requête par URL + pagination HTML | Non (Inathèque sur place uniquement) |
-| 2 | franceinter.fr/emissions/le-masque-et-la-plume/archives-… | 2006-07 à 2015-16 | date, titre, critiques, œuvres, parfois audio embed | Haute pour 2006+ | Liste HTML par saison | Oui | Variable (extraits audio sur la page, parfois retirés) |
-| 3 | fr.wikipedia.org/wiki/Le_Masque_et_la_Plume | 1955-2016 (méta) | animateurs, critiques, organes de presse, dates | Moyenne | Listes structurées | Oui (table HTML) | Non |
-| 4 | Livre Garcin/Garcia 2005 (Les Arènes/INA) | 1955-2005 | citations, anecdotes, chronologie partielle | Haute mais qualitative | Narratif | Non (livre imprimé, numérisation contrôlée sur archive.org) | 2 CD inclus (extraits) |
-| 5 | Playlists YouTube INA Culture | années 60-90 | extraits édités avec date et thématique | Faible (sélection) | Vidéos isolées | Oui via YouTube Data API v3 | Oui (extraits seulement) |
-| 6 | ina.fr/ina-eclaire-actu/audio/p{ID}/… | 1956-2016 | extraits édités avec date, durée, contexte | Faible (sélection éditoriale) | Pages article | Robots.txt bloqué pour fetcher | Streaming oui ; téléchargement non |
-| 7 | Babelio / SensCritique listes auditeurs | 2011-2023 | titre + auteur + date d'émission | Moyenne (subjective) | Liste | Oui | Non |
-| 8 | Wayback Machine (radiofrance.fr/franceinter/em/lemasqueetlaplume/archives.php) | ~2000-2006 | listes anciennes du site France Inter | Faible (snapshots irréguliers) | HTML legacy | Oui | Audio rarement archivé |
-| 9 | Gallica + presse d'époque | 1955-1995 | programme radio annoncé | Très faible/chronophage | Journaux scannés (OCR) | Oui via API Gallica/RetroNews | Non |
+| Rang | Source                                                                         | Période couverte                 | Type de données                                          | Densité                        | Structure              | Scrapable ?                                                 | Audio téléchargeable ?                                 |
+| ---- | ------------------------------------------------------------------------------ | -------------------------------- | -------------------------------------------------------- | ------------------------------ | ---------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| 1    | catalogue.ina.fr (HTML)                                                        | 1956-2016 (lacunes années 50-60) | date, durée, thématique, animateur, descripteurs, résumé | Très haute (DL 1995→)          | Notice tabulaire       | Oui via partage de requête par URL + pagination HTML        | Non (Inathèque sur place uniquement)                   |
+| 2    | franceinter.fr/emissions/le-masque-et-la-plume/archives-…                      | 2006-07 à 2015-16                | date, titre, critiques, œuvres, parfois audio embed      | Haute pour 2006+               | Liste HTML par saison  | Oui                                                         | Variable (extraits audio sur la page, parfois retirés) |
+| 3    | fr.wikipedia.org/wiki/Le_Masque_et_la_Plume                                    | 1955-2016 (méta)                 | animateurs, critiques, organes de presse, dates          | Moyenne                        | Listes structurées     | Oui (table HTML)                                            | Non                                                    |
+| 4    | Livre Garcin/Garcia 2005 (Les Arènes/INA)                                      | 1955-2005                        | citations, anecdotes, chronologie partielle              | Haute mais qualitative         | Narratif               | Non (livre imprimé, numérisation contrôlée sur archive.org) | 2 CD inclus (extraits)                                 |
+| 5    | Playlists YouTube INA Culture                                                  | années 60-90                     | extraits édités avec date et thématique                  | Faible (sélection)             | Vidéos isolées         | Oui via YouTube Data API v3                                 | Oui (extraits seulement)                               |
+| 6    | ina.fr/ina-eclaire-actu/audio/p{ID}/…                                          | 1956-2016                        | extraits édités avec date, durée, contexte               | Faible (sélection éditoriale)  | Pages article          | Robots.txt bloqué pour fetcher                              | Streaming oui ; téléchargement non                     |
+| 7    | Babelio / SensCritique listes auditeurs                                        | 2011-2023                        | titre + auteur + date d'émission                         | Moyenne (subjective)           | Liste                  | Oui                                                         | Non                                                    |
+| 8    | Wayback Machine (radiofrance.fr/franceinter/em/lemasqueetlaplume/archives.php) | ~2000-2006                       | listes anciennes du site France Inter                    | Faible (snapshots irréguliers) | HTML legacy            | Oui                                                         | Audio rarement archivé                                 |
+| 9    | Gallica + presse d'époque                                                      | 1955-1995                        | programme radio annoncé                                  | Très faible/chronophage        | Journaux scannés (OCR) | Oui via API Gallica/RetroNews                               | Non                                                    |
 
 ## Volume estimé pour le CSV cible (1955-2016, littérature)
 - L'émission est hebdomadaire depuis la rentrée 1957 ; le cinéma occupe ~50 % de l'antenne (« une semaine sur deux »), littérature ~25 %, théâtre ~25 %. Sur 60 ans (1955-2015), on estime **~3 000-3 200 émissions au total**, dont **~750-900 émissions « littérature »** (numéros monothématiques + segments littérature dans les émissions mixtes des années 50-60).
@@ -105,3 +105,30 @@ audio_consultable_inatheque (oui/non), notes
 - Pour les années 1955-1957, l'émission était **mensuelle** (pas hebdomadaire) — adapter le volume estimé en conséquence.
 - Wikipédia n'est **pas une source primaire** ; les dates de participation des critiques y sont souvent imprécises (« ?–? »).
 - Le périmètre « littérature » a évolué dans le temps : à l'origine (1955-1957), l'émission ne couvrait QUE théâtre + littérature (avant l'arrivée du cinéma en octobre 1957). Donc pour la période 1955-1957, **toute** émission contient une part littérature.
+
+> je suis etonné de ne rien voir concernant des sites d'associations litteraires ou d'associations ? as-tu regardé ?
+
+
+Bonne remarque — la recherche initiale a surtout raflé les grandes institutions. Je creuse spécifiquement du côté des associations, clubs de lecture, syndicats de critiques, et sites de passionnés.Voilà une réponse honnête : tu as raison de t'étonner. Les recherches — y compris celle de fond conduite initialement — **n'ont pas trouvé d'associations littéraires, de cercles de lecture ou de clubs ayant compilé de façon systématique les émissions**. Voici pourquoi, et ce qu'on trouve réellement côté "communauté" :
+
+---
+
+**Ce qui existe du côté des associations et clubs :**
+
+Il n'existe, à ce jour, **aucune association dédiée spécifiquement au Masque et la Plume** (de type "amis de l'émission", cercle d'auditeurs organisé, fanzine, etc.), contrairement à ce qui existe pour d'autres émissions cultes. Plusieurs raisons probables : l'émission est institutionnelle, très bien servie par Radio France elle-même, et surtout les auditeurs fidèles ont migré vers des **plateformes communautaires décentralisées** plutôt que vers des associations formelles.
+
+Ce qu'on trouve concrètement, et que le rapport précédent a sous-estimé :
+
+**Sur Babelio** (le plus riche en données datées) : une auditrice a constitué depuis 2014 une liste « Les enthousiasmes du Masque et la Plume (1) 2011-2015 » en notant scrupuleusement dans un carnet les titres plébiscités unanimement, avec les dates d'émission mentionnées — elle signale d'ailleurs explicitement : « à tout hasard, si quelqu'un avait des mp3 des émissions antérieures à décembre 2012… » Ce cri du cœur confirme que même les auditeurs les plus assidus manquent d'archives sonores pour cette période. La même communauté a produit une liste parallèle « Le Masque et la Plume vous déconseille (2013-2016) » qui recense 17 livres unanimement descendus, avec les dates d'émission précises.
+
+**Sur leslibraires.fr** : le réseau des libraires indépendants tient une sélection éditoriale des livres défendus ou descendus par l'émission, présentée dans l'ordre chronologique inverse — mais sans dates d'émission ni critiques nommés, c'est purement une vitrine commerciale.
+
+**Sur France Inter elle-même**, une page d'archives de la saison 2008-2009 révèle quelque chose d'utile : les émissions y sont listées avec leur thème (Cinéma, Livres, Théâtre) et leur date, accessibles directement par URL — ce qui confirme que le scraping des pages de saison reste la meilleure piste structurée pour 2008+.
+
+**Livres Hebdo** est une source professionnelle que la recherche initiale avait négligée : la revue a couvert en détail les arrivées et départs de critiques (par exemple l'arrivée d'Élisabeth Philippe le 7 octobre 2021, avec le détail des livres au programme de cette émission), ce qui en fait une source complémentaire pour reconstituer l'équipe par période.
+
+---
+
+**Conclusion sur les associations :** la "communauté" du Masque est diffuse et non organisée — elle vit sur Babelio, SensCritique, les commentaires de podcasts (Apple Podcasts, podCloud) et Goodreads. Un lecteur sur Goodreads le formule d'ailleurs explicitement : « Quel dommage que le site internet de l'émission ne donne pas accès à toutes ces archives. » Ce vide institutionnel côté fans est précisément ce qui rend ton projet de CSV si pertinent — et si difficile à alimenter pour la période pré-2008.
+
+La piste la plus prometteuse que j'aurais dû mentionner en premier : la page spéciale « 60 ans — Les archives » publiée par France Inter en novembre 2015 permet de télécharger des archives dont certaines dans leurs versions longues et plusieurs émissions dans leur intégralité, notamment la première émission consacrée au cinéma en octobre 1957. C'est un point d'entrée précieux pour les années fondatrices.
