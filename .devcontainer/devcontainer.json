@@ -1,9 +1,9 @@
 {
     "name": "lmelp pap - Dev Environment",
     "workspaceFolder": "/workspaces/lmelp-pap",
-	"build": {
-		"dockerfile": "Dockerfile"
-	},
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
     "runArgs": [
         "--network=host",
         "--label",
@@ -48,7 +48,8 @@
                 "anthropic.claude-code",
                 "catppuccin.catppuccin-vsc-icons",
                 "catppuccin.catppuccin-vsc",
-                "pomdtr.excalidraw-editor"
+                "pomdtr.excalidraw-editor",
+                "mechatroner.rainbow-csv"
             ],
             "settings": {
                 // Configuration Python
