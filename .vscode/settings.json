@@ -13,5 +13,6 @@
           100
      ],
      "terminal.integrated.shellIntegration.enabled": false,
-     "terminal.integrated.suggest.cdPath": "off"
+     "terminal.integrated.suggest.cdPath": "off",
+     "python.terminal.useEnvFile": true
 }
