@@ -27,6 +27,10 @@ dependencies = [
     "numpy",
     "matplotlib",
     "pymongo>=4.17.0",
+    "requests>=2.33.1",
+    "beautifulsoup4>=4.14.3",
+    "lxml>=6.1.1",
+    "playwright>=1.60.0",
 ]
 
 [project.optional-dependencies]
@@ -73,6 +77,21 @@ dev = ["pytest",]
 
 # Configuration Ruff - Linter et formateur Python moderne
 [tool.ruff]
+# Longueur de ligne (cohérent avec black)
+line-length = 88
+
+# Fichiers à exclure
+extend-exclude = [
+    "data/*",
+    "models/*",
+    "logs/*",
+    ".jupyter/*",
+]
+
+# Version Python cible
+target-version = "py312"
+
+[tool.ruff.lint]
 # Règles activées
 extend-select = [
     "E",      # pycodestyle errors
@@ -95,23 +114,8 @@ extend-select = [
 ignore = [
     "E501",   # Line too long (black/ruff format s'en occupe)
     "B905",   # zip() sans strict= (Python 3.10+)
-    "PD901",  # Avoid `df` as variable name (commun en DS)
     "RET504", # Assign + return -> return direct (parfois moins lisible)
 ]
-
-# Longueur de ligne (cohérent avec black)
-line-length = 88
-
-# Fichiers à exclure
-extend-exclude = [
-    "data/*",
-    "models/*",
-    "logs/*",
-    ".jupyter/*",
-]
-
-# Version Python cible
-target-version = "py312"
 
 [tool.ruff.format]
 # Style de formatage
@@ -169,7 +173,7 @@ no_implicit_reexport = true
 ignore_missing_imports = false
 follow_imports = "normal"
 
-# Configuration pour Data Science
+# Configuration pour Data Science et dépendances sans stubs
 [[tool.mypy.overrides]]
 module = [
     "matplotlib.*",
@@ -177,6 +181,11 @@ module = [
     "sklearn.*",
     "scipy.*",
     "plotly.*",
+    "pandas.*",
+    "pymongo.*",
+    "bs4.*",
+    "requests.*",
+    "lmelp_pap.*",
 ]
 ignore_missing_imports = true
 
