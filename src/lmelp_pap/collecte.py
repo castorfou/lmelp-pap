@@ -22,6 +22,7 @@ from lmelp_pap.sources import anciennes_listes, ina, radiofrance, wayback_podcas
 TERMINEE = "collecte_terminee"
 _ENTETES = {"User-Agent": "lmelp-pap (https://github.com/castorfou/lmelp-pap)"}
 _DELAI = 1.0
+_DELAI_WAYBACK = 4.0  # la Wayback Machine refuse les connexions au-delà
 _CDX = "https://web.archive.org/cdx/search/cdx"
 _RADIOFRANCE = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume"
 
@@ -46,18 +47,19 @@ def lire_ina(dossier: Path) -> list[Attestation]:
 
 
 def lire_anciennes_listes(dossier: Path) -> list[Attestation]:
-    return [
-        a
-        for f in sorted(dossier.glob("*.html"))
-        for a in anciennes_listes.lire_liste(f.read_text(encoding="utf-8"))
-    ]
+    """Une attestation par date et par thème : les listes se recoupent."""
+    uniques: dict[tuple[object, frozenset[str]], Attestation] = {}
+    for f in sorted(dossier.glob("*.html")):
+        for a in anciennes_listes.lire_liste(f.read_text(encoding="utf-8")):
+            uniques.setdefault((a.date, a.themes), a)
+    return list(uniques.values())
 
 
 # --- Collecte (réseau) -------------------------------------------------------
 
 
 def _get(
-    adresse: str, params: dict[str, str] | None = None, essais: int = 5
+    adresse: str, params: dict[str, str] | None = None, essais: int = 6
 ) -> requests.Response:
     """GET avec relances : la Wayback Machine renvoie souvent 503 ou 504."""
     for essai in range(essais):
@@ -68,7 +70,7 @@ def _get(
         except requests.RequestException:
             if essai == essais - 1:
                 raise
-        time.sleep(_DELAI * 2 ** (essai + 1))
+        time.sleep(10 * 2**essai)  # 10 s, 20 s, 40 s… : laisser passer la limite
     reponse.raise_for_status()
     return reponse
 
@@ -149,7 +151,7 @@ def collecter_anciennes_listes(dossier: Path) -> None:
             page = _get(f"https://web.archive.org/web/{horodatage}id_/http://{cle}")
             if page.status_code == 200:
                 fichier.write_text(page.content.decode(encodage, "replace"), "utf-8")
-            time.sleep(_DELAI)
+            time.sleep(_DELAI_WAYBACK)
 
 
 # --- Registre des sources ----------------------------------------------------

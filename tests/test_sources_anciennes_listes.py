@@ -63,3 +63,43 @@ def test_la_liste_mensuelle_donne_date_theme_et_oeuvres_critiquees() -> None:
         "Fontenoy ne reviendra plus"
     )
     assert attestations[date(2011, 3, 27)].themes == frozenset({"théâtre"})
+
+
+def _ligne(jour: str, identifiant: str, libelle: str) -> str:
+    return f'<li><strong>{jour}</strong> ><a href="index.php?id={identifiant}">{libelle}</a></li>'
+
+
+def test_aucune_emission_n_atteste_rien() -> None:
+    page = _ligne("06/08/2006", "1", "Aucune émission")
+
+    assert lire_liste(page) == []
+
+
+def test_le_festival_d_aix_est_un_theme_opera() -> None:
+    page = _ligne("16/07/2006", "2", "Festival d'Aix-en-Provence")
+
+    (attestation,) = lire_liste(page)
+
+    assert attestation.themes == frozenset({"opéra"})
+
+
+def test_une_emission_presente_dans_deux_listes_n_est_attestee_qu_une_fois(
+    tmp_path: Path,
+) -> None:
+    from lmelp_pap.collecte import lire_anciennes_listes
+
+    (tmp_path / "archives.php.html").write_text(
+        _ligne("17/12/2006", "49171", "Livres"), encoding="utf-8"
+    )
+    (tmp_path / "archives.php_annee_2006.html").write_text(
+        _ligne("17/12/2006", "49171", "Livres")
+        + _ligne("24/12/2006", "50272", "Cinéma"),
+        encoding="utf-8",
+    )
+
+    attestations = lire_anciennes_listes(tmp_path)
+
+    assert sorted((a.date, a.source_id) for a in attestations) == [
+        (date(2006, 12, 17), "em-49171"),
+        (date(2006, 12, 24), "em-50272"),
+    ]

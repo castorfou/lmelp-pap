@@ -27,7 +27,7 @@ Une émission entière remise en ligne après sa diffusion, par exemple dans un 
 _Avoid_ : réédition, rediffusion
 
 **Thème** :
-Le ou les domaines critiqués dans une émission : livres, cinéma, théâtre. Une émission mixte a plusieurs thèmes ; le thème d'une émission attestée seulement par un enregistrement peut être inconnu.
+Le ou les domaines critiqués dans une émission : livres, cinéma, théâtre, opéra. Une émission mixte a plusieurs thèmes ; le thème d'une émission attestée seulement par un enregistrement peut être inconnu.
 _Avoid_ : type, catégorie, genre
 
 **Enregistrement** :

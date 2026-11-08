@@ -29,11 +29,12 @@ _MENSUELLE = re.compile(
     r'(?:<div class="description"><p>(?P<description>.*?)</p>)?',
     re.DOTALL,
 )
-_SANS_EMISSION = re.compile(r"pas de masque", re.IGNORECASE)
+_SANS_EMISSION = re.compile(r"pas de masque|aucune émission", re.IGNORECASE)
 _THEMES = (
     (re.compile(r"livre|prix des auditeurs", re.IGNORECASE), "livres"),
     (re.compile(r"cinéma|cannes", re.IGNORECASE), "cinéma"),
     (re.compile(r"théâtre|avignon", re.IGNORECASE), "théâtre"),
+    (re.compile(r"opéra|aix-en-provence", re.IGNORECASE), "opéra"),
 )
 
 
