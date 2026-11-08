@@ -1,6 +1,6 @@
 {
   "template": "https://github.com/castorfou/PyFoundry.git",
-  "commit": "0bba09257e9f3c4e8e411924a5b5c9b36b7a6c12",
+  "commit": "ac46c3ac7f7778e6bf6ff272f65613026063edd5",
   "checkout": null,
   "context": {
     "cookiecutter": {
@@ -12,10 +12,14 @@
       "use_node": "y",
       "docker_in_docker": "n",
       "_copy_without_render": [
-        ".devcontainer/resources/.p10k.zsh"
+        ".devcontainer/resources/.p10k.zsh",
+        ".devcontainer/scripts/check_mounts.sh",
+        ".claude/skills/cruft-update/*",
+        ".claude/skills/cruft-update/scripts/*"
       ],
+      "_pyfoundry_version": "1.1.2",
       "_template": "https://github.com/castorfou/PyFoundry.git",
-      "_commit": "0bba09257e9f3c4e8e411924a5b5c9b36b7a6c12"
+      "_commit": "ac46c3ac7f7778e6bf6ff272f65613026063edd5"
     }
   },
   "directory": null

@@ -153,7 +153,6 @@ data/processed/*
 # VS Code local settings
 .vscode/settings.local.json
 
-
 # Node.js
 node_modules/
 npm-debug.log*

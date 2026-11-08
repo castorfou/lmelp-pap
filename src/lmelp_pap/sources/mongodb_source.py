@@ -1,6 +1,7 @@
 """Export des épisodes littéraires depuis MongoDB vers un DataFrame structuré."""
 
 from datetime import datetime
+from typing import Any
 
 import pandas as pd
 import pymongo
@@ -8,7 +9,7 @@ import pymongo
 
 def get_episodes_from_mongodb(mongo_uri: str, db_name: str) -> list[dict]:
     """Récupère tous les épisodes littéraires (type='livres') depuis MongoDB."""
-    client = pymongo.MongoClient(mongo_uri)
+    client: pymongo.MongoClient[dict[str, Any]] = pymongo.MongoClient(mongo_uri)
     collection = client[db_name]["episodes"]
     docs = list(collection.find({"type": "livres"}))
     client.close()
