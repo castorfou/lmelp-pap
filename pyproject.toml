@@ -38,6 +38,7 @@ dev = [
     "cruft",
     "pre-commit",
     "pytest",
+    "pytest-cov",
     "ruff",
     "mypy",
     "pandas-stubs",            # Types pour pandas (lus par mypy dans le venv)
@@ -199,6 +200,7 @@ ignore_errors = true
 module = [
     "tests.*",
     "pytest",
+    "pytest-cov",
 ]
 ignore_missing_imports = true
 disallow_untyped_defs = false
