@@ -175,7 +175,20 @@ uv run mkdocs serve
 
 ## Usage
 
-Décrivez ici comment utiliser votre projet.
+Le projet s'utilise par la commande `lmelp-pap`, installée avec le projet.
+
+```bash
+# Construire (ou reconstruire) la liste des émissions dans data/processed/
+uv run --active lmelp-pap emissions
+
+# Ajouter les émissions récentes : re-collecter radiofrance.fr
+uv run --active lmelp-pap emissions --source radiofrance --refresh
+
+# Aide et options
+uv run --active lmelp-pap emissions --help
+```
+
+La première exécution collecte les sources en ligne (environ une heure) et les garde en cache dans `data/raw/cache/` ; les suivantes reconstruisent la liste sans accès réseau. Détails, sources et format des fichiers : [Liste des émissions](https://castorfou.github.io/lmelp-pap/user/liste-des-emissions/).
 
 ## Contribution
 
