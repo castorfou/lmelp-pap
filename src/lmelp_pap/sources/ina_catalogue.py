@@ -9,15 +9,6 @@ from playwright.sync_api import sync_playwright
 
 _INA_URL = "https://catalogue.ina.fr"
 _SEARCH_TERM = "masque et la plume"
-_COLUMNS = [
-    "date_diffusion",
-    "titre",
-    "animateur",
-    "description",
-    "url_page",
-    "url_audio",
-    "source",
-]
 _COLUMNS_RAW = [
     "date_diffusion",
     "titre",
@@ -32,16 +23,6 @@ _COLUMNS_RAW = [
 
 # JS appelé après la recherche pour filtrer la thématique Littérature
 _FILTER_JS = "filterQueryByFacet('themat_facet','Littérature','Thématique1', '', 0, submitToGetSolr)"
-
-
-def build_ina_search_url(page: int = 1) -> str:
-    """Retourne l'URL de base du catalogue INA (navigation JS)."""
-    return _INA_URL
-
-
-def parse_ina_results_page(html: str) -> list[dict]:
-    """Compatibilité : parse HTML statique — retourne toujours une liste vide (SPA JS)."""
-    return []
 
 
 def _parse_ina_date(date_str: str | None) -> str | None:
@@ -112,26 +93,6 @@ def _extract_table_rows(page) -> list[dict]:  # type: ignore[no-untyped-def]
         if entry["date_diffusion"] or entry["titre"]:
             results.append(entry)
     return results
-
-
-def scrape_ina_catalogue(max_pages: int = 99, delay: float = 2.0) -> pd.DataFrame:
-    """Scrape le catalogue INA via Playwright (thématique Littérature, toutes années).
-
-    Args:
-        max_pages: Nombre maximum de pages à parcourir (0 = ne scrape pas).
-        delay: Délai en secondes entre chaque page pour respecter les CGU INA.
-
-    Returns:
-        DataFrame avec les colonnes standard des émissions (pour merge_sources).
-    """
-    df_raw = scrape_ina_catalogue_raw(max_pages=max_pages, delay=delay)
-    if df_raw.empty:
-        return pd.DataFrame(columns=_COLUMNS)
-    return (
-        df_raw[["date_diffusion", "titre", "url_ina", "source"]]
-        .rename(columns={"url_ina": "url_page"})
-        .assign(animateur=None, description=None, url_audio=None)[_COLUMNS]
-    )
 
 
 def scrape_ina_catalogue_raw(
