@@ -30,6 +30,7 @@ class Attestation:
     heure: str | None = None
     duree: str | None = None
     animateur: str | None = None
+    url: str | None = None
     enregistrements: tuple[Enregistrement, ...] = ()
 
 

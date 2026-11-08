@@ -41,6 +41,7 @@ def lire_fiche(page: str) -> Attestation:
         description=_texte(article.get("description")),
         duree=_duree(audio.get("duration")),
         animateur=", ".join(p["name"] for p in episode.get("director", [])) or None,
+        url=url,
         enregistrements=_enregistrements(audio.get("contentUrl")),
     )
 

@@ -19,6 +19,10 @@ def test_un_extrait_d_archive_atteste_l_emission_d_origine() -> None:
 
     assert attestation.source == "radiofrance"
     assert attestation.source_id == "louis-aragon-4684213"
+    assert attestation.url == (
+        "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/"
+        "louis-aragon-4684213"
+    )
     assert attestation.date == date(1958, 12, 4)
     assert attestation.themes == frozenset({"livres"})
     assert attestation.titre == (
