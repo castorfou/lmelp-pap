@@ -3,14 +3,14 @@
 from datetime import date
 from pathlib import Path
 
-from lmelp_pap.liste import Enregistrement
+from lmelp_pap.liste import Attestation, Enregistrement
 from lmelp_pap.sources.radiofrance import lire_fiche, lire_page_liste
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "radiofrance"
 
 
-def _fiche(slug: str):  # type: ignore[no-untyped-def]
+def _fiche(slug: str) -> Attestation:
     return lire_fiche((FIXTURES / f"{slug}.html").read_text(encoding="utf-8"))
 
 

@@ -134,12 +134,16 @@ def scrape_ina_catalogue(max_pages: int = 99, delay: float = 2.0) -> pd.DataFram
     )
 
 
-def scrape_ina_catalogue_raw(max_pages: int = 99, delay: float = 2.0) -> pd.DataFrame:
+def scrape_ina_catalogue_raw(
+    max_pages: int = 99, delay: float = 2.0, facette: bool = True
+) -> pd.DataFrame:
     """Scrape le catalogue INA et retourne toutes les colonnes disponibles.
 
     Args:
         max_pages: Nombre maximum de pages à parcourir (0 = ne scrape pas).
         delay: Délai en secondes entre chaque page pour respecter les CGU INA.
+        facette: Limite la recherche à la thématique Littérature ; sinon toute
+            la collection.
 
     Returns:
         DataFrame brut avec date_diffusion, titre, titre_collection, chaine,
@@ -165,9 +169,10 @@ def scrape_ina_catalogue_raw(max_pages: int = 99, delay: float = 2.0) -> pd.Data
         page.wait_for_load_state("networkidle")
         time.sleep(2)
 
-        page.evaluate(_FILTER_JS)
-        page.wait_for_load_state("networkidle")
-        time.sleep(2)
+        if facette:
+            page.evaluate(_FILTER_JS)
+            page.wait_for_load_state("networkidle")
+            time.sleep(2)
 
         for page_num in range(1, max_pages + 1):
             if page_num > 1:

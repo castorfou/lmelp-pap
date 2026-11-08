@@ -141,6 +141,11 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+# Liste des émissions : livrable versionné (ADR 0001)
+!data/processed/emissions.csv
+!data/processed/attestations.csv
+!data/processed/enregistrements.csv
+!data/processed/rapport_rapprochement.csv
 
 # ML models
 *.model
