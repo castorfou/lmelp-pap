@@ -61,3 +61,10 @@ def test_hors_facette_une_notice_sans_mot_cle_a_un_theme_inconnu() -> None:
     (notice,) = lire_notices([ligne])
 
     assert notice.themes == frozenset()
+
+
+def test_le_theme_se_lit_aussi_dans_un_titre_sans_accent_ou_d_opera() -> None:
+    notices = _notices()
+
+    assert notices["PH_PHD88021060"].themes == frozenset({"théâtre"})  # « Théatre »
+    assert notices["PH_PHD99255941"].themes == frozenset({"opéra"})

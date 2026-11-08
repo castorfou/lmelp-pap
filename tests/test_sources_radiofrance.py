@@ -86,3 +86,7 @@ def test_une_page_de_serie_n_atteste_aucune_emission() -> None:
     page = (FIXTURES / "serie-les-punchlines-du-masque.html").read_text("utf-8")
 
     assert lire_fiche(page) is None
+
+
+def test_le_theme_se_lit_dans_un_titre_le_masque_et_la_plume_cinema() -> None:
+    assert _fiche("le-masque-et-la-plume-cinema-1964672").themes == {"cinéma"}

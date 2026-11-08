@@ -80,7 +80,8 @@ def collecter_radiofrance(dossier: Path) -> None:
     vues: set[str] = set()
     page = 1
     while True:
-        urls = radiofrance.lire_page_liste(_get(_RADIOFRANCE, {"p": str(page)}).text)
+        liste = _get(_RADIOFRANCE, {"p": str(page)})
+        urls = radiofrance.lire_page_liste(liste.content.decode("utf-8"))
         # Au-delà de la dernière page, le site renvoie une liste vide ou
         # redirige vers la page 1 : une page sans URL nouvelle marque la fin.
         if not set(urls) - vues:
@@ -89,7 +90,8 @@ def collecter_radiofrance(dossier: Path) -> None:
         for url in urls:
             fichier = fiches / f"{url.rstrip('/').rsplit('/', 1)[-1]}.html"
             if not fichier.exists():
-                fichier.write_text(_get(url).text, encoding="utf-8")
+                # Le site n'annonce pas d'encodage : décoder l'UTF-8 soi-même.
+                fichier.write_text(_get(url).content.decode("utf-8"), "utf-8")
                 time.sleep(_DELAI)
         page += 1
         time.sleep(_DELAI)

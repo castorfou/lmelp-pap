@@ -78,8 +78,13 @@ def _etiquettes(page: str) -> list[str]:
 
 
 def _themes(slug: str, titre: str | None, etiquettes: list[str]) -> frozenset[str]:
-    """Thèmes lus dans les étiquettes, le début de l'URL et le titre exact."""
-    candidats = [*etiquettes, slug.split("-", 1)[0], titre or ""]
+    """Thèmes lus dans les étiquettes, le début de l'URL et le titre exact.
+
+    Le titre compte aussi précédé du nom de l'émission (« Le masque et la
+    plume cinéma »).
+    """
+    titre = re.sub(r"^le masque et la plume\s*", "", (titre or "").lower())
+    candidats = [*etiquettes, slug.split("-", 1)[0], titre]
     return frozenset(
         _THEMES[c.strip().lower()] for c in candidats if c.strip().lower() in _THEMES
     )

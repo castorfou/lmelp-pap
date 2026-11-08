@@ -170,3 +170,4 @@ yarn.lock
 *.tsbuildinfo
 .next/
 .cache/
+!tests/fixtures/**/*.csv

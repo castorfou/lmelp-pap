@@ -17,8 +17,9 @@ SOURCE = "ina"
 
 _MOTS_CLES = {
     "livres": r"littér|livre|roman|lire|édition|librairie|poète|goncourt",
-    "théâtre": r"théâtre",
+    "théâtre": r"th[ée][âa]tre",
     "cinéma": r"cinéma|film",
+    "opéra": r"opéra",
 }
 
 
