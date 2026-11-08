@@ -31,10 +31,9 @@ _RADIOFRANCE = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-
 
 
 def lire_radiofrance(dossier: Path) -> list[Attestation]:
-    return [
-        radiofrance.lire_fiche(f.read_text(encoding="utf-8"))
-        for f in sorted((dossier / "fiches").glob("*.html"))
-    ]
+    fiches = sorted((dossier / "fiches").glob("*.html"))
+    lues = (radiofrance.lire_fiche(f.read_text(encoding="utf-8")) for f in fiches)
+    return [a for a in lues if a is not None]
 
 
 def lire_wayback_podcast(dossier: Path) -> list[Attestation]:
@@ -78,11 +77,15 @@ def _get(
 def collecter_radiofrance(dossier: Path) -> None:
     fiches = dossier / "fiches"
     fiches.mkdir(parents=True, exist_ok=True)
+    vues: set[str] = set()
     page = 1
     while True:
         urls = radiofrance.lire_page_liste(_get(_RADIOFRANCE, {"p": str(page)}).text)
-        if not urls:
+        # Au-delà de la dernière page, le site renvoie une liste vide ou
+        # redirige vers la page 1 : une page sans URL nouvelle marque la fin.
+        if not set(urls) - vues:
             break
+        vues.update(urls)
         for url in urls:
             fichier = fiches / f"{url.rstrip('/').rsplit('/', 1)[-1]}.html"
             if not fichier.exists():

@@ -11,7 +11,9 @@ FIXTURES = Path(__file__).parent / "fixtures" / "radiofrance"
 
 
 def _fiche(slug: str) -> Attestation:
-    return lire_fiche((FIXTURES / f"{slug}.html").read_text(encoding="utf-8"))
+    attestation = lire_fiche((FIXTURES / f"{slug}.html").read_text(encoding="utf-8"))
+    assert attestation is not None
+    return attestation
 
 
 def test_un_extrait_d_archive_atteste_l_emission_d_origine() -> None:
@@ -78,3 +80,9 @@ def test_une_page_de_liste_donne_les_urls_des_fiches() -> None:
         "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/"
         "mission-impossible-1-de-brian-de-palma-6043240"
     )
+
+
+def test_une_page_de_serie_n_atteste_aucune_emission() -> None:
+    page = (FIXTURES / "serie-les-punchlines-du-masque.html").read_text("utf-8")
+
+    assert lire_fiche(page) is None

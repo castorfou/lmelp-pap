@@ -22,9 +22,15 @@ _THEMES = {"livres": "livres", "cinéma": "cinéma", "cinema": "cinéma",
            "théâtre": "théâtre", "theatre": "théâtre"}  # fmt: skip
 
 
-def lire_fiche(page: str) -> Attestation:
-    """Lit une fiche d'émission et renvoie ce qu'elle atteste."""
+def lire_fiche(page: str) -> Attestation | None:
+    """Lit une fiche d'émission et renvoie ce qu'elle atteste.
+
+    Une page qui n'est pas une fiche d'émission (une page de série, par
+    exemple) n'atteste rien.
+    """
     graphe = _json_ld(page)
+    if "RadioEpisode" not in graphe:
+        return None
     episode = graphe["RadioEpisode"]
     article = graphe.get("NewsArticle", {})
     url: str = episode["url"]
