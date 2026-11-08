@@ -17,9 +17,12 @@ SOURCE = "ina"
 
 _MOTS_CLES = {
     "livres": r"littér|livre|roman|lire|édition|librairie|poète|goncourt",
-    "théâtre": r"th[ée][âa]tre",
+    "théâtre": r"th[ée][âa]tre|critiques dramatiques",
     "cinéma": r"cinéma|film",
     "opéra": r"opéra",
+    "télévision": r"télévision",
+    "musique": r"musique",
+    "variétés": r"variétés",
 }
 
 

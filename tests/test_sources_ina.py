@@ -68,3 +68,12 @@ def test_le_theme_se_lit_aussi_dans_un_titre_sans_accent_ou_d_opera() -> None:
 
     assert notices["PH_PHD88021060"].themes == frozenset({"théâtre"})  # « Théatre »
     assert notices["PH_PHD99255941"].themes == frozenset({"opéra"})
+
+
+def test_les_titres_television_musique_varietes_et_critique_dramatique() -> None:
+    notices = _notices()
+
+    assert notices["PH_PHD99226107"].themes == frozenset({"télévision"})
+    assert notices["PH_PHD99255852"].themes == frozenset({"musique"})
+    assert notices["PH_PHD99255882"].themes == frozenset({"variétés"})
+    assert notices["PH_PHD88021037"].themes == frozenset({"théâtre"})

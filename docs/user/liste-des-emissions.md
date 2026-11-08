@@ -55,7 +55,7 @@ Une ligne par émission de la liste.
 |---|---|
 | `id` | Identifiant de l'émission. |
 | `date` | Date de première diffusion. |
-| `themes` | Thèmes séparés par `;` (`livres`, `cinéma`, `théâtre`, `opéra`). Vide : thème inconnu. |
+| `themes` | Thèmes séparés par `;` (`livres`, `cinéma`, `théâtre`, `opéra`, `télévision`, `musique`, `variétés`). Vide : thème inconnu. |
 | `titre`, `description` | Titre et description, selon la source prioritaire. |
 | `animateur` | Animateur précisé par une source, sinon déduit de la date. Vide pour les années de transition (1970, 1989, 2023). |
 | `chaine`, `heure`, `duree` | Selon l'INA en priorité. |
