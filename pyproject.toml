@@ -26,15 +26,24 @@ dependencies = [
     "pandas",
     "numpy",
     "matplotlib",
+    "requests>=2.33.1",
+    "playwright>=1.60.0",
 ]
+
+[project.scripts]
+lmelp-pap = "lmelp_pap.cli:main"
 
 [project.optional-dependencies]
 dev = [
     "cruft",
     "pre-commit",
     "pytest",
+    "pytest-cov",
     "ruff",
     "mypy",
+    "pandas-stubs",            # Types pour pandas (lus par mypy dans le venv)
+    "types-python-dateutil",
+    "types-requests",
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.4.0",
     "mkdocs-git-revision-date-localized-plugin>=1.2.0",
@@ -53,9 +62,6 @@ Documentation = "https://castorfou.github.io/lmelp-pap"
 Repository = "https://github.com/castorfou/lmelp-pap.git"
 Issues = "https://github.com/castorfou/lmelp-pap/issues"
 
-[project.scripts]
-lmelp_pap_setup = "scripts.setup:main"
-
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -72,6 +78,21 @@ dev = ["pytest",]
 
 # Configuration Ruff - Linter et formateur Python moderne
 [tool.ruff]
+# Longueur de ligne (cohérent avec black)
+line-length = 88
+
+# Fichiers à exclure
+extend-exclude = [
+    "data/*",
+    "models/*",
+    "logs/*",
+    ".jupyter/*",
+]
+
+# Version Python cible
+target-version = "py312"
+
+[tool.ruff.lint]
 # Règles activées
 extend-select = [
     "E",      # pycodestyle errors
@@ -94,23 +115,8 @@ extend-select = [
 ignore = [
     "E501",   # Line too long (black/ruff format s'en occupe)
     "B905",   # zip() sans strict= (Python 3.10+)
-    "PD901",  # Avoid `df` as variable name (commun en DS)
     "RET504", # Assign + return -> return direct (parfois moins lisible)
 ]
-
-# Longueur de ligne (cohérent avec black)
-line-length = 88
-
-# Fichiers à exclure
-extend-exclude = [
-    "data/*",
-    "models/*",
-    "logs/*",
-    ".jupyter/*",
-]
-
-# Version Python cible
-target-version = "py312"
 
 [tool.ruff.format]
 # Style de formatage
@@ -141,8 +147,8 @@ classmethod-decorators = ["classmethod", "pydantic.validator"]
 python_version = "3.12"
 platform = "linux"
 
-# Chemins à analyser : exclure src/ car déjà dans sys.path via editable install
-files = ["tests"]
+# Chemins à analyser : `mypy` seul vérifie le code et les tests, comme le hook et la CI
+files = ["src", "tests"]
 
 # Ne pas chercher de namespace packages pour éviter la détection en double
 namespace_packages = false
@@ -168,7 +174,7 @@ no_implicit_reexport = true
 ignore_missing_imports = false
 follow_imports = "normal"
 
-# Configuration pour Data Science
+# Configuration pour Data Science et dépendances sans stubs
 [[tool.mypy.overrides]]
 module = [
     "matplotlib.*",
@@ -176,6 +182,11 @@ module = [
     "sklearn.*",
     "scipy.*",
     "plotly.*",
+    "pandas.*",
+    "requests.*",
+    "lmelp_pap.*",
+    "playwright.*",
+    "dotenv.*",
 ]
 ignore_missing_imports = true
 
@@ -189,6 +200,7 @@ ignore_errors = true
 module = [
     "tests.*",
     "pytest",
+    "pytest-cov",
 ]
 ignore_missing_imports = true
 disallow_untyped_defs = false

@@ -4,6 +4,10 @@
     Elle explique **comment utiliser** les fonctionnalités du projet, sans nécessiter de connaissances
     approfondies du code source.
 
+## Guides
+
+- [Liste des émissions](liste-des-emissions.md) : construire et mettre à jour la liste avec `lmelp-pap emissions`, sources, fichiers produits.
+
 ## Contenu suggéré
 
 Voici les types de documentation que vous devriez ajouter dans cette section :

@@ -17,7 +17,9 @@ Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)
 ```
 .
 ├── .claude/                # Configuration Claude Code
-│   └── commands/          # Commandes slash personnalisées
+│   ├── commands/          # Commandes slash personnalisées
+│   ├── skills/            # Skills (cruft-update : mise à jour du template)
+│   └── settings.json      # Plugins activés (mattpocock-skills)
 ├── .devcontainer/          # Configuration du dev container
 ├── .github/workflows/      # CI/CD GitHub Actions
 ├── data/
@@ -27,6 +29,7 @@ Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)
 │   ├── index.md           # Page d'accueil de la documentation
 │   ├── user/              # Documentation utilisateur
 │   ├── dev/               # Documentation développeur
+│   ├── agents/            # Config des skills Matt Pocock (issues, labels, domaine)
 │   └── claude/
 │       └── memory/        # Mémoire projet (décisions, apprentissages)
 ├── notebooks/             # Notebooks Jupyter pour l'exploration
@@ -35,6 +38,7 @@ Le Masque & La Plume : Projet d'Archivage Patrimonial (1955-2016)
 ├── .gitignore
 ├── .pre-commit-config.yaml
 ├── CLAUDE.md              # Ce fichier - Documentation pour Claude Code
+├── TEMPLATE_VERSION       # Version PyFoundry du projet (mise à jour par cruft update)
 └── pyproject.toml         # Configuration du projet et dépendances
 ```
 
@@ -60,6 +64,10 @@ Les dépendances sont gérées via `uv` et définies dans `pyproject.toml`:
 ```bash
 # Sync des dépendances
 uv sync --active --all-extras
+
+# Après une modification à la main de pyproject.toml : mettre à jour uv.lock et le commiter
+# (le devcontainer installe uv.lock sans le modifier, la CI vérifie qu'il est à jour)
+uv lock
 
 # Tests
 uv run --active pytest
@@ -137,7 +145,9 @@ uv run mkdocs build --strict
 ### Déploiement automatique
 
 La documentation est automatiquement construite et déployée sur GitHub Pages via la workflow `.github/workflows/docs.yml` :
+- Prérequis : GitHub Pages activé avec la source « GitHub Actions » (`gh api "repos/{owner}/{repo}/pages" --jq .build_type` doit afficher `workflow`). Sur un dépôt public dont on est admin, `.devcontainer/scripts/enable_pages.sh` l'active tout seul à l'ouverture d'un terminal, une fois `gh` authentifié et le dépôt créé sur GitHub. Sinon (dépôt privé, pas de droits admin, source « Deploy from a branch »), il affiche une ligne et le réglage se fait à la main : voir `docs/cheatsheets/mkdocs.md`, section « Activer GitHub Pages ». Sans Pages, `docs.yml` échoue à `Setup Pages` (`Get Pages site failed`) ; avec « Deploy from a branch », GitHub lance à chaque push un run `pages build and deployment` en échec dans « Build with Jekyll ».
 - Déclenché à chaque push sur `main` modifiant `docs/` ou `mkdocs.yml`
+- Lançable à la main depuis n'importe quelle branche : `gh workflow run docs.yml --ref <branche>`. Prérequis, une fois par projet : autoriser la branche dans l'environnement GitHub `github-pages` (voir `docs/cheatsheets/mkdocs.md`, section « Publier la doc d'une branche »). La doc publiée remplace celle de `main` jusqu'au prochain déploiement depuis `main`.
 - Disponible à l'URL : https://castorfou.github.io/lmelp-pap
 
 ### Bonnes pratiques de rédaction
@@ -242,6 +252,24 @@ Ce dossier sert à conserver une trace des décisions importantes, apprentissage
 
 Cette mémoire aide Claude Code à maintenir la cohérence du projet au fil du temps.
 
+### Skills Matt Pocock
+
+Le plugin [mattpocock-skills](https://github.com/mattpocock/skills) est activé dans `.claude/settings.json`. Ce réglage active le plugin pour le dépôt mais ne le télécharge pas : chaque utilisateur doit l'installer une fois sur sa machine. Dans VS Code : `/plugins` → onglet **Plugins** → rechercher `mattpocock-skills` → **Install** → **Install for this project**.
+
+La configuration attendue par les skills d'ingénierie est déjà pré-remplie (voir [Agent skills](#agent-skills)) : issues sur GitHub, labels de triage par défaut, documentation du domaine à contexte unique. Pour changer ces choix (par exemple passer à GitLab), modifie directement `docs/agents/*.md` ou relance `/setup-matt-pocock-skills`.
+
+Skills les plus utiles :
+
+- `/grill-me`, `/grill-with-docs` : Claude te pose des questions pour clarifier un besoin avant d'écrire du code
+- `/to-spec`, `/to-tickets` : transformer une discussion en spécification, puis en issues
+- `/tdd` : boucle RED → GREEN → REFACTOR
+- `/triage` : trier les issues GitHub à l'aide des labels
+- `/diagnosing-bugs` : enquêter méthodiquement sur un bug
+
+## Mise à jour du template
+
+La skill `/cruft-update` (`.claude/skills/cruft-update/`) applique les évolutions de PyFoundry : `cruft update`, lecture du CHANGELOG et des migrations, résolution des rejets (`.rej`, marqueurs de conflit) selon le propriétaire de chaque fichier, vérifications, commit. Demande simplement « mets à jour le projet depuis le template ». Elle vient du template : ne la modifie pas ici, la prochaine mise à jour l'écraserait.
+
 ## Workflow de Développement
 
 ### Cycle typique de développement avec Claude Code
@@ -300,6 +328,20 @@ uv run mkdocs serve
 # Construire la documentation
 uv run mkdocs build --strict
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Les issues sont suivies dans GitHub Issues (`castorfou/lmelp-pap`), via la CLI `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Labels par défaut : `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Contexte unique : `CONTEXT.md` et `docs/adr/` à la racine, créés au besoin. See `docs/agents/domain.md`.
 
 ## Ressources
 - Dépôt GitHub: https://github.com/castorfou/lmelp-pap
