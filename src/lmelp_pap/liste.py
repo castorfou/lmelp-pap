@@ -8,6 +8,8 @@ from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any, Literal
 
+from lmelp_pap.sources.audio_radiofrance import lire_nom_fichier
+
 
 @dataclass(frozen=True)
 class Enregistrement:
@@ -97,82 +99,145 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
     doutes: list[Doute] = []
     # la première diffusion de la dernière émission vérifiée, pas sa publication
     derniere_verifiee = max(
-        (
-            e.date
-            for e in emissions
-            if any(a.source in SOURCES_VERIFIEES for a in e.attestations)
-        ),
+        (e.date for e in emissions if _verifiee(e)),
         default=None,
     )
     for emission in emissions:
         dans_la_liste = _dans_la_liste(emission)
-        if (
-            dans_la_liste
-            and derniere_verifiee
-            and LMELP_COMPLET_DEPUIS <= emission.date <= derniere_verifiee
-            and not any(a.source in SOURCES_VERIFIEES for a in emission.attestations)
-        ):
+
+        def ajouter(
+            type_: str,
+            detail: str,
+            attestation: Attestation | None = None,
+            emission: Emission = emission,
+            dans_la_liste: bool = dans_la_liste,
+        ) -> None:
             doutes.append(
                 Doute(
-                    type="absente de lmelp",
+                    type=type_,
                     emission_id=emission.id,
                     dans_la_liste=dans_la_liste,
-                    source="",
-                    source_id="",
-                    detail=(
-                        f"lmelp est complet depuis le {LMELP_COMPLET_DEPUIS:%d/%m/%Y}"
-                        " pour les émissions littéraires"
-                    ),
+                    source=attestation.source if attestation else "",
+                    source_id=attestation.source_id if attestation else "",
+                    detail=detail,
                 )
             )
+
+        # Rapprochement et date.
         autres = [e for e in emissions if e is not emission]
         for a in emission.attestations:
             if a.source in SOURCES_VERIFIEES:
                 # rattachée par sa fiche, sans ambiguïté ; sinon par la date
                 if not any(_meme_fiche(a, b) for b in emission.attestations):
-                    doutes.append(
-                        Doute(
-                            type="sans fiche radiofrance",
-                            emission_id=emission.id,
-                            dans_la_liste=dans_la_liste,
-                            source=a.source,
-                            source_id=a.source_id,
-                            detail=f"aucune fiche {a.url}",
-                        )
-                    )
+                    ajouter("sans fiche radiofrance", f"aucune fiche {a.url}", a)
                 continue
             rivales = [e.id for e in autres if _rapprochable(a, e.attestations)]
             if rivales:
-                doutes.append(
-                    Doute(
-                        type="rapprochement ambigu",
-                        emission_id=emission.id,
-                        dans_la_liste=dans_la_liste,
-                        source=a.source,
-                        source_id=a.source_id,
-                        detail=f"rapprochable aussi de {', '.join(rivales)}",
-                    )
+                ajouter(
+                    "rapprochement ambigu",
+                    f"rapprochable aussi de {', '.join(rivales)}",
+                    a,
                 )
         dates = sorted(set(_dates_de_diffusion(emission.attestations)))
         if (dates[-1] - dates[0]).days > 1:
-            doutes.append(
-                Doute(
-                    type="désaccord de date",
-                    emission_id=emission.id,
-                    dans_la_liste=dans_la_liste,
-                    source="",
-                    source_id="",
-                    detail=", ".join(
-                        f"{a.source}:{a.date.isoformat()}"
-                        for a in emission.attestations
-                        if a.nature_date == "première diffusion"
-                    ),
-                )
+            ajouter(
+                "désaccord de date",
+                ", ".join(
+                    f"{a.source}:{a.date.isoformat()}"
+                    for a in emission.attestations
+                    if a.nature_date == "première diffusion"
+                ),
             )
+        if emission.id != emission.date.isoformat():
+            ajouter("collision", f"une autre émission le même jour : {emission.date}")
+
+        # Une source vérifiée lève les doutes de thème et d'existence (ADR 0003).
+        if _verifiee(emission):
+            continue
+        if (
+            dans_la_liste
+            and derniere_verifiee
+            and LMELP_COMPLET_DEPUIS <= emission.date <= derniere_verifiee
+        ):
+            ajouter(
+                "absente de lmelp",
+                f"lmelp est complet depuis le {LMELP_COMPLET_DEPUIS:%d/%m/%Y}"
+                " pour les émissions littéraires",
+            )
+        if not emission.themes:
+            ajouter("thème inconnu", "aucune source ne donne de thème")
+        divergence = _themes_divergents(emission.attestations)
+        if divergence:
+            ajouter("thèmes divergents", divergence)
+        for a in emission.attestations:
+            dates_des_fichiers = sorted(
+                {
+                    f.date
+                    for e in a.enregistrements
+                    if (f := lire_nom_fichier(e.url))
+                    and abs((f.date - a.date).days) > ECART_REPUBLICATION_JOURS
+                }
+            )
+            if dates_des_fichiers:
+                ajouter(
+                    "republication",
+                    f"daté du {a.date}, enregistrement du "
+                    + ", ".join(str(jour) for jour in dates_des_fichiers),
+                    a,
+                )
+        fragilite = _fragilite(emission.attestations)
+        if fragilite:
+            ajouter("attestation fragile", fragilite)
     return doutes
 
 
+def _verifiee(emission: Emission) -> bool:
+    """L'émission est attestée par une source vérifiée."""
+    return any(a.source in SOURCES_VERIFIEES for a in emission.attestations)
+
+
+def _fragilite(groupe: list[Attestation]) -> str | None:
+    """Pourquoi l'existence de l'émission est fragile, ou None.
+
+    Ni un extrait ni un fichier conservé par la Wayback Machine ne décrit une
+    émission diffusée en entier : une émission qu'eux seuls attestent peut être
+    une republication ou un fragment publié à part.
+    """
+    if all(a.extrait for a in groupe):
+        return "attestée seulement par des extraits"
+    if all(a.source == "wayback_podcast" for a in groupe):
+        return "attestée seulement par la Wayback Machine"
+    if all(a.extrait or a.source == "wayback_podcast" for a in groupe):
+        return "attestée seulement par des extraits et la Wayback Machine"
+    return None
+
+
+def _themes_divergents(groupe: list[Attestation]) -> str | None:
+    """Le détail d'une divergence de thèmes entre attestations, ou None.
+
+    Les attestations de l'émission entière divergent si elles ne donnent pas
+    les mêmes thèmes ; un extrait diverge s'il porte un thème qu'aucune ne
+    donne. Des extraits aux thèmes différents (un livre, un film) décrivent
+    une émission mixte, sans divergence.
+    """
+    avec_theme = [a for a in groupe if a.themes]
+    entieres = {a.themes for a in avec_theme if not a.extrait}
+    themes_entiers = frozenset().union(*entieres)
+    divergent = len(entieres) > 1 or any(
+        a.extrait and entieres and not a.themes <= themes_entiers for a in avec_theme
+    )
+    if not divergent:
+        return None
+    return ", ".join(
+        f"{a.source}:{'+'.join(sorted(a.themes))}" + (" (extrait)" if a.extrait else "")
+        for a in avec_theme
+    )
+
+
 ECART_MAX_JOURS = 3
+# Un enregistrement daté à plus de trois jours de son attestation signale une
+# émission remise en ligne plus tard (republication), pas un simple décalage.
+ECART_REPUBLICATION_JOURS = 3
 
 # Sources dont chaque attestation a été vérifiée à la main (ADR 0003) : elles se
 # rattachent à l'émission par leur fiche radiofrance.fr, et leur thème fait foi.
