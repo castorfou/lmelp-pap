@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liste des émissions du Masque et la Plume</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,650&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Mise en page : une liste d'archives radio. Bandeau-frise des années en tête, filtres, puis les émissions ligne à ligne. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --fg: #16202c;
+  --muted: #5b6878;
+  --rule: #dde3ea;
+  --accent: #2346c8;
+  --accent-soft: #e4e9fb;
+  --livres: #2346c8;
+  --autre: #8a6a1f;
+  --autre-soft: #f5eedc;
+  --inconnu: #7a8494;
+  --alerte: #b4361f;
+  --alerte-soft: #fbe6e1;
+  --periode: #eaeef3;
+  --f-display: "Literata", Georgia, "Times New Roman", serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151c; --surface: #171e27; --fg: #e4e9f0; --muted: #94a0b0; --rule: #273140;
+    --accent: #8ea6ff; --accent-soft: #1f2a4a; --livres: #8ea6ff; --autre: #d9b664; --autre-soft: #2f2716;
+    --inconnu: #8792a2; --alerte: #f08b74; --alerte-soft: #3a1f19; --periode: #1a222d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151c; --surface: #171e27; --fg: #e4e9f0; --muted: #94a0b0; --rule: #273140;
+  --accent: #8ea6ff; --accent-soft: #1f2a4a; --livres: #8ea6ff; --autre: #d9b664; --autre-soft: #2f2716;
+  --inconnu: #8792a2; --alerte: #f08b74; --alerte-soft: #3a1f19; --periode: #1a222d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+.page { max-width: 1120px; margin: 0 auto; display: grid; gap: 24px; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, .ligne:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header { display: grid; gap: 6px; }
+.surtitre { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { font-family: var(--f-display); font-weight: 650; font-size: clamp(28px, 4.4vw, 42px); line-height: 1.1; margin: 0; text-wrap: balance; }
+.chapeau { color: var(--muted); max-width: 68ch; margin: 0; }
+.chiffres { display: flex; flex-wrap: wrap; gap: 6px 22px; font-family: var(--f-data); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chiffres b { color: var(--fg); font-weight: 500; }
+
+.frise { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 14px 10px; display: grid; gap: 6px; }
+.frise-tete { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.frise-tete button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.frise-defil { overflow-x: auto; }
+.frise svg { display: block; width: 100%; min-width: 640px; height: 120px; }
+.frise .barre { cursor: pointer; }
+.frise .barre rect.l { fill: var(--livres); }
+.frise .barre rect.i { fill: var(--inconnu); opacity: .55; }
+.frise .barre rect.zone { fill: transparent; }
+.frise .barre:hover rect.zone, .frise .barre.choisie rect.zone { fill: var(--accent-soft); }
+.frise .periode { fill: var(--periode); }
+.frise text { fill: var(--muted); font-family: var(--f-data); font-size: 10px; }
+.legende { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legende span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border-radius: 2px; background: var(--c); }
+
+.filtres { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.champ { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.champ input[type=search], .champ select {
+  font: inherit; font-size: 14px; color: var(--fg); background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 5px; padding: 7px 10px; min-width: 0;
+}
+.champ.recherche { flex: 1 1 260px; }
+.champ.recherche input { width: 100%; }
+.bascule { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--fg); padding-bottom: 7px; cursor: pointer; }
+.resultat { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.liste { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.entete, .ligne { display: grid; grid-template-columns: 118px minmax(0, 1fr) 132px 72px 150px; gap: 14px; align-items: baseline; padding: 10px 16px; }
+.entete { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--rule); }
+.entete button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.ligne { border-bottom: 1px solid var(--rule); cursor: pointer; }
+.ligne:hover { background: var(--bg); }
+.ligne[aria-expanded="true"] { background: var(--bg); }
+.date { font-family: var(--f-data); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.date small { display: block; color: var(--muted); font-size: 11px; }
+.titre { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.titre .anim { display: block; font-weight: 400; font-size: 13px; color: var(--muted); }
+.themes { display: flex; flex-wrap: wrap; gap: 4px; }
+.puce { font-size: 11.5px; padding: 1px 7px; border-radius: 99px; background: var(--autre-soft); color: var(--autre); white-space: nowrap; }
+.puce.livres { background: var(--accent-soft); color: var(--livres); }
+.puce.inconnu { background: transparent; color: var(--inconnu); border: 1px dashed var(--inconnu); }
+.duree { font-family: var(--f-data); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sources { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.src { font-family: var(--f-data); font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--rule); border-radius: 3px; color: var(--muted); }
+.drap { font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--alerte-soft); color: var(--alerte); font-weight: 600; }
+.son { font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.detail { padding: 4px 16px 18px 148px; border-bottom: 1px solid var(--rule); background: var(--bg); display: grid; gap: 12px; font-size: 14px; }
+.detail p { margin: 0; max-width: 72ch; }
+.detail h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.detail ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.detail li { overflow-wrap: anywhere; }
+.detail .meta { font-family: var(--f-data); font-size: 12.5px; color: var(--muted); }
+.detail .alerte { color: var(--alerte); }
+
+.plus { display: flex; justify-content: center; padding: 14px; }
+.plus button, .vide button { font: inherit; font-size: 14px; color: var(--accent); background: var(--surface); border: 1px solid var(--rule); border-radius: 5px; padding: 7px 14px; cursor: pointer; }
+.vide { padding: 32px 16px; text-align: center; color: var(--muted); display: grid; gap: 10px; justify-items: center; }
+footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+
+@media (max-width: 760px) {
+  .entete { display: none; }
+  .ligne { grid-template-columns: 1fr auto; gap: 4px 12px; }
+  .ligne .titre { grid-column: 1 / -1; grid-row: 2; }
+  .ligne .themes { grid-column: 1 / -1; grid-row: 3; }
+  .ligne .duree { grid-column: 2; grid-row: 1; text-align: right; }
+  .ligne .sources { grid-column: 1 / -1; grid-row: 4; }
+  .date small { display: inline; margin-left: 8px; }
+  .detail { padding-left: 16px; }
+}
+@media (prefers-reduced-motion: no-preference) { .ligne, .frise .barre rect.zone { transition: background-color .12s, fill .12s; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="surtitre">France Inter · depuis 1955</div>
+    <h1>Liste des émissions du Masque et la Plume</h1>
+    <p class="chapeau">Les émissions où la littérature est abordée, attestées par au moins une source en ligne. Une émission est identifiée par la date de sa première diffusion ; le thème est inconnu quand seule une notice sans détail ou un enregistrement l'atteste.</p>
+    <div class="chiffres" id="chiffres"></div>
+  </header>
+
+  <section class="frise" aria-label="Émissions par année">
+    <div class="frise-tete">
+      <span id="frise-titre">Émissions par année · cliquez une année pour filtrer</span>
+      <button type="button" id="frise-tout" hidden>Toutes les années</button>
+    </div>
+    <div class="frise-defil"><svg id="frise" role="img" aria-label="Nombre d'émissions par année"></svg></div>
+    <div class="legende">
+      <span style="--c: var(--livres)">Thème livres (seul ou mixte)</span>
+      <span style="--c: var(--inconnu)">Thème inconnu</span>
+      <span style="--c: var(--periode)">Périmètre patrimonial 1955-2016</span>
+    </div>
+  </section>
+
+  <section class="filtres" aria-label="Filtres">
+    <label class="champ recherche" for="q">Rechercher (titre, description, animateur, livre…)
+      <input type="search" id="q" placeholder="Duras, Goncourt, Garcin…">
+    </label>
+    <label class="champ" for="theme">Thème
+      <select id="theme">
+        <option value="">Tous</option>
+        <option value="livres">Livres seul</option>
+        <option value="mixte">Mixte (livres + autre)</option>
+        <option value="inconnu">Inconnu</option>
+      </select>
+    </label>
+    <label class="champ" for="source">Attestée par
+      <select id="source">
+        <option value="">Toute source</option>
+        <option value="seule">Une seule source</option>
+      </select>
+    </label>
+    <label class="bascule" for="avec-enregistrement"><input type="checkbox" id="avec-enregistrement"> Avec enregistrement</label>
+    <label class="bascule" for="a-verifier"><input type="checkbox" id="a-verifier"> À vérifier</label>
+  </section>
+
+  <div class="resultat" id="resultat" aria-live="polite"></div>
+
+  <section class="liste" aria-label="Émissions">
+    <div class="entete">
+      <button type="button" id="tri">Date ↑</button><span>Titre · animateur</span><span>Thèmes</span><span>Durée</span><span>Sources</span>
+    </div>
+    <div id="lignes"></div>
+    <div class="plus" id="plus" hidden><button type="button" id="plus-btn"></button></div>
+  </section>
+
+  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter et podcasts archivés par la Wayback Machine. « À vérifier » signale un rapprochement ambigu ou un désaccord de date entre sources.</footer>
+</div>
+
+<script type="application/json" id="donnees">__DONNEES__</script>
+<script>
+const NOMS = { radiofrance: "radiofrance", ina: "INA", anciennes_listes: "listes", wayback_podcast: "wayback" };
+const LOT = 150;
+const sansAccents = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+const LIBELLES = { radiofrance: "radiofrance.fr", ina: "INA", anciennes_listes: "anciennes listes France Inter", wayback_podcast: "podcast archivé (Wayback)" };
+
+const emissions = JSON.parse(document.getElementById("donnees").textContent).map(e => ({
+  ...e,
+  annee: +e.date.slice(0, 4),
+  att: e.attestations.map(a => [a.source, a.date, a.titre, a.url]),
+  enreg: e.enregistrements.map(r => [r.url, r.type]),
+  sig: e.signalements.map(s => [s.type, s.detail]),
+  sources: [...new Set(e.attestations.map(a => a.source))],
+  texte: sansAccents([e.titre, e.description, e.animateur, ...e.attestations.map(a => a.titre)].join(" ")),
+})).sort((a, b) => (a.id < b.id ? -1 : 1));
+
+// Une option du filtre par source pour chaque source présente dans les données.
+for (const s of [...new Set(emissions.flatMap(e => e.sources))].sort()) {
+  document.getElementById("source").insertAdjacentHTML("beforeend", `<option value="${s}">${LIBELLES[s] || s}</option>`);
+}
+
+const etat = { annee: null, croissant: true, affichees: LOT, ouverte: null };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+function jour(date) { const d = new Date(date + "T12:00:00Z"); return JOURS[d.getUTCDay()]; }
+function dateLisible(date) { const [a, m, j] = date.split("-"); return `${+j} ${MOIS[+m - 1]} ${a}`; }
+
+function chiffres() {
+  const n = emissions.length;
+  const livres = emissions.filter(e => e.themes.includes("livres")).length;
+  const avecEnreg = emissions.filter(e => e.enreg.length).length;
+  const sig = emissions.filter(e => e.sig.length).length;
+  const pat = emissions.filter(e => e.annee <= 2016).length;
+  $("chiffres").innerHTML =
+    `<span><b>${n}</b> émissions</span><span><b>${pat}</b> de 1955 à 2016</span>` +
+    `<span><b>${livres}</b> au thème livres</span><span><b>${n - livres}</b> au thème inconnu</span>` +
+    `<span><b>${avecEnreg}</b> avec enregistrement</span><span><b>${sig}</b> à vérifier</span>`;
+}
+
+function frise() {
+  const svg = $("frise");
+  const debut = 1955, fin = Math.max(...emissions.map(e => e.annee));
+  const parAn = {};
+  for (let a = debut; a <= fin; a++) parAn[a] = { l: 0, i: 0 };
+  for (const e of emissions) parAn[e.annee][e.themes.includes("livres") ? "l" : "i"]++;
+  const max = Math.max(...Object.values(parAn).map(v => v.l + v.i));
+  const W = 1000, H = 120, bas = 100, haut = 10, n = fin - debut + 1, pas = W / n;
+  const y = v => (bas - haut) * v / max;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  let s = `<rect class="periode" x="0" y="${haut - 6}" width="${pas * (2016 - debut + 1)}" height="${bas - haut + 6}"></rect>`;
+  for (const g of [0, Math.round(max / 2), max]) {
+    s += `<text x="${W - 2}" y="${bas - y(g) - 2}" text-anchor="end">${g}</text>`;
+  }
+  for (let a = debut; a <= fin; a++) {
+    const x = (a - debut) * pas, v = parAn[a], hl = y(v.l), hi = y(v.i);
+    s += `<g class="barre" data-annee="${a}" tabindex="0" role="button" aria-label="${a} : ${v.l + v.i} émissions">` +
+      `<title>${a} · ${v.l} livres, ${v.i} thème inconnu</title>` +
+      `<rect class="zone" x="${x}" y="${haut - 6}" width="${pas}" height="${bas - haut + 6}"></rect>` +
+      `<rect class="l" x="${x + 1}" y="${bas - hl}" width="${pas - 2}" height="${hl}"></rect>` +
+      `<rect class="i" x="${x + 1}" y="${bas - hl - hi}" width="${pas - 2}" height="${hi}"></rect></g>`;
+    if (a % 5 === 0) s += `<text x="${x + pas / 2}" y="${H - 6}" text-anchor="middle">${a}</text>`;
+  }
+  svg.innerHTML = s;
+  svg.querySelectorAll(".barre").forEach(g => {
+    const choisir = () => { const a = +g.dataset.annee; etat.annee = etat.annee === a ? null : a; etat.affichees = LOT; rendre(); };
+    g.addEventListener("click", choisir);
+    g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); choisir(); } });
+  });
+}
+
+function filtrer() {
+  const q = sansAccents($("q").value.trim());
+  const theme = $("theme").value, source = $("source").value;
+  const avecEnreg = $("avec-enregistrement").checked, verif = $("a-verifier").checked;
+  const r = emissions.filter(e => {
+    if (etat.annee && e.annee !== etat.annee) return false;
+    if (theme === "livres" && !(e.themes.length === 1 && e.themes[0] === "livres")) return false;
+    if (theme === "mixte" && !(e.themes.includes("livres") && e.themes.length > 1)) return false;
+    if (theme === "inconnu" && e.themes.length) return false;
+    if (source === "seule" && e.sources.length !== 1) return false;
+    if (source && source !== "seule" && !e.sources.includes(source)) return false;
+    if (avecEnreg && !e.enreg.length) return false;
+    if (verif && !e.sig.length) return false;
+    if (q && !q.split(/\s+/).every(m => e.texte.includes(m))) return false;
+    return true;
+  });
+  return etat.croissant ? r : r.slice().reverse();
+}
+
+function nomCourt(url) {
+  const nom = url.split("/").pop();
+  return nom.length > 60 ? nom.slice(0, 60) + "…" : nom;
+}
+
+function puces(e) {
+  if (!e.themes.length) return `<span class="puce inconnu">inconnu</span>`;
+  return e.themes.map(t => `<span class="puce ${t === "livres" ? "livres" : ""}">${esc(t)}</span>`).join("");
+}
+
+function ligne(e) {
+  const ouverte = etat.ouverte === e.id;
+  let h = `<div class="ligne" role="button" tabindex="0" aria-expanded="${ouverte}" data-id="${esc(e.id)}">` +
+    `<div class="date">${esc(e.id)}<small>${jour(e.date)}</small></div>` +
+    `<div class="titre">${esc(e.titre || "Sans titre")}${e.animateur ? `<span class="anim">${esc(e.animateur)}</span>` : ""}</div>` +
+    `<div class="themes">${puces(e)}</div>` +
+    `<div class="duree">${esc(e.duree ? e.duree.replace(/^00:/, "") : "")}</div>` +
+    `<div class="sources">${e.sources.map(s => `<span class="src">${NOMS[s] || esc(s)}</span>`).join("")}` +
+    `${e.enreg.length ? `<span class="son">enregistrement</span>` : ""}${e.sig.length ? `<span class="drap">à vérifier</span>` : ""}</div></div>`;
+  if (ouverte) h += detail(e);
+  return h;
+}
+
+function detail(e) {
+  let h = `<div class="detail">`;
+  h += `<div class="meta">${dateLisible(e.date)}${e.chaine ? " · " + esc(e.chaine) : ""}${e.duree ? " · " + esc(e.duree) : ""}</div>`;
+  if (e.description) h += `<p>${esc(e.description)}</p>`;
+  h += `<div><h3>Attestations</h3><ul>` + e.att.map(([s, d, t, u]) =>
+    `<li><span class="meta">${NOMS[s] || esc(s)} · ${esc(d)}</span> ${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t || u)}</a>` : esc(t || "enregistrement archivé")}</li>`
+  ).join("") + `</ul></div>`;
+  if (e.enreg.length) h += `<div><h3>Enregistrements</h3><ul>` + e.enreg.map(([u, t]) =>
+    `<li><span class="meta">${esc(t)}</span> <a href="${esc(u)}" target="_blank" rel="noopener">${esc(nomCourt(u))}</a></li>`
+  ).join("") + `</ul></div>`;
+  if (e.sig.length) h += `<div><h3>À vérifier</h3><ul>` + e.sig.map(([t, d]) =>
+    `<li class="alerte">${esc(t)} · ${esc(d)}</li>`).join("") + `</ul></div>`;
+  return h + `</div>`;
+}
+
+function rendre() {
+  const r = filtrer();
+  const visibles = r.slice(0, etat.affichees);
+  $("lignes").innerHTML = visibles.length ? visibles.map(ligne).join("") :
+    `<div class="vide"><span>Aucune émission ne correspond à ces filtres.</span><button type="button" id="reset">Effacer les filtres</button></div>`;
+  $("resultat").textContent = `${r.length} émission${r.length > 1 ? "s" : ""}${etat.annee ? " en " + etat.annee : ""}` +
+    (r.length > visibles.length ? ` · ${visibles.length} affichées` : "");
+  $("plus").hidden = r.length <= visibles.length;
+  $("plus-btn").textContent = `Afficher ${Math.min(LOT, r.length - visibles.length)} de plus`;
+  $("tri").textContent = etat.croissant ? "Date ↑" : "Date ↓";
+  $("frise-tout").hidden = !etat.annee;
+  $("frise-titre").textContent = etat.annee ? `Année ${etat.annee} sélectionnée` : "Émissions par année · cliquez une année pour filtrer";
+  document.querySelectorAll(".frise .barre").forEach(g => g.classList.toggle("choisie", +g.dataset.annee === etat.annee));
+  const reset = $("reset");
+  if (reset) reset.addEventListener("click", () => {
+    $("q").value = ""; $("theme").value = ""; $("source").value = ""; $("avec-enregistrement").checked = false; $("a-verifier").checked = false;
+    etat.annee = null; etat.affichees = LOT; rendre();
+  });
+}
+
+$("lignes").addEventListener("click", ev => {
+  if (ev.target.closest("a")) return;
+  const l = ev.target.closest(".ligne"); if (!l) return;
+  etat.ouverte = etat.ouverte === l.dataset.id ? null : l.dataset.id; rendre();
+});
+$("lignes").addEventListener("keydown", ev => {
+  const l = ev.target.closest(".ligne");
+  if (l && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); l.click(); }
+});
+for (const id of ["q", "theme", "source", "avec-enregistrement", "a-verifier"]) {
+  $(id).addEventListener(id === "q" ? "input" : "change", () => { etat.affichees = LOT; rendre(); });
+}
+$("tri").addEventListener("click", () => { etat.croissant = !etat.croissant; rendre(); });
+$("plus-btn").addEventListener("click", () => { etat.affichees += LOT; rendre(); });
+$("frise-tout").addEventListener("click", () => { etat.annee = null; etat.affichees = LOT; rendre(); });
+
+chiffres(); frise(); rendre();
+</script>
+</body>
+</html>

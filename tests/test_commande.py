@@ -60,3 +60,14 @@ def test_la_commande_construit_la_liste_depuis_le_cache_sans_reseau(
     for fichier in ("attestations.csv", "enregistrements.csv"):
         assert (sortie / fichier).exists()
     assert (sortie / "rapport_rapprochement.csv").exists()
+
+
+def test_la_commande_page_ecrit_la_page_a_partir_des_csv(tmp_path: Path) -> None:
+    sortie = tmp_path / "site" / "emissions" / "index.html"
+
+    code = main(["page", "--donnees", str(FIXTURES / "liste"), "--sortie", str(sortie)])
+
+    assert code == 0
+    page = sortie.read_text(encoding="utf-8")
+    assert page.lower().startswith("<!doctype html>")
+    assert "1958-12-04" in page

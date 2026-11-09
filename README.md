@@ -184,6 +184,9 @@ uv run --active lmelp-pap emissions
 # Ajouter les émissions récentes : re-collecter radiofrance.fr
 uv run --active lmelp-pap emissions --source radiofrance --refresh
 
+# Générer la page de la liste (docs/emissions/index.html), à ouvrir dans un navigateur
+uv run --active lmelp-pap page
+
 # Aide et options
 uv run --active lmelp-pap emissions --help
 ```

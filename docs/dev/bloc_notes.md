@@ -10,7 +10,10 @@
 
 ## demarrage du serveur mkdocs
 
+La navigation pointe vers la page générée de la liste des émissions : `lmelp-pap page` d'abord.
+
 ```bash
+uv run --active lmelp-pap page
 mkdocs serve -a localhost:8005
 ```
 
