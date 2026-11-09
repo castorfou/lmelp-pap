@@ -1,5 +1,6 @@
 nav:
   - Accueil: index.md
+  - Liste des émissions: emissions/index.html
   - Guides utilisateurs: user/
   - Guides développeurs: dev/
   - Cheatsheets: cheatsheets/

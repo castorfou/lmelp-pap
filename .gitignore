@@ -171,3 +171,6 @@ yarn.lock
 .next/
 .cache/
 !tests/fixtures/**/*.csv
+
+# Page de la liste des émissions, générée par `lmelp-pap page` (et dans la CI de la doc)
+docs/emissions/

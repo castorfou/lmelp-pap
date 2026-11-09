@@ -32,6 +32,31 @@ uv run --active playwright install chromium
 sudo -E env "PATH=$PATH" /tmp/venv/bin/playwright install-deps chromium
 ```
 
+## Consulter la liste
+
+Une page HTML présente la liste des émissions :
+- une frise des émissions par année, où un clic sur une année filtre la liste ;
+- une recherche sans tenir compte des accents ;
+- des filtres par thème, par source, « avec enregistrement » et « à vérifier » ;
+- le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements et signalements.
+
+```bash
+uv run --active lmelp-pap page
+```
+
+La commande lit les CSV de `data/processed/` et écrit `docs/emissions/index.html`. Ce fichier autonome s'ouvre directement dans un navigateur, sans serveur. Les données et le code y sont embarqués ; seules les polices de caractères viennent d'Internet. Le fichier est régénéré à partir des CSV et n'est pas versionné.
+
+| Option | Effet |
+|---|---|
+| `--donnees DOSSIER` | Dossier des CSV de la liste (par défaut `data/processed`). |
+| `--sortie FICHIER` | Fichier HTML produit (par défaut `docs/emissions/index.html`). |
+
+La page fait partie de la documentation et elle est publiée sur [castorfou.github.io/lmelp-pap/emissions/](https://castorfou.github.io/lmelp-pap/emissions/), régénérée à chaque mise à jour de la liste sur `main`. Pour construire ou prévisualiser la documentation en local, générer d'abord la page : sans elle, `mkdocs build --strict` échoue sur l'entrée « Liste des émissions » de la navigation.
+
+```bash
+uv run --active lmelp-pap page && uv run --active mkdocs serve
+```
+
 ## Sources
 
 | Source (`--source`) | Ce qu'elle atteste | Durée de collecte |

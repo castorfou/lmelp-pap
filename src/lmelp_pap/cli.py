@@ -9,6 +9,7 @@ from pathlib import Path
 from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import construire_liste
+from lmelp_pap.page import construire_page
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -30,7 +31,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     emissions.add_argument("--cache", type=Path, default=Path("data/raw/cache"))
     emissions.add_argument("--sortie", type=Path, default=Path("data/processed"))
+    page = commandes.add_parser(
+        "page", help="génère la page HTML de la liste des émissions"
+    )
+    page.add_argument("--donnees", type=Path, default=Path("data/processed"))
+    page.add_argument("--sortie", type=Path, default=Path("docs/emissions/index.html"))
     args = parser.parse_args(argv)
+
+    if args.commande == "page":
+        args.sortie.parent.mkdir(parents=True, exist_ok=True)
+        args.sortie.write_text(construire_page(args.donnees), encoding="utf-8")
+        print(f"Page de la liste des émissions → {args.sortie}", file=sys.stderr)
+        return 0
 
     for source in args.source or sorted(SOURCES):
         print(f"Collecte : {source}", file=sys.stderr)
