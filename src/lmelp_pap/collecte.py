@@ -7,16 +7,28 @@ jamais au réseau.
 """
 
 import csv
+import json
+import os
 import re
+import sys
 import time
 from collections.abc import Callable
+from datetime import UTC
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import requests
+from dotenv import find_dotenv, load_dotenv
 
 from lmelp_pap.liste import Attestation
-from lmelp_pap.sources import anciennes_listes, ina, radiofrance, wayback_podcast
+from lmelp_pap.sources import (
+    anciennes_listes,
+    ina,
+    lmelp,
+    radiofrance,
+    wayback_podcast,
+)
 
 
 TERMINEE = "collecte_terminee"
@@ -54,7 +66,17 @@ def lire_anciennes_listes(dossier: Path) -> list[Attestation]:
     return list(uniques.values())
 
 
+def lire_lmelp(dossier: Path) -> list[Attestation]:
+    """Les émissions vérifiées copiées de la base Mongo par la collecte."""
+    emissions = json.loads((dossier / "emissions.json").read_text(encoding="utf-8"))
+    return lmelp.lire_emissions(emissions)
+
+
 # --- Collecte (réseau) -------------------------------------------------------
+
+
+class SourceIndisponibleError(Exception):
+    """La source ne peut pas être collectée ici (accès absent) : on la saute."""
 
 
 def _get(
@@ -159,6 +181,55 @@ def collecter_anciennes_listes(dossier: Path) -> None:
             time.sleep(_DELAI_WAYBACK)
 
 
+def collecter_lmelp(dossier: Path) -> None:
+    """Les émissions vérifiées de la base Mongo de lmelp, en lecture seule.
+
+    La base n'est accessible que depuis le devcontainer : ``MONGO_URI`` et
+    ``MONGO_DB`` viennent de l'environnement ou du fichier ``.env``.
+    """
+    load_dotenv(find_dotenv(usecwd=True))
+    uri = os.environ.get("MONGO_URI")
+    if not uri:
+        raise SourceIndisponibleError("MONGO_URI absent")
+    from pymongo import MongoClient
+
+    client: MongoClient[dict[str, Any]] = MongoClient(
+        uri, serverSelectionTimeoutMS=10_000
+    )
+    with client:
+        base = client[os.environ.get("MONGO_DB", "masque_et_la_plume")]
+        champs = ["titre", "titre_corrige", "date", "episode_page_url"]
+        episodes = {
+            str(e["_id"]): e
+            for e in base.episodes.find({}, [*champs, "audio_rel_filename", "masked"])
+        }
+        retenus = [episodes.get(str(e["episode_id"])) for e in base.emissions.find()]
+    emissions = [
+        {
+            "page": e["episode_page_url"],
+            "titre": e.get("titre_corrige") or e["titre"],
+            "publication": e["date"].replace(tzinfo=UTC).isoformat(),
+            "fichier": e.get("audio_rel_filename") or "",
+        }
+        for e in retenus
+        if e and not e.get("masked") and e.get("episode_page_url")
+    ]
+    if len(emissions) < len(retenus):
+        print(
+            f"lmelp : {len(retenus) - len(emissions)} émissions sans épisode, "
+            "masquées ou sans page radiofrance.fr, ignorées",
+            file=sys.stderr,
+        )
+    (dossier / "emissions.json").write_text(
+        json.dumps(
+            sorted(emissions, key=lambda e: e["publication"]),
+            ensure_ascii=False,
+            indent=1,
+        ),
+        encoding="utf-8",
+    )
+
+
 # --- Registre des sources ----------------------------------------------------
 
 SOURCES: dict[
@@ -168,6 +239,7 @@ SOURCES: dict[
     "wayback_podcast": (collecter_wayback_podcast, lire_wayback_podcast),
     "ina": (collecter_ina, lire_ina),
     "anciennes_listes": (collecter_anciennes_listes, lire_anciennes_listes),
+    "lmelp": (collecter_lmelp, lire_lmelp),
 }
 
 
@@ -177,8 +249,16 @@ def collecter(source: str, cache: Path, refresh: bool = False) -> None:
     if (dossier / TERMINEE).exists() and not refresh:
         return
     dossier.mkdir(parents=True, exist_ok=True)
+    etait_terminee = (dossier / TERMINEE).exists()
     (dossier / TERMINEE).unlink(missing_ok=True)
-    SOURCES[source][0](dossier)
+    try:
+        SOURCES[source][0](dossier)
+    except SourceIndisponibleError as raison:
+        # rien n'a été écrit : le cache précédent, s'il y en a un, reste valable
+        print(f"{source} : collecte sautée ({raison})", file=sys.stderr)
+        if etait_terminee:
+            (dossier / TERMINEE).touch()
+        return
     (dossier / TERMINEE).touch()
 
 

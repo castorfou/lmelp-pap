@@ -14,6 +14,18 @@ _Avoid_ : épisode, numéro, notice
 Le passage d'une émission à l'antenne, à une date donnée.
 _Avoid_ : programmation
 
+**Première diffusion** :
+La première diffusion d'une émission à la radio. Sa date identifie l'émission ; une source qui en donne une autre (date de publication, de captation) ne la contredit pas.
+_Avoid_ : date de l'émission, date de sortie
+
+**Captation** :
+La séance où l'émission est enregistrée, souvent en public et quelques jours avant sa première diffusion.
+_Avoid_ : enregistrement (le fichier audio), date d'enregistrement
+
+**Publication** :
+La mise en ligne d'un enregistrement de l'émission dans le podcast, autour de sa première diffusion (parfois quelques jours avant ou après). Une mise en ligne bien plus tardive, dans un podcast d'archives, est une republication.
+_Avoid_ : diffusion (pour le podcast), sortie
+
 **Rediffusion** :
 Une diffusion d'une émission déjà diffusée auparavant. Elle se rattache à l'émission d'origine et n'en crée pas une nouvelle.
 _Avoid_ : redif, reprise
@@ -41,8 +53,12 @@ _Avoid_ : présentateur, producteur
 ### Sources et liste
 
 **Source** :
-Un fonds externe qui atteste l'existence d'émissions (catalogue INA, base des podcasts France Inter…).
+Un fonds qui atteste l'existence d'émissions (catalogue INA, base des podcasts France Inter, lmelp…).
 _Avoid_ : provider, origine
+
+**Source vérifiée** :
+Une source dont chaque attestation résulte d'une vérification humaine faite en amont : lmelp, pour les émissions qu'il retient. Elle atteste l'émission comme toute source, et ce qu'elle affirme (l'existence de l'émission, son thème livres) fait foi comme un arbitrage. Son silence ne prouve rien, sauf sur la période où elle est complète. Une contradiction entre une source vérifiée et un arbitrage est un doute.
+_Avoid_ : référence, vérité terrain
 
 **Émission attestée** :
 Une émission dont au moins une source témoigne. La liste des émissions ne contient que des émissions attestées.
@@ -57,7 +73,7 @@ Un point d'une émission que les sources ne permettent pas d'affirmer avec certi
 _Avoid_ : signalement, anomalie, alerte
 
 **Arbitrage** :
-Une décision humaine qui lève un doute : le thème d'une émission, ou le fait qu'elle n'existe pas. Il s'attache à une attestation de l'émission et s'applique à chaque construction de la liste. Ce n'est pas une source : il n'atteste aucune émission, il tranche entre ce que disent les sources.
+Une décision humaine qui lève un doute : le thème d'une émission, ou le fait qu'elle n'existe pas. Il s'attache à une attestation de l'émission et s'applique à chaque construction de la liste. Ce n'est pas une source : il n'atteste aucune émission, il tranche entre ce que disent les sources. Il se décide dans lmelp-pap, émission par émission, alors qu'une source vérifiée apporte des vérifications faites ailleurs.
 _Avoid_ : correction manuelle, saisie, override
 
 **Liste des émissions** :

@@ -1,6 +1,7 @@
 """La commande ``lmelp-pap emissions``, de bout en bout sur un cache déjà rempli."""
 
 import csv
+import json
 import shutil
 from pathlib import Path
 
@@ -10,6 +11,13 @@ from lmelp_pap.cli import main
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _sans_base_lmelp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Les tests ne touchent jamais à la base Mongo de lmelp, ni au .env du dépôt."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MONGO_URI", raising=False)
 
 
 def _cache_rempli(cache: Path) -> None:
@@ -91,3 +99,63 @@ def test_la_commande_page_ecrit_la_page_a_partir_des_csv(tmp_path: Path) -> None
     page = sortie.read_text(encoding="utf-8")
     assert page.lower().startswith("<!doctype html>")
     assert "1958-12-04" in page
+
+
+def _attestations(chemin: Path) -> list[dict[str, str]]:
+    with chemin.open(encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def test_la_commande_rattache_les_emissions_verifiees_de_lmelp(
+    tmp_path: Path,
+) -> None:
+    cache, sortie = tmp_path / "cache", tmp_path / "sortie"
+    _cache_rempli(cache)
+    page = (
+        "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/"
+        "le-masque-et-la-plume-du-dimanche-11-fevrier-2024-2491269"
+    )
+    (cache / "lmelp").mkdir()
+    (cache / "lmelp" / "emissions.json").write_text(
+        json.dumps(
+            [
+                {
+                    "page": page,
+                    "titre": "Darrieussecq, Kerangal… que lire cette semaine ?",
+                    "publication": "2024-02-10T09:00:00+00:00",
+                    "fichier": "2024/14007-11.02.2024-ITEMA_2-2024F4007S0043.m4a",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (cache / "lmelp" / "collecte_terminee").touch()
+
+    main(["emissions", "--cache", str(cache), "--sortie", str(sortie)])
+
+    lmelp = [
+        (a["emission_id"], a["source_id"], a["date"], a["themes"])
+        for a in _attestations(sortie / "attestations.csv")
+        if a["source"] == "lmelp"
+    ]
+    assert lmelp == [
+        (
+            "2024-02-11",
+            "le-masque-et-la-plume-du-dimanche-11-fevrier-2024-2491269",
+            "2024-02-10",
+            "livres",
+        )
+    ]
+
+
+def test_sans_acces_a_la_base_lmelp_la_collecte_est_sautee(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cache = tmp_path / "cache"
+
+    code = main(["emissions", "--source", "lmelp", "--cache", str(cache)])
+
+    assert code == 0
+    assert "lmelp : collecte sautée" in capsys.readouterr().err
+    assert not (cache / "lmelp" / "collecte_terminee").exists()
