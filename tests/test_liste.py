@@ -1,5 +1,6 @@
 """Construction de la liste des émissions à partir des attestations des sources."""
 
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -311,3 +312,165 @@ def test_un_animateur_precise_par_une_source_l_emporte_sur_la_deduction() -> Non
     liste, _ = construire_liste([attestation])
 
     assert liste[0].animateur == "Arnaud Viviant"
+
+
+DIMANCHE = date(2024, 2, 11)
+URL_INTEGRAL = "https://media.radiofrance-podcast.net/podcast09/20904-11.02.2024-ITEMA_23644545-2024F4007S0042-27.m4a"
+URL_EXTRAIT = "https://media.radiofrance-podcast.net/podcast09/14007-12.02.2024-ITEMA_23783945-2024F4007S0043-27.m4a"
+
+
+def _fiche_du_dimanche() -> Attestation:
+    return Attestation(
+        source="radiofrance",
+        source_id="le-masque-et-la-plume-du-dimanche-11-fevrier-2024-2491269",
+        date=DIMANCHE,
+        themes=frozenset({"livres"}),
+        titre="Les nouvelles pages de Marie Darrieussecq, Philippe Besson",
+        description="Les critiques ont lu les nouveaux livres de la semaine.",
+        duree="00:46:54",
+        enregistrements=(Enregistrement(url=URL_INTEGRAL, type="intégral"),),
+    )
+
+
+def _fiche_par_livre() -> Attestation:
+    return Attestation(
+        source="radiofrance",
+        source_id="fabriquer-une-femme-de-marie-darrieussecq-3613378",
+        date=date(2024, 2, 12),
+        themes=frozenset({"livres"}),
+        titre="CRITIQUE l Le Masque unanime face à Marie Darrieussecq",
+        description="Le Masque a lu « Fabriquer une femme ».",
+        duree="00:11:22",
+        enregistrements=(Enregistrement(url=URL_EXTRAIT, type="extrait"),),
+        extrait=True,
+    )
+
+
+def test_les_champs_viennent_de_l_emission_entiere_plutot_que_d_un_extrait() -> None:
+    # publié le même dimanche et arrivé en premier : sa place ne doit rien changer
+    extrait = replace(_fiche_par_livre(), date=DIMANCHE)
+    liste, _rapport = construire_liste([extrait, _fiche_du_dimanche()])
+
+    emission = liste[0]
+    assert emission.date == DIMANCHE
+    assert (
+        emission.titre == "Les nouvelles pages de Marie Darrieussecq, Philippe Besson"
+    )
+    assert (
+        emission.description
+        == "Les critiques ont lu les nouveaux livres de la semaine."
+    )
+    assert emission.duree == "00:46:54"
+
+
+def test_une_emission_attestee_seulement_par_un_extrait_n_a_pas_de_duree() -> None:
+    liste, _rapport = construire_liste([_fiche_par_livre()])
+
+    emission = liste[0]
+    assert emission.titre == "CRITIQUE l Le Masque unanime face à Marie Darrieussecq"
+    assert emission.duree is None
+
+
+def test_un_extrait_l_est_pour_tous_les_fichiers_de_son_archive() -> None:
+    # la Wayback ne connaît que le nom du fichier : lettre S, donc « intégral »
+    mp3_du_fragment = URL_EXTRAIT.replace("-27.m4a", "-22.mp3")
+    wayback = Attestation(
+        source="wayback_podcast",
+        source_id="ITEMA_23783945",
+        date=date(2024, 2, 12),
+        enregistrements=(Enregistrement(url=mp3_du_fragment, type="intégral"),),
+    )
+
+    liste, _rapport = construire_liste(
+        [_fiche_du_dimanche(), _fiche_par_livre(), wayback]
+    )
+
+    assert [(e.url, e.type) for e in liste[0].enregistrements] == [
+        (URL_INTEGRAL, "intégral"),
+        (URL_EXTRAIT, "extrait"),
+        (mp3_du_fragment, "extrait"),
+    ]
+
+
+URL_HITCHCOCK = "https://media.radiofrance-podcast.net/podcast09/14007-01.01.1967-ITEMA_23820437-1967F4007E0001"
+
+
+def _archive_hitchcock(duree: str) -> list[Attestation]:
+    """L'émission du 1er janvier 1967 : notice INA, archive E, MP3 de la Wayback."""
+    return [
+        Attestation(
+            source="ina",
+            source_id="PH_PHD99205665",
+            date=date(1967, 1, 1),
+            themes=frozenset({"cinéma"}),
+            titre="Cinéma",
+            duree="00:23:10",
+        ),
+        Attestation(
+            source="radiofrance",
+            source_id="francois-truffaut-invite-du-masque-pour-parler-d-alfred-hitchcock-1030980",
+            date=date(1967, 1, 1),
+            themes=frozenset({"cinéma", "livres"}),
+            titre='"Le cinéma selon Hitchcock" par Truffaut',
+            duree=duree,
+            enregistrements=(
+                Enregistrement(url=f"{URL_HITCHCOCK}-27.m4a", type="extrait"),
+            ),
+            extrait=True,
+        ),
+        Attestation(
+            source="wayback_podcast",
+            source_id="ITEMA_23820437",
+            date=date(1967, 1, 1),
+            enregistrements=(
+                Enregistrement(url=f"{URL_HITCHCOCK}-22.mp3", type="extrait"),
+            ),
+            extrait=True,
+        ),
+    ]
+
+
+def test_une_archive_presque_aussi_longue_que_la_diffusion_est_l_emission_entiere() -> (
+    None
+):
+    liste, _rapport = construire_liste(_archive_hitchcock(duree="00:21:05"))
+
+    emission = liste[0]
+    assert [e.type for e in emission.enregistrements] == ["intégral", "intégral"]
+    assert emission.titre == '"Le cinéma selon Hitchcock" par Truffaut'
+
+
+def test_une_archive_nettement_plus_courte_que_la_diffusion_reste_un_extrait() -> None:
+    liste, _rapport = construire_liste(_archive_hitchcock(duree="00:10:00"))
+
+    emission = liste[0]
+    assert [e.type for e in emission.enregistrements] == ["extrait", "extrait"]
+    assert emission.titre == "Cinéma"
+
+
+def test_la_regle_des_90_pourcent_ne_vaut_que_pour_les_archives_e() -> None:
+    # une fiche par livre (lettre S) face à une durée INA du même ordre
+    ina = Attestation(source="ina", source_id="RD_1", date=DIMANCHE, duree="00:12:00")
+
+    liste, _rapport = construire_liste([ina, _fiche_par_livre()])
+
+    assert [e.type for e in liste[0].enregistrements] == ["extrait"]
+
+
+def test_les_themes_se_cumulent_entre_sources_et_extraits() -> None:
+    # 70 ans du Masque : la fiche entière ne dit que « cinéma » ; un extrait
+    # et la notice INA, rapprochés par ce thème commun, apportent les autres
+    entiere = replace(_fiche_du_dimanche(), themes=frozenset({"cinéma"}))
+    extrait = replace(
+        _fiche_par_livre(), date=DIMANCHE, themes=frozenset({"cinéma", "livres"})
+    )
+    ina = Attestation(
+        source="ina",
+        source_id="RD_2",
+        date=DIMANCHE,
+        themes=frozenset({"cinéma", "théâtre"}),
+    )
+
+    liste, _rapport = construire_liste([entiere, extrait, ina])
+
+    assert liste[0].themes == frozenset({"cinéma", "livres", "théâtre"})

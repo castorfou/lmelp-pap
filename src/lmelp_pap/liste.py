@@ -3,7 +3,8 @@
 Vocabulaire : voir CONTEXT.md. Décisions : docs/adr/0001 et 0002.
 """
 
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
 
@@ -32,6 +33,7 @@ class Attestation:
     animateur: str | None = None
     url: str | None = None
     enregistrements: tuple[Enregistrement, ...] = ()
+    extrait: bool = False  # un fragment, qui ne décrit pas l'émission entière
 
 
 @dataclass
@@ -125,7 +127,6 @@ ECART_MAX_JOURS = 3
 # Pour chaque champ, les sources par ordre de priorité décroissante (issue #2).
 PRIORITES: dict[str, tuple[str, ...]] = {
     "date": ("radiofrance", "ina", "anciennes_listes", "wayback_podcast"),
-    "themes": ("radiofrance", "anciennes_listes", "ina"),
     "titre": ("radiofrance", "ina"),
     "description": ("radiofrance", "ina"),
     "chaine": ("ina", "radiofrance"),
@@ -153,10 +154,22 @@ def animateur_du(jour: date) -> str | None:
     return None
 
 
+# Champs qu'un extrait ne renseigne jamais : il ne couvre qu'un fragment.
+_JAMAIS_D_UN_EXTRAIT = {"duree"}
+# Une archive au moins aussi longue que 90 % de la diffusion (durée INA) est
+# l'émission entière, pas un extrait.
+_PART_MIN_ENTIERE = 0.9
+
+
 def _valeur(champ: str, groupe: list[Attestation]) -> Any:
-    """La valeur du champ dans la source la plus prioritaire qui le renseigne."""
+    """La valeur du champ dans la source la plus prioritaire qui le renseigne.
+
+    Une attestation de l'émission entière passe avant un extrait.
+    """
     ordre = PRIORITES[champ]
-    for a in sorted(groupe, key=lambda a: _rang(a.source, ordre)):
+    candidats = [a for a in groupe if not (a.extrait and champ in _JAMAIS_D_UN_EXTRAIT)]
+
+    for a in sorted(candidats, key=lambda a: (a.extrait, _rang(a.source, ordre))):
         valeur = getattr(a, champ)
         if valeur:
             return valeur
@@ -196,12 +209,58 @@ def _attribuer_identifiants(liste: list[Emission]) -> None:
         emission.id = base if rang == 0 else f"{base}-{chr(ord('a') + rang)}"
 
 
+def _secondes(duree: str) -> int:
+    """``HH:MM:SS`` en secondes."""
+    h, m, s = (int(x) for x in duree.split(":"))
+    return h * 3600 + m * 60 + s
+
+
+def _archives_entieres(groupe: list[Attestation]) -> list[Attestation]:
+    """Les extraits d'archive qui couvrent en fait toute la diffusion INA.
+
+    Ils redeviennent des attestations de l'émission entière, et leurs
+    enregistrements des intégraux : la règle de type par archive (ITEMA)
+    étend ce changement aux fichiers des autres sources.
+    """
+    diffusion = max(
+        (_secondes(a.duree) for a in groupe if a.source == "ina" and a.duree),
+        default=None,
+    )
+    if diffusion is None:
+        return groupe
+    seuil = _PART_MIN_ENTIERE * diffusion
+    entieres = {
+        _itema(e.url)
+        for a in groupe
+        if a.extrait and a.duree and _secondes(a.duree) >= seuil
+        for e in a.enregistrements
+        if _archive(e.url)
+    } - {None}
+    if not entieres:
+        return groupe
+
+    def entiere(a: Attestation) -> Attestation:
+        if not any(_itema(e.url) in entieres for e in a.enregistrements):
+            return a
+        return replace(
+            a,
+            extrait=False,
+            enregistrements=tuple(
+                Enregistrement(e.url, "intégral") if _itema(e.url) in entieres else e
+                for e in a.enregistrements
+            ),
+        )
+
+    return [entiere(a) for a in groupe]
+
+
 def _fusionner(groupe: list[Attestation]) -> Emission:
+    groupe = _archives_entieres(groupe)
     jour: date = _valeur("date", groupe)
     return Emission(
         id=jour.isoformat(),
         date=jour,
-        themes=_valeur("themes", groupe) or frozenset(),
+        themes=_themes(groupe),
         titre=_valeur("titre", groupe),
         description=_valeur("description", groupe),
         chaine=_valeur("chaine", groupe),
@@ -209,13 +268,39 @@ def _fusionner(groupe: list[Attestation]) -> Emission:
         duree=_valeur("duree", groupe),
         animateur=_valeur("animateur", groupe) or animateur_du(jour),
         attestations=groupe,
-        enregistrements=list(
-            dict.fromkeys(e for a in groupe for e in a.enregistrements)
-        ),
+        enregistrements=_enregistrements(groupe),
+    )
+
+
+def _archive(url: str) -> bool:
+    """Un fichier d'une série d'archives : lettre ``E`` du code de publication."""
+    return re.search(r"\d{4}F4007E\d+", url) is not None
+
+
+def _itema(url: str) -> str | None:
+    """L'identifiant d'archive Radio France d'un fichier audio, s'il y figure."""
+    m = re.search(r"ITEMA_\d+", url)
+    return m.group(0) if m else None
+
+
+def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
+    """Les enregistrements de toutes les sources, typés par archive (ITEMA).
+
+    Une source qui sait qu'une archive est un extrait (radiofrance.fr connaît
+    la durée) l'emporte sur une autre qui ne voit que le nom du fichier.
+    """
+    tous = [e for a in groupe for e in a.enregistrements]
+    extraits = {_itema(e.url) for e in tous if e.type == "extrait"} - {None}
+    return list(
+        dict.fromkeys(
+            Enregistrement(e.url, "extrait") if _itema(e.url) in extraits else e
+            for e in tous
+        )
     )
 
 
 def _themes(groupe: list[Attestation]) -> frozenset[str]:
+    """Les thèmes de toutes les attestations, extraits compris."""
     return frozenset().union(*(a.themes for a in groupe))
 
 

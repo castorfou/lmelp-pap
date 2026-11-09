@@ -66,7 +66,7 @@ uv run --active lmelp-pap page && uv run --active mkdocs serve
 | `ina` | Toutes les notices de la collection « Le masque et la plume » du catalogue INA : date, titre, chaîne, heure, durée. Le thème vient du titre, et les notices de la facette Littérature reçoivent le thème livres. | plusieurs minutes |
 | `anciennes_listes` | Les listes d'émissions de l'ancien site France Inter, archivées par la Wayback Machine : liste annuelle (2002-2008) et listes mensuelles (2009-2012), avec date et thème. Un dimanche « Pas de masque et la plume » n'atteste aucune émission. | quelques minutes |
 
-Le nom d'un fichier audio Radio France distingue une émission diffusée d'un extrait : dans `14007-04.12.1958-ITEMA_24232446-1958F4007E0005-….m4a`, la lettre `E` après `F4007` désigne un épisode d'une série d'archives (un extrait), la lettre `S` une émission diffusée.
+Une fiche radiofrance.fr décrit soit l'émission entière, soit un **extrait** : une fiche par livre ou par film (moins de 25 minutes, contre 40 minutes à une heure pour une émission entière), ou une archive. Le nom d'un fichier audio Radio France signale les archives : dans `14007-04.12.1958-ITEMA_24232446-1958F4007E0005-….m4a`, la lettre `E` après `F4007` désigne un épisode d'une série d'archives (un extrait). La lettre `S` ne suffit pas à reconnaître une émission entière : les fiches par livre la portent aussi.
 
 ## Fichiers produits
 
@@ -104,14 +104,21 @@ Les cas à vérifier à la main :
 
 **Rapprochement.** Deux attestations décrivent la même émission si elles ont la même date, ou au plus trois jours d'écart avec des thèmes compatibles. Un thème inconnu est compatible avec tous les thèmes.
 
-**Fusion.** Chaque champ de l'émission vient de la source la plus prioritaire qui le renseigne :
+**Extraits.** Un extrait atteste son émission sans la décrire en entier :
+
+- une fiche radiofrance.fr est un extrait si elle dure moins de 25 minutes ou si son fichier audio porte la lettre `E` ; une fiche sans durée décrit l'émission entière ;
+- les champs de l'émission viennent d'abord d'une attestation de l'émission entière (fiche longue, notice INA), et seulement à défaut d'un extrait ; une émission ancienne prend ainsi le titre de sa notice INA (« Littérature »), le titre de l'extrait restant dans les attestations ;
+- la durée ne vient jamais d'un extrait ;
+- les thèmes se cumulent : ceux de toutes les attestations, extraits compris ;
+- une archive dont la durée atteint 90 % de la durée de diffusion INA est l'émission entière, pas un extrait.
+
+**Fusion.** Chaque champ de l'émission vient de la source la plus prioritaire qui le renseigne, parmi les attestations de l'émission entière d'abord (voir ci-dessus) :
 
 | Champ | Priorité |
 |---|---|
 | Date | radiofrance > ina > anciennes_listes > wayback_podcast |
-| Thèmes | radiofrance > anciennes_listes > ina |
 | Titre, description | radiofrance > ina |
 | Chaîne, heure, durée | ina > radiofrance |
 | Animateur | radiofrance > ina, sinon déduit de la date |
 
-Les enregistrements de toutes les sources sont conservés. Les décisions sur le format et le périmètre de la liste sont dans `docs/adr/`.
+Les enregistrements de toutes les sources sont conservés. Leur type (`intégral` ou `extrait`) vaut pour tous les fichiers d'une même archive Radio France (ITEMA) : la Wayback Machine ne voit que le nom d'un fichier, radiofrance.fr en connaît la durée. Les décisions sur le format et le périmètre de la liste sont dans `docs/adr/`.
