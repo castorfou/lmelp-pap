@@ -1,12 +1,12 @@
 """Construction de la liste des émissions à partir des attestations des sources.
 
-Vocabulaire : voir CONTEXT.md. Décisions : docs/adr/0001 et 0002.
+Vocabulaire : voir CONTEXT.md. Décisions : docs/adr/0001, 0002 et 0003.
 """
 
 import re
 from dataclasses import dataclass, field, replace
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,9 @@ class Attestation:
     url: str | None = None
     enregistrements: tuple[Enregistrement, ...] = ()
     extrait: bool = False  # un fragment, qui ne décrit pas l'émission entière
+    # La date de première diffusion, ou de publication dans le podcast (lmelp) :
+    # une date de publication ne date pas l'émission.
+    nature_date: Literal["première diffusion", "publication"] = "première diffusion"
 
 
 @dataclass
@@ -74,11 +77,15 @@ def construire_liste(
     """
     groupes: list[list[Attestation]] = []
     for a in sorted(attestations, key=lambda a: a.date):
-        candidats = [g for g in groupes if _rapprochable(a, g)]
-        if candidats:
-            min(candidats, key=lambda g: _ecart(a, g)).append(a)
-        else:
-            groupes.append([a])
+        if a.source not in SOURCES_VERIFIEES:
+            _rapprocher(a, groupes)
+    for a in attestations:
+        if a.source in SOURCES_VERIFIEES:
+            fiche = [g for g in groupes if any(_meme_fiche(a, b) for b in g)]
+            if fiche:
+                fiche[0].append(a)
+            else:
+                _rapprocher(a, groupes)
 
     emissions = sorted((_fusionner(g) for g in groupes), key=_cle_de_tri)
     _attribuer_identifiants(emissions)
@@ -88,10 +95,52 @@ def construire_liste(
 
 def _doutes(emissions: list[Emission]) -> list[Doute]:
     doutes: list[Doute] = []
+    # la première diffusion de la dernière émission vérifiée, pas sa publication
+    derniere_verifiee = max(
+        (
+            e.date
+            for e in emissions
+            if any(a.source in SOURCES_VERIFIEES for a in e.attestations)
+        ),
+        default=None,
+    )
     for emission in emissions:
         dans_la_liste = _dans_la_liste(emission)
+        if (
+            dans_la_liste
+            and derniere_verifiee
+            and LMELP_COMPLET_DEPUIS <= emission.date <= derniere_verifiee
+            and not any(a.source in SOURCES_VERIFIEES for a in emission.attestations)
+        ):
+            doutes.append(
+                Doute(
+                    type="absente de lmelp",
+                    emission_id=emission.id,
+                    dans_la_liste=dans_la_liste,
+                    source="",
+                    source_id="",
+                    detail=(
+                        f"lmelp est complet depuis le {LMELP_COMPLET_DEPUIS:%d/%m/%Y}"
+                        " pour les émissions littéraires"
+                    ),
+                )
+            )
         autres = [e for e in emissions if e is not emission]
         for a in emission.attestations:
+            if a.source in SOURCES_VERIFIEES:
+                # rattachée par sa fiche, sans ambiguïté ; sinon par la date
+                if not any(_meme_fiche(a, b) for b in emission.attestations):
+                    doutes.append(
+                        Doute(
+                            type="sans fiche radiofrance",
+                            emission_id=emission.id,
+                            dans_la_liste=dans_la_liste,
+                            source=a.source,
+                            source_id=a.source_id,
+                            detail=f"aucune fiche {a.url}",
+                        )
+                    )
+                continue
             rivales = [e.id for e in autres if _rapprochable(a, e.attestations)]
             if rivales:
                 doutes.append(
@@ -104,7 +153,7 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                         detail=f"rapprochable aussi de {', '.join(rivales)}",
                     )
                 )
-        dates = sorted({a.date for a in emission.attestations})
+        dates = sorted(set(_dates_de_diffusion(emission.attestations)))
         if (dates[-1] - dates[0]).days > 1:
             doutes.append(
                 Doute(
@@ -116,6 +165,7 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                     detail=", ".join(
                         f"{a.source}:{a.date.isoformat()}"
                         for a in emission.attestations
+                        if a.nature_date == "première diffusion"
                     ),
                 )
             )
@@ -123,6 +173,13 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
 
 
 ECART_MAX_JOURS = 3
+
+# Sources dont chaque attestation a été vérifiée à la main (ADR 0003) : elles se
+# rattachent à l'émission par leur fiche radiofrance.fr, et leur thème fait foi.
+SOURCES_VERIFIEES = frozenset({"lmelp"})
+# lmelp est complet depuis cette date : une émission de la liste qui n'y figure
+# pas, jusqu'à sa dernière émission, est un doute.
+LMELP_COMPLET_DEPUIS = date(2017, 1, 1)
 
 # Pour chaque champ, les sources par ordre de priorité décroissante (issue #2).
 PRIORITES: dict[str, tuple[str, ...]] = {
@@ -168,6 +225,8 @@ def _valeur(champ: str, groupe: list[Attestation]) -> Any:
     """
     ordre = PRIORITES[champ]
     candidats = [a for a in groupe if not (a.extrait and champ in _JAMAIS_D_UN_EXTRAIT)]
+    if champ == "date" and any(a.nature_date == "première diffusion" for a in groupe):
+        candidats = [a for a in candidats if a.nature_date == "première diffusion"]
 
     for a in sorted(candidats, key=lambda a: (a.extrait, _rang(a.source, ordre))):
         valeur = getattr(a, champ)
@@ -300,12 +359,36 @@ def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
 
 
 def _themes(groupe: list[Attestation]) -> frozenset[str]:
-    """Les thèmes de toutes les attestations, extraits compris."""
-    return frozenset().union(*(a.themes for a in groupe))
+    """Les thèmes de toutes les attestations, extraits compris.
+
+    Ceux d'une source vérifiée font foi, sans cumul avec les autres.
+    """
+    verifiees = [a for a in groupe if a.source in SOURCES_VERIFIEES]
+    return frozenset().union(*(a.themes for a in verifiees or groupe))
+
+
+def _rapprocher(a: Attestation, groupes: list[list[Attestation]]) -> None:
+    """Ajoute l'attestation au groupe le plus proche, ou en crée un."""
+    candidats = [g for g in groupes if _rapprochable(a, g)]
+    if candidats:
+        min(candidats, key=lambda g: _ecart(a, g)).append(a)
+    else:
+        groupes.append([a])
+
+
+def _meme_fiche(verifiee: Attestation, b: Attestation) -> bool:
+    """``b`` est la fiche radiofrance.fr de l'attestation vérifiée (même URL)."""
+    return b.source not in SOURCES_VERIFIEES and b.url == verifiee.url
+
+
+def _dates_de_diffusion(groupe: list[Attestation]) -> list[date]:
+    """Les dates de première diffusion du groupe, à défaut ses autres dates."""
+    diffusion = [a.date for a in groupe if a.nature_date == "première diffusion"]
+    return diffusion or [a.date for a in groupe]
 
 
 def _ecart(a: Attestation, groupe: list[Attestation]) -> int:
-    return min(abs((a.date - b.date).days) for b in groupe)
+    return min(abs((a.date - jour).days) for jour in _dates_de_diffusion(groupe))
 
 
 def _rapprochable(a: Attestation, groupe: list[Attestation]) -> bool:

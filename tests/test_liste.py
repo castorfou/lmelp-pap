@@ -496,3 +496,109 @@ def test_les_themes_se_cumulent_entre_sources_et_extraits() -> None:
     liste, _doutes = construire_liste([entiere, extrait, ina])
 
     assert liste[0].themes == frozenset({"cinéma", "livres", "théâtre"})
+
+
+# --- Source vérifiée lmelp (ADR 0003) ----------------------------------------
+
+_PAGE = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/"
+
+
+def _fiche(slug: str, jour: date, themes: set[str]) -> Attestation:
+    return Attestation(
+        source="radiofrance",
+        source_id=slug,
+        date=jour,
+        themes=frozenset(themes),
+        url=_PAGE + slug,
+    )
+
+
+def _lmelp(slug: str, publication: date) -> Attestation:
+    return Attestation(
+        source="lmelp",
+        source_id=slug,
+        date=publication,
+        nature_date="publication",
+        themes=frozenset({"livres"}),
+        url=_PAGE + slug,
+    )
+
+
+def test_lmelp_se_rattache_par_sa_fiche_sans_changer_la_date_de_diffusion() -> None:
+    # publiée le mercredi pour le dimanche 5 juillet : plus près, par la date,
+    # de l'émission du dimanche précédent, au thème inconnu
+    precedente = _fiche("dimanche-precedent-1", date(2026, 6, 28), set())
+    fiche = _fiche("salman-rushdie-didier-decoin-2", date(2026, 7, 5), {"livres"})
+
+    liste, doutes = construire_liste(
+        [precedente, fiche, _lmelp("salman-rushdie-didier-decoin-2", date(2026, 7, 1))]
+    )
+
+    assert [(e.id, sorted(a.source for a in e.attestations)) for e in liste] == [
+        ("2026-06-28", ["radiofrance"]),
+        ("2026-07-05", ["lmelp", "radiofrance"]),
+    ]
+    # ni désaccord de date, ni rapprochement ambigu : seule la précédente,
+    # non vérifiée, est absente de lmelp
+    assert [(d.type, d.emission_id) for d in doutes] == [
+        ("absente de lmelp", "2026-06-28")
+    ]
+
+
+def test_le_theme_verifie_par_lmelp_remplace_ceux_des_autres_sources() -> None:
+    # 2018-01-21 : « Elena Ferrante, Delphine de Vigan… que lire cette semaine ? »
+    ferrante = _fiche("elena-ferrante-1", date(2018, 1, 21), {"cinéma", "théâtre"})
+
+    liste, _doutes = construire_liste(
+        [ferrante, _lmelp("elena-ferrante-1", date(2018, 1, 21))]
+    )
+
+    assert [(e.id, e.themes) for e in liste] == [("2018-01-21", frozenset({"livres"}))]
+
+
+def test_lmelp_sans_fiche_se_rapproche_par_la_date_et_c_est_un_doute() -> None:
+    podcast = Attestation(
+        source="wayback_podcast", source_id="ITEMA_7", date=date(2016, 3, 6)
+    )
+
+    liste, doutes = construire_liste(
+        [podcast, _lmelp("page-disparue-3", date(2016, 3, 6))]
+    )
+
+    assert [(e.id, sorted(a.source for a in e.attestations)) for e in liste] == [
+        ("2016-03-06", ["lmelp", "wayback_podcast"])
+    ]
+    assert [(d.type, d.emission_id, d.source_id) for d in doutes] == [
+        ("sans fiche radiofrance", "2016-03-06", "page-disparue-3")
+    ]
+
+
+def test_une_emission_absente_de_lmelp_depuis_2017_est_un_doute() -> None:
+    verifiees = [
+        _fiche("verifiee-1", date(2017, 3, 5), {"livres"}),
+        _lmelp("verifiee-1", date(2017, 3, 5)),
+        _fiche("derniere-verifiee-2", date(2018, 2, 4), {"livres"}),
+        _lmelp("derniere-verifiee-2", date(2018, 2, 4)),
+    ]
+    avant_2017 = _fiche("avant-2017-3", date(2016, 5, 1), {"livres"})
+    absente = _fiche("mage-du-kremlin-4", date(2017, 6, 11), {"livres"})
+    inconnu = Attestation(source="ina", source_id="PHD5", date=date(2017, 9, 10))
+    cinema = _fiche("cinema-6", date(2017, 7, 9), {"cinéma"})
+    apres = _fiche("apres-la-derniere-7", date(2018, 6, 3), {"livres"})
+
+    _liste, doutes = construire_liste(
+        [*verifiees, avant_2017, absente, inconnu, cinema, apres]
+    )
+
+    assert [(d.type, d.emission_id) for d in doutes] == [
+        ("absente de lmelp", "2017-06-11"),
+        ("absente de lmelp", "2017-09-10"),
+    ]
+
+
+def test_sans_aucune_emission_lmelp_l_absence_n_est_pas_un_doute() -> None:
+    _liste, doutes = construire_liste(
+        [_fiche("sans-lmelp-1", date(2019, 5, 5), {"livres"})]
+    )
+
+    assert doutes == []

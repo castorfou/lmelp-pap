@@ -28,6 +28,7 @@ dependencies = [
     "matplotlib",
     "requests>=2.33.1",
     "playwright>=1.60.0",
+    "pymongo>=4.19.0",
 ]
 
 [project.scripts]
