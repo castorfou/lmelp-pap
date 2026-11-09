@@ -52,6 +52,14 @@ _Avoid_ : émission présumée, émission théorique
 Le fait de reconnaître que des éléments venant de sources différentes décrivent la même émission. Deux éléments se rapprochent s'ils sont datés du même jour, ou à trois jours d'écart au plus avec des thèmes compatibles.
 _Avoid_ : dédoublonnage, matching, fusion
 
+**Doute** :
+Un point d'une émission que les sources ne permettent pas d'affirmer avec certitude : son existence, sa date, son rapprochement ou son thème. Un doute porte sur ce qui peut changer la liste ; un champ simplement absent (une durée inconnue) n'en est pas un. Il se détecte à chaque construction de la liste et disparaît quand une règle, une source ou un arbitrage le lève.
+_Avoid_ : signalement, anomalie, alerte
+
+**Arbitrage** :
+Une décision humaine qui lève un doute : le thème d'une émission, ou le fait qu'elle n'existe pas. Il s'attache à une attestation de l'émission et s'applique à chaque construction de la liste. Ce n'est pas une source : il n'atteste aucune émission, il tranche entre ce que disent les sources.
+_Avoid_ : correction manuelle, saisie, override
+
 **Liste des émissions** :
 L'ensemble des émissions attestées dont le thème inclut les livres ou est inconnu, toutes sources rapprochées, de 1955 à aujourd'hui. Le périmètre patrimonial (1955-2016) en est un sous-ensemble.
 _Avoid_ : master index, catalogue

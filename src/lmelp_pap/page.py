@@ -17,9 +17,7 @@ def construire_page(dossier: Path) -> str:
         dossier / "attestations.csv", ("source", "date", "titre", "url")
     )
     enregistrements = _par_emission(dossier / "enregistrements.csv", ("url", "type"))
-    signalements = _par_emission(
-        dossier / "rapport_rapprochement.csv", ("type", "detail")
-    )
+    doutes = _par_emission(dossier / "doutes.csv", ("type", "detail"))
     emissions = [
         {
             "id": e["id"],
@@ -32,7 +30,7 @@ def construire_page(dossier: Path) -> str:
             "duree": e["duree"],
             "attestations": attestations[e["id"]],
             "enregistrements": enregistrements[e["id"]],
-            "signalements": signalements[e["id"]],
+            "doutes": doutes[e["id"]],
         }
         for e in _lire(dossier / "emissions.csv")
     ]

@@ -4,6 +4,8 @@ import csv
 import shutil
 from pathlib import Path
 
+import pytest
+
 from lmelp_pap.cli import main
 
 
@@ -59,7 +61,25 @@ def test_la_commande_construit_la_liste_depuis_le_cache_sans_reseau(
     assert "1994-05-29" not in ids  # extrait Pulp Fiction : cinéma
     for fichier in ("attestations.csv", "enregistrements.csv"):
         assert (sortie / fichier).exists()
-    assert (sortie / "rapport_rapprochement.csv").exists()
+    assert (sortie / "doutes.csv").exists()
+    assert not (sortie / "rapport_rapprochement.csv").exists()
+
+
+def test_la_commande_affiche_le_nombre_de_doutes_par_type(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache, sortie = tmp_path / "cache", tmp_path / "sortie"
+    _cache_rempli(cache)
+    # une seconde notice de l'émission du 22 janvier 1956, datée deux jours après
+    with (cache / "ina" / "notices.csv").open("a", encoding="utf-8") as f:
+        f.write(
+            "1956-01-24,Littérature,Le masque et la plume,Paris Inter,,00:50:00,"
+            "Magazine,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD1/litterature,oui\n"
+        )
+
+    main(["emissions", "--cache", str(cache), "--sortie", str(sortie)])
+
+    assert "Doutes : désaccord de date 1\n" in capsys.readouterr().err
 
 
 def test_la_commande_page_ecrit_la_page_a_partir_des_csv(tmp_path: Path) -> None:

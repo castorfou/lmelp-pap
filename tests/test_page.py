@@ -35,9 +35,7 @@ def test_la_page_embarque_chaque_emission_avec_ses_champs() -> None:
     assert emissions[2]["themes"] == []  # thème inconnu
 
 
-def test_chaque_emission_porte_ses_attestations_enregistrements_et_signalements() -> (
-    None
-):
+def test_chaque_emission_porte_ses_attestations_enregistrements_et_doutes() -> None:
     aragon = _donnees(construire_page(FIXTURES))[1]
 
     assert aragon["attestations"] == [
@@ -55,17 +53,26 @@ def test_chaque_emission_porte_ses_attestations_enregistrements_et_signalements(
             "type": "extrait",
         }
     ]
-    assert aragon["signalements"] == [
-        {"type": "ambigu", "detail": "rapprochable aussi de 1958-12-06"}
+    assert aragon["doutes"] == [
+        {"type": "rapprochement ambigu", "detail": "rapprochable aussi de 1958-12-06"}
     ]
     assert aragon["description"].endswith("</script> incluse")
 
 
-def test_une_emission_sans_enregistrement_ni_signalement_a_des_listes_vides() -> None:
+def test_une_emission_sans_enregistrement_ni_doute_a_des_listes_vides() -> None:
     sans = _donnees(construire_page(FIXTURES))[0]
 
     assert sans["enregistrements"] == []
-    assert sans["signalements"] == []
+    assert sans["doutes"] == []
+
+
+def test_les_doutes_d_une_emission_hors_de_la_liste_ne_sont_pas_sur_la_page() -> None:
+    emissions = _donnees(construire_page(FIXTURES))
+
+    assert "1958-12-06" not in [e["id"] for e in emissions]
+    assert [d["type"] for e in emissions for d in e["doutes"]] == [
+        "rapprochement ambigu"
+    ]
 
 
 def test_la_page_est_un_document_html_complet_qui_s_ouvre_seul() -> None:

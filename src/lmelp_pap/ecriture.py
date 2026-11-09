@@ -4,7 +4,7 @@ import csv
 from collections.abc import Iterable
 from pathlib import Path
 
-from lmelp_pap.liste import Emission, Rapport
+from lmelp_pap.liste import Doute, Emission
 
 
 COLONNES_EMISSIONS = [
@@ -28,11 +28,18 @@ COLONNES_ATTESTATIONS = [
     "url",
 ]
 COLONNES_ENREGISTREMENTS = ["emission_id", "url", "type", "sources"]
-COLONNES_RAPPORT = ["type", "emission_id", "source", "source_id", "detail"]
+COLONNES_DOUTES = [
+    "type",
+    "emission_id",
+    "dans_la_liste",
+    "source",
+    "source_id",
+    "detail",
+]
 
 
-def ecrire_liste(liste: list[Emission], rapport: Rapport, dossier: Path) -> None:
-    """Écrit emissions.csv, attestations.csv, enregistrements.csv et le rapport."""
+def ecrire_liste(liste: list[Emission], doutes: list[Doute], dossier: Path) -> None:
+    """Écrit emissions.csv, attestations.csv, enregistrements.csv et doutes.csv."""
     dossier.mkdir(parents=True, exist_ok=True)
     emissions = sorted(liste, key=lambda e: e.id)
 
@@ -95,17 +102,18 @@ def ecrire_liste(liste: list[Emission], rapport: Rapport, dossier: Path) -> None
         ),
     )
     _ecrire(
-        dossier / "rapport_rapprochement.csv",
-        COLONNES_RAPPORT,
+        dossier / "doutes.csv",
+        COLONNES_DOUTES,
         (
             {
-                "type": s.type,
-                "emission_id": s.emission_id,
-                "source": s.source,
-                "source_id": s.source_id,
-                "detail": s.detail,
+                "type": d.type,
+                "emission_id": d.emission_id,
+                "dans_la_liste": "oui" if d.dans_la_liste else "non",
+                "source": d.source,
+                "source_id": d.source_id,
+                "detail": d.detail,
             }
-            for s in sorted(rapport.signalements, key=lambda s: (s.emission_id, s.type))
+            for d in sorted(doutes, key=lambda d: (d.emission_id, d.type))
         ),
     )
 
