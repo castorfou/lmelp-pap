@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from lmelp_pap.liste import Attestation, Enregistrement, construire_liste
+from lmelp_pap.liste import Attestation, Doute, Enregistrement, construire_liste
 
 
 def test_une_attestation_donne_une_emission_identifiee_par_sa_date() -> None:
@@ -132,7 +132,7 @@ def test_un_jour_d_ecart_n_est_pas_un_doute() -> None:
 
     _liste, doutes = construire_liste([a, b])
 
-    assert doutes == []
+    assert [d for d in doutes if d.type == "désaccord de date"] == []
 
 
 def test_un_doute_sur_une_emission_hors_de_la_liste_le_dit() -> None:
@@ -538,11 +538,9 @@ def test_lmelp_se_rattache_par_sa_fiche_sans_changer_la_date_de_diffusion() -> N
         ("2026-06-28", ["radiofrance"]),
         ("2026-07-05", ["lmelp", "radiofrance"]),
     ]
-    # ni désaccord de date, ni rapprochement ambigu : seule la précédente,
-    # non vérifiée, est absente de lmelp
-    assert [(d.type, d.emission_id) for d in doutes] == [
-        ("absente de lmelp", "2026-06-28")
-    ]
+    assert [
+        d for d in doutes if d.type in ("désaccord de date", "rapprochement ambigu")
+    ] == []
 
 
 def test_le_theme_verifie_par_lmelp_remplace_ceux_des_autres_sources() -> None:
@@ -590,9 +588,9 @@ def test_une_emission_absente_de_lmelp_depuis_2017_est_un_doute() -> None:
         [*verifiees, avant_2017, absente, inconnu, cinema, apres]
     )
 
-    assert [(d.type, d.emission_id) for d in doutes] == [
-        ("absente de lmelp", "2017-06-11"),
-        ("absente de lmelp", "2017-09-10"),
+    assert [d.emission_id for d in doutes if d.type == "absente de lmelp"] == [
+        "2017-06-11",
+        "2017-09-10",
     ]
 
 
@@ -602,3 +600,209 @@ def test_sans_aucune_emission_lmelp_l_absence_n_est_pas_un_doute() -> None:
     )
 
     assert doutes == []
+
+
+# --- Doutes de thème, collision, republication, attestation fragile ----------
+
+_MEDIA = "https://media.radiofrance-podcast.net/podcast09/"
+
+
+def _types(doutes: list[Doute], emission_id: str) -> list[str]:
+    return sorted(d.type for d in doutes if d.emission_id == emission_id)
+
+
+def test_une_emission_sans_theme_a_un_doute_theme_inconnu() -> None:
+    # 2010-07-11 : « Festival d'Avignon », une émission de théâtre sans thème
+    ina = Attestation(
+        source="ina",
+        source_id="RD_4294389.001",
+        date=date(2010, 7, 11),
+        titre="Le masque et la plume du 11 juillet 2010",
+    )
+    avignon = Attestation(
+        source="radiofrance",
+        source_id="festival-d-avignon-5488789",
+        date=date(2010, 7, 11),
+        titre="Festival d'Avignon",
+        enregistrements=(
+            Enregistrement(
+                _MEDIA + "14007-11.07.2010-ITEMA_20234917-2010F4007E0150-27.m4a",
+                "extrait",
+            ),
+        ),
+        extrait=True,
+    )
+
+    _liste, doutes = construire_liste([ina, avignon])
+
+    assert _types(doutes, "2010-07-11") == ["thème inconnu"]
+
+
+def _dimanche_18_aout_2024() -> list[Attestation]:
+    """Le 18 août 2024 : fiches radiofrance « cinéma », notices INA « livres »."""
+    return [
+        _fiche(
+            "le-masque-et-la-plume-du-dimanche-18-aout-2024-5609935",
+            date(2024, 8, 18),
+            {"cinéma"},
+        ),
+        replace(
+            _fiche(
+                "le-roman-de-jim-des-freres-larrieu-6664324",
+                date(2024, 8, 19),
+                {"cinéma", "livres"},
+            ),
+            extrait=True,
+        ),
+        replace(
+            _fiche(
+                "moi-moche-et-mechant-4-de-chris-renaud-4922866",
+                date(2024, 8, 19),
+                {"cinéma"},
+            ),
+            extrait=True,
+        ),
+        Attestation(
+            source="ina",
+            source_id="RD_16239327.001",
+            date=date(2024, 8, 18),
+            themes=frozenset({"livres"}),
+        ),
+    ]
+
+
+def test_un_extrait_au_theme_absent_de_l_emission_entiere_est_un_doute() -> None:
+    _liste, doutes = construire_liste(_dimanche_18_aout_2024())
+
+    assert "thèmes divergents" in _types(doutes, "2024-08-18")
+
+
+def test_une_seconde_emission_le_meme_jour_est_une_collision() -> None:
+    _liste, doutes = construire_liste(_dimanche_18_aout_2024())
+
+    assert "collision" in _types(doutes, "2024-08-18-b")
+    assert "collision" not in _types(doutes, "2024-08-18")
+
+
+def test_deux_attestations_de_l_emission_entiere_aux_themes_differents() -> None:
+    # 1959-03-23 : deux notices INA rapprochées, « livres ; théâtre » et « livres »
+    mixte = Attestation(
+        source="ina",
+        source_id="PH_PHD88020938",
+        date=date(1959, 3, 23),
+        themes=frozenset({"livres", "théâtre"}),
+    )
+    livres = Attestation(
+        source="ina",
+        source_id="PH_PHD88020939",
+        date=date(1959, 3, 26),
+        themes=frozenset({"livres"}),
+    )
+
+    _liste, doutes = construire_liste([mixte, livres])
+
+    assert "thèmes divergents" in _types(doutes, "1959-03-23")
+
+
+def test_une_emission_mixte_aux_extraits_par_livre_et_par_film_n_a_pas_de_doute() -> (
+    None
+):
+    entiere = _fiche("du-dimanche-1", date(2025, 3, 2), {"cinéma", "livres"})
+    livre = replace(_fiche("un-roman-2", date(2025, 3, 2), {"livres"}), extrait=True)
+    film = replace(_fiche("un-film-3", date(2025, 3, 2), {"cinéma"}), extrait=True)
+
+    _liste, doutes = construire_liste([entiere, livre, film])
+
+    assert _types(doutes, "2025-03-02") == []
+
+
+def _mage_du_kremlin() -> Attestation:
+    """2026-01-14 : une fiche par livre, dont le fichier date de mars 2022."""
+    return Attestation(
+        source="radiofrance",
+        source_id="le-mage-du-kremlin-de-giuliano-da-empoli-1192090",
+        date=date(2026, 1, 14),
+        themes=frozenset({"livres"}),
+        url=_PAGE + "le-mage-du-kremlin-de-giuliano-da-empoli-1192090",
+        enregistrements=(
+            Enregistrement(
+                _MEDIA + "14007-14.03.2022-ITEMA_24373986-2022F4007S0102-"
+                "ITE_00156369_RSCE-27-fe21e419a0fb974761d3823a8ebef3a3.m4a",
+                "extrait",
+            ),
+        ),
+        extrait=True,
+    )
+
+
+def test_un_fichier_audio_date_d_un_autre_jour_signale_une_republication() -> None:
+    _liste, doutes = construire_liste([_mage_du_kremlin()])
+
+    (republication,) = [d for d in doutes if d.type == "republication"]
+    assert (republication.emission_id, republication.source_id) == (
+        "2026-01-14",
+        "le-mage-du-kremlin-de-giuliano-da-empoli-1192090",
+    )
+    assert "2022-03-14" in republication.detail
+
+
+def test_une_emission_attestee_seulement_par_des_extraits_est_fragile() -> None:
+    _liste, doutes = construire_liste([_mage_du_kremlin()])
+
+    assert "attestation fragile" in _types(doutes, "2026-01-14")
+
+
+def test_une_emission_attestee_seulement_par_la_wayback_est_fragile() -> None:
+    podcast = Attestation(
+        source="wayback_podcast", source_id="ITEMA_24183916", date=date(2025, 6, 29)
+    )
+
+    _liste, doutes = construire_liste([podcast])
+
+    assert "attestation fragile" in _types(doutes, "2025-06-29")
+
+
+def test_lmelp_leve_les_doutes_de_theme_et_d_existence() -> None:
+    # une fiche par livre, au fichier ancien et au thème contredit par un extrait
+    fiche = replace(_mage_du_kremlin(), themes=frozenset({"cinéma"}))
+    lmelp = _lmelp("le-mage-du-kremlin-de-giuliano-da-empoli-1192090", fiche.date)
+
+    _liste, doutes = construire_liste([fiche, lmelp])
+
+    assert _types(doutes, "2026-01-14") == []
+
+
+def test_une_duree_ou_un_animateur_absent_n_est_pas_un_doute() -> None:
+    # 1970 : année de transition, l'animateur n'est pas déduit ; aucune durée
+    ina = Attestation(
+        source="ina",
+        source_id="PHD1970",
+        date=date(1970, 3, 1),
+        themes=frozenset({"livres"}),
+    )
+
+    liste, doutes = construire_liste([ina])
+
+    assert (liste[0].duree, liste[0].animateur) == (None, None)
+    assert doutes == []
+
+
+def test_une_emission_attestee_par_des_extraits_et_la_wayback_est_fragile() -> None:
+    podcast = Attestation(
+        source="wayback_podcast", source_id="ITEMA_24373986", date=date(2026, 1, 14)
+    )
+
+    _liste, doutes = construire_liste([_mage_du_kremlin(), podcast])
+
+    assert "attestation fragile" in _types(doutes, "2026-01-14")
+
+
+def test_une_fiche_de_l_emission_entiere_n_est_pas_fragile() -> None:
+    fiche = _fiche("le-masque-et-la-plume-du-dimanche-1", date(2025, 6, 1), {"livres"})
+    podcast = Attestation(
+        source="wayback_podcast", source_id="ITEMA_1", date=date(2025, 6, 1)
+    )
+
+    _liste, doutes = construire_liste([fiche, podcast])
+
+    assert "attestation fragile" not in _types(doutes, "2025-06-01")

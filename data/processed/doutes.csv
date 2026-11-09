@@ -1,78 +1,573 @@
 type,emission_id,dans_la_liste,source,source_id,detail
+thèmes divergents,1957-05-16,non,,,"radiofrance:cinéma+théâtre (extrait), ina:théâtre"
+thèmes divergents,1958-11-06,oui,,,"radiofrance:cinéma+livres (extrait), ina:cinéma"
 rapprochement ambigu,1958-12-04,oui,wayback_podcast,ITEMA_24232446,rapprochable aussi de 1958-12-06
+attestation fragile,1958-12-06,non,,,attestée seulement par des extraits
 désaccord de date,1959-03-23,oui,,,"ina:1959-03-23, ina:1959-03-26"
+thèmes divergents,1959-03-23,oui,,,"ina:livres+théâtre, ina:livres"
+republication,1959-06-18,non,radiofrance,les-400-coups-de-francois-truffaut-2814275,"daté du 1959-06-18, enregistrement du 2024-10-24"
+republication,1959-06-25,non,radiofrance,francois-truffaut-invite-du-masque-pour-les-400-coups-1481200,"daté du 1959-06-25, enregistrement du 2024-10-24"
+thème inconnu,1960-03-17,oui,,,aucune source ne donne de thème
+thème inconnu,1961-01-05,oui,,,aucune source ne donne de thème
+thème inconnu,1961-03-16,oui,,,aucune source ne donne de thème
+republication,1961-11-16,oui,radiofrance,georges-conchon-l-etat-sauvage-1624736,"daté du 1961-11-16, enregistrement du 1964-11-15"
+thème inconnu,1962-04-05,oui,,,aucune source ne donne de thème
+thème inconnu,1962-11-22,oui,,,aucune source ne donne de thème
+thèmes divergents,1964-11-29,non,,,"radiofrance:cinéma+théâtre (extrait), ina:théâtre"
+thèmes divergents,1967-01-01,oui,,,"radiofrance:cinéma+livres, ina:cinéma"
+thème inconnu,1967-10-01,oui,,,aucune source ne donne de thème
+thèmes divergents,1968-11-10,oui,,,"radiofrance:cinéma+livres (extrait), radiofrance:cinéma (extrait), ina:livres, ina:cinéma"
+collision,1969-10-26-b,non,,,une autre émission le même jour : 1969-10-26
 rapprochement ambigu,1969-10-26-b,non,wayback_podcast,ITEMA_23820430,rapprochable aussi de 1969-10-26
+attestation fragile,1969-11-23,non,,,attestée seulement par des extraits
+collision,1969-11-23-b,non,,,une autre émission le même jour : 1969-11-23
 rapprochement ambigu,1969-11-23-b,non,wayback_podcast,ITEMA_24232457,rapprochable aussi de 1969-11-23
+attestation fragile,1975-10-18,oui,,,attestée seulement par des extraits
 rapprochement ambigu,1975-10-19,non,wayback_podcast,ITEMA_23820425,rapprochable aussi de 1975-10-18
+collision,1976-02-15-b,non,,,une autre émission le même jour : 1976-02-15
+thème inconnu,1976-02-29,oui,,,aucune source ne donne de thème
+thème inconnu,1976-03-14,oui,,,aucune source ne donne de thème
+thème inconnu,1979-07-15,oui,,,aucune source ne donne de thème
+thème inconnu,1980-07-09,oui,,,aucune source ne donne de thème
+thème inconnu,1982-05-16,oui,,,aucune source ne donne de thème
+thème inconnu,1982-07-11,oui,,,aucune source ne donne de thème
+thème inconnu,1983-08-07,oui,,,aucune source ne donne de thème
+thème inconnu,1985-01-13,oui,,,aucune source ne donne de thème
+thème inconnu,1985-01-20,oui,,,aucune source ne donne de thème
+thème inconnu,1985-09-01,oui,,,aucune source ne donne de thème
+thème inconnu,1985-10-06,oui,,,aucune source ne donne de thème
+thème inconnu,1985-11-10,oui,,,aucune source ne donne de thème
+thème inconnu,1986-01-26,oui,,,aucune source ne donne de thème
+thème inconnu,1986-04-06,oui,,,aucune source ne donne de thème
+thème inconnu,1986-04-13,oui,,,aucune source ne donne de thème
+thème inconnu,1986-05-04,oui,,,aucune source ne donne de thème
+thème inconnu,1986-05-11,oui,,,aucune source ne donne de thème
+thème inconnu,1986-07-27,oui,,,aucune source ne donne de thème
+thème inconnu,1986-10-26,oui,,,aucune source ne donne de thème
+thème inconnu,1986-11-16,oui,,,aucune source ne donne de thème
+thème inconnu,1986-11-23,oui,,,aucune source ne donne de thème
+thème inconnu,1986-12-21,oui,,,aucune source ne donne de thème
+thème inconnu,1986-12-28,oui,,,aucune source ne donne de thème
+thème inconnu,1987-01-04,oui,,,aucune source ne donne de thème
+thème inconnu,1987-01-11,oui,,,aucune source ne donne de thème
+thème inconnu,1987-02-01,oui,,,aucune source ne donne de thème
+thème inconnu,1987-02-08,oui,,,aucune source ne donne de thème
+thème inconnu,1987-02-15,oui,,,aucune source ne donne de thème
+thème inconnu,1987-03-01,oui,,,aucune source ne donne de thème
+thème inconnu,1987-03-08,oui,,,aucune source ne donne de thème
+thème inconnu,1987-03-15,oui,,,aucune source ne donne de thème
+thème inconnu,1987-03-22,oui,,,aucune source ne donne de thème
+thème inconnu,1987-04-05,oui,,,aucune source ne donne de thème
+thème inconnu,1987-04-12,oui,,,aucune source ne donne de thème
+thème inconnu,1987-04-19,oui,,,aucune source ne donne de thème
+thème inconnu,1987-05-03,oui,,,aucune source ne donne de thème
+thème inconnu,1987-05-10,oui,,,aucune source ne donne de thème
+thème inconnu,1987-05-31,oui,,,aucune source ne donne de thème
+thème inconnu,1987-06-14,oui,,,aucune source ne donne de thème
+thème inconnu,1987-06-21,oui,,,aucune source ne donne de thème
+thème inconnu,1987-07-05,oui,,,aucune source ne donne de thème
+thème inconnu,1987-07-19,oui,,,aucune source ne donne de thème
+thème inconnu,1987-08-02,oui,,,aucune source ne donne de thème
+thème inconnu,1987-09-06,oui,,,aucune source ne donne de thème
+thème inconnu,1987-09-13,oui,,,aucune source ne donne de thème
+thème inconnu,1987-09-27,oui,,,aucune source ne donne de thème
+thème inconnu,1987-10-11,oui,,,aucune source ne donne de thème
+thème inconnu,1987-10-18,oui,,,aucune source ne donne de thème
+thème inconnu,1987-11-01,oui,,,aucune source ne donne de thème
+thème inconnu,1987-11-08,oui,,,aucune source ne donne de thème
+thème inconnu,1987-11-15,oui,,,aucune source ne donne de thème
+thème inconnu,1987-11-29,oui,,,aucune source ne donne de thème
+thème inconnu,1987-12-06,oui,,,aucune source ne donne de thème
+thème inconnu,1987-12-20,oui,,,aucune source ne donne de thème
+thème inconnu,1987-12-27,oui,,,aucune source ne donne de thème
+thème inconnu,1988-03-27,oui,,,aucune source ne donne de thème
+thème inconnu,1988-05-01,oui,,,aucune source ne donne de thème
+thème inconnu,1988-05-29,oui,,,aucune source ne donne de thème
+thème inconnu,1988-07-24,oui,,,aucune source ne donne de thème
+thème inconnu,1988-07-31,oui,,,aucune source ne donne de thème
+collision,1988-11-27-b,non,,,une autre émission le même jour : 1988-11-27
+thème inconnu,1989-04-23,oui,,,aucune source ne donne de thème
+thème inconnu,1989-07-23,oui,,,aucune source ne donne de thème
+thème inconnu,1989-07-30,oui,,,aucune source ne donne de thème
+thème inconnu,1989-08-06,oui,,,aucune source ne donne de thème
+thème inconnu,1990-06-17,oui,,,aucune source ne donne de thème
+thème inconnu,1990-08-05,oui,,,aucune source ne donne de thème
+thème inconnu,1991-02-10,oui,,,aucune source ne donne de thème
+thème inconnu,1991-02-17,oui,,,aucune source ne donne de thème
+thème inconnu,1991-03-03,oui,,,aucune source ne donne de thème
+thème inconnu,1991-03-10,oui,,,aucune source ne donne de thème
+thème inconnu,1991-03-17,oui,,,aucune source ne donne de thème
+thème inconnu,1991-03-24,oui,,,aucune source ne donne de thème
+thème inconnu,1991-04-21,oui,,,aucune source ne donne de thème
+thème inconnu,1991-06-16,oui,,,aucune source ne donne de thème
+thème inconnu,1991-06-23,oui,,,aucune source ne donne de thème
+thème inconnu,1991-07-28,oui,,,aucune source ne donne de thème
+thème inconnu,1992-03-15,oui,,,aucune source ne donne de thème
+thème inconnu,1992-04-19,oui,,,aucune source ne donne de thème
+republication,1992-04-26,non,radiofrance,indochine-de-regis-wargnier-1992-6168950,"daté du 1992-04-26, enregistrement du 2025-02-28"
+thème inconnu,1992-06-07,oui,,,aucune source ne donne de thème
+thème inconnu,1992-07-05,oui,,,aucune source ne donne de thème
+thème inconnu,1992-07-12,oui,,,aucune source ne donne de thème
+thème inconnu,1992-07-19,oui,,,aucune source ne donne de thème
+thème inconnu,1992-08-02,oui,,,aucune source ne donne de thème
+thème inconnu,1992-10-04,oui,,,aucune source ne donne de thème
+thème inconnu,1992-10-11,oui,,,aucune source ne donne de thème
+thème inconnu,1992-10-18,oui,,,aucune source ne donne de thème
+thème inconnu,1992-11-01,oui,,,aucune source ne donne de thème
+thème inconnu,1992-11-08,oui,,,aucune source ne donne de thème
+thème inconnu,1992-11-22,oui,,,aucune source ne donne de thème
+thème inconnu,1992-11-29,oui,,,aucune source ne donne de thème
+thème inconnu,1992-12-06,oui,,,aucune source ne donne de thème
+thème inconnu,1992-12-27,oui,,,aucune source ne donne de thème
+republication,1993-05-23,non,radiofrance,ma-saison-preferee-d-andre-techine-1993-8816840,"daté du 1993-05-23, enregistrement du 2025-02-28"
+thème inconnu,1993-07-18,oui,,,aucune source ne donne de thème
+thème inconnu,1993-08-01,oui,,,aucune source ne donne de thème
+thème inconnu,1993-08-08,oui,,,aucune source ne donne de thème
+thème inconnu,1994-01-02,oui,,,aucune source ne donne de thème
+thème inconnu,1994-01-09,oui,,,aucune source ne donne de thème
+thème inconnu,1994-01-16,oui,,,aucune source ne donne de thème
+thème inconnu,1994-01-23,oui,,,aucune source ne donne de thème
+thème inconnu,1994-02-06,oui,,,aucune source ne donne de thème
+thème inconnu,1994-02-13,oui,,,aucune source ne donne de thème
+thème inconnu,1994-02-20,oui,,,aucune source ne donne de thème
+thème inconnu,1994-02-27,oui,,,aucune source ne donne de thème
+thème inconnu,1994-03-13,oui,,,aucune source ne donne de thème
+thème inconnu,1994-04-03,oui,,,aucune source ne donne de thème
+thème inconnu,1994-04-10,oui,,,aucune source ne donne de thème
+thème inconnu,1994-04-17,oui,,,aucune source ne donne de thème
+thème inconnu,1994-04-24,oui,,,aucune source ne donne de thème
+thème inconnu,1994-05-08,oui,,,aucune source ne donne de thème
+thème inconnu,1994-05-15,oui,,,aucune source ne donne de thème
+thème inconnu,1994-05-22,oui,,,aucune source ne donne de thème
+thème inconnu,1994-06-05,oui,,,aucune source ne donne de thème
+thème inconnu,1994-06-12,oui,,,aucune source ne donne de thème
+thème inconnu,1994-06-19,oui,,,aucune source ne donne de thème
+thème inconnu,1994-06-26,oui,,,aucune source ne donne de thème
+thème inconnu,1994-07-03,oui,,,aucune source ne donne de thème
+thème inconnu,1994-07-17,oui,,,aucune source ne donne de thème
+thème inconnu,1994-07-24,oui,,,aucune source ne donne de thème
+thème inconnu,1994-07-31,oui,,,aucune source ne donne de thème
+thème inconnu,1994-08-07,oui,,,aucune source ne donne de thème
+thème inconnu,1994-08-14,oui,,,aucune source ne donne de thème
+thème inconnu,1994-08-21,oui,,,aucune source ne donne de thème
+thème inconnu,1994-08-28,oui,,,aucune source ne donne de thème
+thème inconnu,1994-09-04,oui,,,aucune source ne donne de thème
+thème inconnu,1994-09-11,oui,,,aucune source ne donne de thème
+thème inconnu,1994-09-18,oui,,,aucune source ne donne de thème
+thème inconnu,1994-09-25,oui,,,aucune source ne donne de thème
+thème inconnu,1994-10-02,oui,,,aucune source ne donne de thème
+thème inconnu,1994-10-09,oui,,,aucune source ne donne de thème
+thème inconnu,1994-10-16,oui,,,aucune source ne donne de thème
+thème inconnu,1994-10-23,oui,,,aucune source ne donne de thème
+thème inconnu,1994-10-30,oui,,,aucune source ne donne de thème
+thème inconnu,1994-11-06,oui,,,aucune source ne donne de thème
+thème inconnu,1994-11-13,oui,,,aucune source ne donne de thème
+thème inconnu,1994-11-20,oui,,,aucune source ne donne de thème
+thème inconnu,1994-11-27,oui,,,aucune source ne donne de thème
+thème inconnu,1994-12-04,oui,,,aucune source ne donne de thème
+thème inconnu,1994-12-18,oui,,,aucune source ne donne de thème
+thème inconnu,1994-12-25,oui,,,aucune source ne donne de thème
+thème inconnu,1995-01-01,oui,,,aucune source ne donne de thème
+thème inconnu,1995-01-08,oui,,,aucune source ne donne de thème
+thème inconnu,1995-01-15,oui,,,aucune source ne donne de thème
+thème inconnu,1995-01-22,oui,,,aucune source ne donne de thème
+republication,1995-01-29,non,radiofrance,nelly-et-monsieur-arnaud-de-claude-sautet-laureat-du-prix-des-auditeurs-du-maque-6882590,"daté du 1995-01-28, enregistrement du 1996-01-28"
+thème inconnu,1995-02-05,oui,,,aucune source ne donne de thème
+thème inconnu,1995-02-12,oui,,,aucune source ne donne de thème
+thème inconnu,1995-02-19,oui,,,aucune source ne donne de thème
+thème inconnu,1995-02-26,oui,,,aucune source ne donne de thème
+thème inconnu,1995-03-05,oui,,,aucune source ne donne de thème
+thème inconnu,1995-03-12,oui,,,aucune source ne donne de thème
+thème inconnu,1995-04-02,oui,,,aucune source ne donne de thème
+thème inconnu,1995-04-09,oui,,,aucune source ne donne de thème
+thème inconnu,1995-04-16,oui,,,aucune source ne donne de thème
+thème inconnu,1995-04-30,oui,,,aucune source ne donne de thème
+thème inconnu,1995-05-21,oui,,,aucune source ne donne de thème
+thème inconnu,1995-05-28,oui,,,aucune source ne donne de thème
+thème inconnu,1995-06-04,oui,,,aucune source ne donne de thème
+thème inconnu,1995-07-09,oui,,,aucune source ne donne de thème
+thème inconnu,1995-07-16,oui,,,aucune source ne donne de thème
+thème inconnu,1995-07-23,oui,,,aucune source ne donne de thème
+thème inconnu,1995-07-30,oui,,,aucune source ne donne de thème
+thème inconnu,1995-08-06,oui,,,aucune source ne donne de thème
+thème inconnu,1995-08-13,oui,,,aucune source ne donne de thème
+thème inconnu,1995-08-20,oui,,,aucune source ne donne de thème
+thème inconnu,1995-09-24,oui,,,aucune source ne donne de thème
+thème inconnu,1995-10-01,oui,,,aucune source ne donne de thème
+thème inconnu,1995-10-08,oui,,,aucune source ne donne de thème
+thème inconnu,1995-10-15,oui,,,aucune source ne donne de thème
+thème inconnu,1995-10-22,oui,,,aucune source ne donne de thème
+thème inconnu,1995-11-05,oui,,,aucune source ne donne de thème
+thème inconnu,1995-11-12,oui,,,aucune source ne donne de thème
+thème inconnu,1995-11-19,oui,,,aucune source ne donne de thème
+thème inconnu,1995-11-26,oui,,,aucune source ne donne de thème
+thème inconnu,1995-12-17,oui,,,aucune source ne donne de thème
+thème inconnu,1995-12-24,oui,,,aucune source ne donne de thème
+thème inconnu,1995-12-31,oui,,,aucune source ne donne de thème
+thème inconnu,1996-01-07,oui,,,aucune source ne donne de thème
+thème inconnu,1996-01-21,oui,,,aucune source ne donne de thème
+thème inconnu,1996-01-28,oui,,,aucune source ne donne de thème
+thème inconnu,1996-02-04,oui,,,aucune source ne donne de thème
+thème inconnu,1996-02-11,oui,,,aucune source ne donne de thème
+thème inconnu,1996-02-18,oui,,,aucune source ne donne de thème
+thème inconnu,1996-02-25,oui,,,aucune source ne donne de thème
+thème inconnu,1996-03-10,oui,,,aucune source ne donne de thème
+thème inconnu,1996-03-17,oui,,,aucune source ne donne de thème
+thème inconnu,1996-03-31,oui,,,aucune source ne donne de thème
+thème inconnu,1996-04-07,oui,,,aucune source ne donne de thème
+thème inconnu,1996-04-14,oui,,,aucune source ne donne de thème
+thème inconnu,1996-04-21,oui,,,aucune source ne donne de thème
+thème inconnu,1996-04-28,oui,,,aucune source ne donne de thème
+thème inconnu,1996-05-05,oui,,,aucune source ne donne de thème
+thème inconnu,1996-06-02,oui,,,aucune source ne donne de thème
+thème inconnu,1996-06-09,oui,,,aucune source ne donne de thème
+thème inconnu,1996-06-16,oui,,,aucune source ne donne de thème
+thème inconnu,1996-06-23,oui,,,aucune source ne donne de thème
+thème inconnu,1996-06-30,oui,,,aucune source ne donne de thème
+thème inconnu,1996-07-14,oui,,,aucune source ne donne de thème
+thème inconnu,1996-07-21,oui,,,aucune source ne donne de thème
+thème inconnu,1996-07-28,oui,,,aucune source ne donne de thème
+thème inconnu,1996-08-04,oui,,,aucune source ne donne de thème
+thème inconnu,1996-08-18,oui,,,aucune source ne donne de thème
+thème inconnu,1996-09-01,oui,,,aucune source ne donne de thème
+thème inconnu,1996-09-08,oui,,,aucune source ne donne de thème
+thème inconnu,1996-09-15,oui,,,aucune source ne donne de thème
+thème inconnu,1996-09-22,oui,,,aucune source ne donne de thème
+thème inconnu,1996-09-29,oui,,,aucune source ne donne de thème
+thème inconnu,1996-10-06,oui,,,aucune source ne donne de thème
+thème inconnu,1996-10-13,oui,,,aucune source ne donne de thème
+thème inconnu,1996-10-27,oui,,,aucune source ne donne de thème
+thème inconnu,1996-11-10,oui,,,aucune source ne donne de thème
+thème inconnu,1996-11-24,oui,,,aucune source ne donne de thème
+thème inconnu,1996-12-01,oui,,,aucune source ne donne de thème
+thème inconnu,1996-12-15,oui,,,aucune source ne donne de thème
+thème inconnu,1996-12-29,oui,,,aucune source ne donne de thème
+thème inconnu,1997-01-05,oui,,,aucune source ne donne de thème
+thème inconnu,1997-01-26,oui,,,aucune source ne donne de thème
+thème inconnu,1997-02-02,oui,,,aucune source ne donne de thème
+thème inconnu,1997-02-09,oui,,,aucune source ne donne de thème
+thème inconnu,1997-03-02,oui,,,aucune source ne donne de thème
+thème inconnu,1997-03-09,oui,,,aucune source ne donne de thème
+thème inconnu,1997-03-16,oui,,,aucune source ne donne de thème
+thème inconnu,1997-03-23,oui,,,aucune source ne donne de thème
+thème inconnu,1997-03-30,oui,,,aucune source ne donne de thème
+thème inconnu,1997-04-06,oui,,,aucune source ne donne de thème
+thème inconnu,1997-04-27,oui,,,aucune source ne donne de thème
+thème inconnu,1997-05-04,oui,,,aucune source ne donne de thème
+thème inconnu,1997-05-11,oui,,,aucune source ne donne de thème
+thème inconnu,1997-06-08,oui,,,aucune source ne donne de thème
+thème inconnu,1997-06-15,oui,,,aucune source ne donne de thème
+thème inconnu,1997-06-22,oui,,,aucune source ne donne de thème
+thème inconnu,1997-06-29,oui,,,aucune source ne donne de thème
+thème inconnu,1997-07-13,oui,,,aucune source ne donne de thème
+thème inconnu,1997-07-20,oui,,,aucune source ne donne de thème
+thème inconnu,1997-09-07,oui,,,aucune source ne donne de thème
+thème inconnu,1997-09-14,oui,,,aucune source ne donne de thème
+thème inconnu,1997-09-28,oui,,,aucune source ne donne de thème
+thème inconnu,1997-10-05,oui,,,aucune source ne donne de thème
+thème inconnu,1997-10-19,oui,,,aucune source ne donne de thème
+thème inconnu,1997-11-02,oui,,,aucune source ne donne de thème
+thème inconnu,1997-11-09,oui,,,aucune source ne donne de thème
+thème inconnu,1997-11-16,oui,,,aucune source ne donne de thème
+thème inconnu,1997-11-23,oui,,,aucune source ne donne de thème
+thème inconnu,1997-11-30,oui,,,aucune source ne donne de thème
+thème inconnu,1997-12-07,oui,,,aucune source ne donne de thème
+thème inconnu,1997-12-14,oui,,,aucune source ne donne de thème
+thème inconnu,1997-12-21,oui,,,aucune source ne donne de thème
+thème inconnu,1997-12-28,oui,,,aucune source ne donne de thème
+thème inconnu,1998-01-04,oui,,,aucune source ne donne de thème
+thème inconnu,1998-01-18,oui,,,aucune source ne donne de thème
+thème inconnu,1998-01-25,oui,,,aucune source ne donne de thème
+thème inconnu,1998-02-08,oui,,,aucune source ne donne de thème
+thème inconnu,1998-02-15,oui,,,aucune source ne donne de thème
+thème inconnu,1998-02-22,oui,,,aucune source ne donne de thème
+thème inconnu,1998-03-01,oui,,,aucune source ne donne de thème
+thème inconnu,1998-03-08,oui,,,aucune source ne donne de thème
+thème inconnu,1998-04-05,oui,,,aucune source ne donne de thème
+thème inconnu,1998-04-12,oui,,,aucune source ne donne de thème
+thème inconnu,1998-04-19,oui,,,aucune source ne donne de thème
+thème inconnu,1998-04-26,oui,,,aucune source ne donne de thème
+thème inconnu,1998-05-03,oui,,,aucune source ne donne de thème
+thème inconnu,1998-05-10,oui,,,aucune source ne donne de thème
+thème inconnu,1998-05-17,oui,,,aucune source ne donne de thème
+thème inconnu,1998-06-07,oui,,,aucune source ne donne de thème
+thème inconnu,1998-06-14,oui,,,aucune source ne donne de thème
+thème inconnu,1998-06-21,oui,,,aucune source ne donne de thème
+thème inconnu,1998-06-28,oui,,,aucune source ne donne de thème
+thème inconnu,1998-07-05,oui,,,aucune source ne donne de thème
+thème inconnu,1998-07-19,oui,,,aucune source ne donne de thème
+thème inconnu,1998-07-26,oui,,,aucune source ne donne de thème
+thème inconnu,1998-09-06,oui,,,aucune source ne donne de thème
+thème inconnu,1998-09-13,oui,,,aucune source ne donne de thème
+thème inconnu,1998-10-11,oui,,,aucune source ne donne de thème
+thème inconnu,1998-10-25,oui,,,aucune source ne donne de thème
+thème inconnu,1998-11-08,oui,,,aucune source ne donne de thème
+thème inconnu,1998-11-15,oui,,,aucune source ne donne de thème
+thème inconnu,1998-11-22,oui,,,aucune source ne donne de thème
+thème inconnu,1998-12-13,oui,,,aucune source ne donne de thème
+thème inconnu,1998-12-20,oui,,,aucune source ne donne de thème
+thème inconnu,1998-12-27,oui,,,aucune source ne donne de thème
+thème inconnu,1999-01-03,oui,,,aucune source ne donne de thème
+thème inconnu,1999-01-10,oui,,,aucune source ne donne de thème
+thème inconnu,1999-01-17,oui,,,aucune source ne donne de thème
+thème inconnu,1999-01-24,oui,,,aucune source ne donne de thème
+thème inconnu,1999-02-28,oui,,,aucune source ne donne de thème
+thème inconnu,1999-03-14,oui,,,aucune source ne donne de thème
+thème inconnu,1999-04-04,oui,,,aucune source ne donne de thème
+thème inconnu,1999-04-11,oui,,,aucune source ne donne de thème
+thème inconnu,1999-04-18,oui,,,aucune source ne donne de thème
+thème inconnu,1999-04-25,oui,,,aucune source ne donne de thème
+thème inconnu,1999-05-02,oui,,,aucune source ne donne de thème
+thème inconnu,1999-05-09,oui,,,aucune source ne donne de thème
+thème inconnu,1999-06-13,oui,,,aucune source ne donne de thème
+thème inconnu,1999-06-20,oui,,,aucune source ne donne de thème
+thème inconnu,1999-06-27,oui,,,aucune source ne donne de thème
+thème inconnu,1999-07-04,oui,,,aucune source ne donne de thème
+thème inconnu,1999-07-11,oui,,,aucune source ne donne de thème
+thème inconnu,1999-07-18,oui,,,aucune source ne donne de thème
+thème inconnu,1999-07-25,oui,,,aucune source ne donne de thème
+thème inconnu,1999-08-01,oui,,,aucune source ne donne de thème
+thème inconnu,1999-08-08,oui,,,aucune source ne donne de thème
+thème inconnu,1999-08-15,oui,,,aucune source ne donne de thème
+thème inconnu,1999-08-29,oui,,,aucune source ne donne de thème
+thème inconnu,1999-09-26,oui,,,aucune source ne donne de thème
+thème inconnu,1999-10-10,oui,,,aucune source ne donne de thème
+thème inconnu,1999-10-17,oui,,,aucune source ne donne de thème
+thème inconnu,1999-10-31,oui,,,aucune source ne donne de thème
+thème inconnu,1999-11-07,oui,,,aucune source ne donne de thème
+thème inconnu,1999-11-14,oui,,,aucune source ne donne de thème
+thème inconnu,1999-11-28,oui,,,aucune source ne donne de thème
+thème inconnu,1999-12-05,oui,,,aucune source ne donne de thème
+thème inconnu,1999-12-12,oui,,,aucune source ne donne de thème
+thème inconnu,1999-12-19,oui,,,aucune source ne donne de thème
+thème inconnu,2000-01-02,oui,,,aucune source ne donne de thème
+thème inconnu,2000-01-09,oui,,,aucune source ne donne de thème
+thème inconnu,2000-01-23,oui,,,aucune source ne donne de thème
+thème inconnu,2000-01-30,oui,,,aucune source ne donne de thème
+thème inconnu,2000-02-06,oui,,,aucune source ne donne de thème
+thème inconnu,2000-02-20,oui,,,aucune source ne donne de thème
+thème inconnu,2000-02-27,oui,,,aucune source ne donne de thème
+thème inconnu,2000-03-12,oui,,,aucune source ne donne de thème
+thème inconnu,2000-03-19,oui,,,aucune source ne donne de thème
+thème inconnu,2000-03-26,oui,,,aucune source ne donne de thème
+thème inconnu,2000-04-02,oui,,,aucune source ne donne de thème
+thème inconnu,2000-04-09,oui,,,aucune source ne donne de thème
+thème inconnu,2000-04-16,oui,,,aucune source ne donne de thème
+thème inconnu,2000-04-23,oui,,,aucune source ne donne de thème
+thème inconnu,2000-04-30,oui,,,aucune source ne donne de thème
+thème inconnu,2000-05-14,oui,,,aucune source ne donne de thème
+thème inconnu,2000-06-04,oui,,,aucune source ne donne de thème
+thème inconnu,2000-06-11,oui,,,aucune source ne donne de thème
+thème inconnu,2000-06-18,oui,,,aucune source ne donne de thème
+thème inconnu,2000-07-02,oui,,,aucune source ne donne de thème
+thème inconnu,2000-07-09,oui,,,aucune source ne donne de thème
+thème inconnu,2000-07-16,oui,,,aucune source ne donne de thème
+thème inconnu,2000-07-23,oui,,,aucune source ne donne de thème
+thème inconnu,2000-08-06,oui,,,aucune source ne donne de thème
+thème inconnu,2000-08-13,oui,,,aucune source ne donne de thème
+thème inconnu,2000-08-27,oui,,,aucune source ne donne de thème
+thème inconnu,2000-09-03,oui,,,aucune source ne donne de thème
+thème inconnu,2000-09-10,oui,,,aucune source ne donne de thème
+thème inconnu,2000-09-17,oui,,,aucune source ne donne de thème
+thème inconnu,2000-10-08,oui,,,aucune source ne donne de thème
+thème inconnu,2000-10-15,oui,,,aucune source ne donne de thème
 désaccord de date,2000-10-29,non,,,"radiofrance:2000-10-27, radiofrance:2000-10-29, ina:2000-10-29"
+republication,2000-10-29,non,radiofrance,mission-impossible-2-4404954,"daté du 2000-10-27, enregistrement du 2000-08-27"
+thème inconnu,2000-11-05,oui,,,aucune source ne donne de thème
+thème inconnu,2000-11-12,oui,,,aucune source ne donne de thème
+thème inconnu,2000-11-19,oui,,,aucune source ne donne de thème
+thème inconnu,2000-11-26,oui,,,aucune source ne donne de thème
+thème inconnu,2000-12-10,oui,,,aucune source ne donne de thème
+thème inconnu,2000-12-17,oui,,,aucune source ne donne de thème
+thème inconnu,2000-12-24,oui,,,aucune source ne donne de thème
+thème inconnu,2001-01-07,oui,,,aucune source ne donne de thème
+thème inconnu,2001-01-14,oui,,,aucune source ne donne de thème
+thème inconnu,2001-01-21,oui,,,aucune source ne donne de thème
+thèmes divergents,2001-01-28,non,,,"radiofrance:cinéma+théâtre (extrait), ina:théâtre"
+thème inconnu,2001-02-04,oui,,,aucune source ne donne de thème
+thème inconnu,2001-02-18,oui,,,aucune source ne donne de thème
+thème inconnu,2001-02-25,oui,,,aucune source ne donne de thème
+thème inconnu,2001-04-01,oui,,,aucune source ne donne de thème
+thème inconnu,2001-04-08,oui,,,aucune source ne donne de thème
+thème inconnu,2001-04-15,oui,,,aucune source ne donne de thème
+thème inconnu,2001-04-22,oui,,,aucune source ne donne de thème
+thème inconnu,2001-06-17,oui,,,aucune source ne donne de thème
+thème inconnu,2001-06-24,oui,,,aucune source ne donne de thème
+thème inconnu,2001-07-15,oui,,,aucune source ne donne de thème
+thème inconnu,2001-07-22,oui,,,aucune source ne donne de thème
+thème inconnu,2001-07-29,oui,,,aucune source ne donne de thème
+thème inconnu,2001-08-05,oui,,,aucune source ne donne de thème
+thème inconnu,2001-08-12,oui,,,aucune source ne donne de thème
+thème inconnu,2001-08-19,oui,,,aucune source ne donne de thème
+thème inconnu,2001-08-26,oui,,,aucune source ne donne de thème
+thèmes divergents,2001-09-02,oui,,,"radiofrance:cinéma+livres (extrait), ina:cinéma"
+thème inconnu,2001-09-23,oui,,,aucune source ne donne de thème
+thème inconnu,2001-10-14,oui,,,aucune source ne donne de thème
+thème inconnu,2001-10-21,oui,,,aucune source ne donne de thème
+thème inconnu,2001-10-28,oui,,,aucune source ne donne de thème
+thème inconnu,2001-11-04,oui,,,aucune source ne donne de thème
+thème inconnu,2001-11-11,oui,,,aucune source ne donne de thème
+thème inconnu,2001-11-18,oui,,,aucune source ne donne de thème
+thème inconnu,2001-11-25,oui,,,aucune source ne donne de thème
+thème inconnu,2002-01-13,oui,,,aucune source ne donne de thème
+thème inconnu,2002-01-20,oui,,,aucune source ne donne de thème
+thème inconnu,2002-02-24,oui,,,aucune source ne donne de thème
+thème inconnu,2002-03-17,oui,,,aucune source ne donne de thème
+thème inconnu,2002-03-24,oui,,,aucune source ne donne de thème
+thème inconnu,2002-03-31,oui,,,aucune source ne donne de thème
+thème inconnu,2002-04-07,oui,,,aucune source ne donne de thème
+thème inconnu,2002-04-14,oui,,,aucune source ne donne de thème
+thème inconnu,2002-04-28,oui,,,aucune source ne donne de thème
+thème inconnu,2002-05-19,oui,,,aucune source ne donne de thème
+thème inconnu,2002-06-02,oui,,,aucune source ne donne de thème
+thème inconnu,2002-06-23,oui,,,aucune source ne donne de thème
+thème inconnu,2002-07-07,oui,,,aucune source ne donne de thème
+thème inconnu,2002-07-21,oui,,,aucune source ne donne de thème
+thème inconnu,2002-07-28,oui,,,aucune source ne donne de thème
+thème inconnu,2002-08-04,oui,,,aucune source ne donne de thème
+thème inconnu,2002-08-18,oui,,,aucune source ne donne de thème
+thème inconnu,2002-08-25,oui,,,aucune source ne donne de thème
+thème inconnu,2002-09-15,oui,,,aucune source ne donne de thème
+thème inconnu,2002-09-22,oui,,,aucune source ne donne de thème
+thème inconnu,2002-10-13,oui,,,aucune source ne donne de thème
+thème inconnu,2002-10-20,oui,,,aucune source ne donne de thème
+thème inconnu,2002-10-27,oui,,,aucune source ne donne de thème
+thème inconnu,2002-11-03,oui,,,aucune source ne donne de thème
+thème inconnu,2002-12-01,oui,,,aucune source ne donne de thème
+thème inconnu,2002-12-08,oui,,,aucune source ne donne de thème
+thème inconnu,2002-12-15,oui,,,aucune source ne donne de thème
+thème inconnu,2002-12-22,oui,,,aucune source ne donne de thème
+collision,2003-07-13-b,non,,,une autre émission le même jour : 2003-07-13
+thème inconnu,2003-07-27,oui,,,aucune source ne donne de thème
+thème inconnu,2003-08-03,oui,,,aucune source ne donne de thème
+thèmes divergents,2004-06-06,oui,,,"radiofrance:cinéma, radiofrance:cinéma+livres (extrait), anciennes_listes:cinéma"
+collision,2005-01-23-b,non,,,une autre émission le même jour : 2005-01-23
 rapprochement ambigu,2005-01-23-b,non,wayback_podcast,ITEMA_23951193,rapprochable aussi de 2005-01-23
 rapprochement ambigu,2005-01-23-b,non,ina,RD_2181177.001,rapprochable aussi de 2005-01-23
+thème inconnu,2005-07-03,oui,,,aucune source ne donne de thème
 désaccord de date,2005-07-31,non,,,"anciennes_listes:2005-07-28, radiofrance:2005-07-31, ina:2005-07-31, anciennes_listes:2005-07-31"
+thème inconnu,2005-11-13,oui,,,aucune source ne donne de thème
+collision,2006-02-12-b,non,,,une autre émission le même jour : 2006-02-12
 rapprochement ambigu,2006-02-12-b,non,ina,RD_2670622.001,rapprochable aussi de 2006-02-12
+collision,2007-01-21-b,non,,,une autre émission le même jour : 2007-01-21
 rapprochement ambigu,2007-01-21-b,non,ina,RD_3004001.001,rapprochable aussi de 2007-01-21
 rapprochement ambigu,2007-03-25,oui,wayback_podcast,ITEMA_20063745,rapprochable aussi de 2007-03-25-b
 rapprochement ambigu,2007-03-25,oui,ina,RD_3061768.001,rapprochable aussi de 2007-03-25-b
+attestation fragile,2007-03-25-b,non,,,attestée seulement par des extraits
+collision,2007-03-25-b,non,,,une autre émission le même jour : 2007-03-25
+collision,2008-02-03-b,non,,,une autre émission le même jour : 2008-02-03
 rapprochement ambigu,2008-02-03-b,non,ina,RD_3357265.001,rapprochable aussi de 2008-02-03
+thème inconnu,2009-07-12,oui,,,aucune source ne donne de thème
+thème inconnu,2009-07-19,oui,,,aucune source ne donne de thème
+thème inconnu,2010-07-11,oui,,,aucune source ne donne de thème
+thème inconnu,2010-07-18,oui,,,aucune source ne donne de thème
+collision,2011-02-20-b,non,,,une autre émission le même jour : 2011-02-20
 rapprochement ambigu,2011-02-20-b,non,wayback_podcast,ITEMA_20269909,rapprochable aussi de 2011-02-20
 rapprochement ambigu,2011-02-20-b,non,ina,RD_4739054.001,rapprochable aussi de 2011-02-20
+collision,2012-10-28-b,non,,,une autre émission le même jour : 2012-10-28
 rapprochement ambigu,2012-10-28-b,non,ina,RD_5409914.001,rapprochable aussi de 2012-10-28
+thèmes divergents,2013-03-24,non,,,"radiofrance:cinéma+théâtre, ina:cinéma"
+republication,2013-09-22,non,radiofrance,elle-s-en-va-d-emmanuelle-bercot-3196683,"daté du 2013-09-22, enregistrement du 2025-02-28"
+thème inconnu,2014-12-21,oui,,,aucune source ne donne de thème
 rapprochement ambigu,2016-05-15,oui,ina,RD_6476511.001,rapprochable aussi de 2016-05-15-b
 rapprochement ambigu,2016-05-15,oui,ina,RD_6476526.001,rapprochable aussi de 2016-05-15-b
+collision,2016-05-15-b,non,,,une autre émission le même jour : 2016-05-15
+thème inconnu,2016-07-10,oui,,,aucune source ne donne de thème
+thème inconnu,2016-07-17,oui,,,aucune source ne donne de thème
 désaccord de date,2016-09-25,non,,,"ina:2016-09-23, radiofrance:2016-09-25, ina:2016-09-25, ina:2016-09-26"
 absente de lmelp,2018-12-09,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2018-12-09,oui,,,aucune source ne donne de thème
 absente de lmelp,2019-07-07,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2019-07-07,oui,,,aucune source ne donne de thème
 absente de lmelp,2019-08-04,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2019-08-04,oui,,,aucune source ne donne de thème
 absente de lmelp,2019-08-18,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2019-08-18,oui,,,aucune source ne donne de thème
 absente de lmelp,2019-09-01,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2019-09-01,oui,,,aucune source ne donne de thème
 désaccord de date,2019-09-08,oui,,,"wayback_podcast:2019-09-07, radiofrance:2019-09-08, wayback_podcast:2019-09-08, ina:2019-09-08, ina:2019-09-09"
 absente de lmelp,2019-10-13,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2019-10-13,oui,,,aucune source ne donne de thème
 absente de lmelp,2020-04-19,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2020-04-19,oui,,,aucune source ne donne de thème
 absente de lmelp,2020-06-27,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
 désaccord de date,2020-06-27,oui,,,"radiofrance:2020-06-27, wayback_podcast:2020-06-27, ina:2020-06-27, ina:2020-06-29"
+thème inconnu,2020-06-27,oui,,,aucune source ne donne de thème
 désaccord de date,2020-07-04,non,,,"radiofrance:2020-07-04, wayback_podcast:2020-07-04, ina:2020-07-04, ina:2020-07-05, ina:2020-07-06"
 désaccord de date,2020-07-11,non,,,"radiofrance:2020-07-11, wayback_podcast:2020-07-11, ina:2020-07-11, ina:2020-07-12, ina:2020-07-13"
 désaccord de date,2020-07-18,non,,,"radiofrance:2020-07-18, wayback_podcast:2020-07-18, ina:2020-07-18, ina:2020-07-19, ina:2020-07-20"
 absente de lmelp,2020-07-25,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
 désaccord de date,2020-07-25,oui,,,"radiofrance:2020-07-25, wayback_podcast:2020-07-25, ina:2020-07-25, ina:2020-07-26, ina:2020-07-27"
+thème inconnu,2020-07-25,oui,,,aucune source ne donne de thème
 désaccord de date,2020-08-01,oui,,,"radiofrance:2020-08-01, ina:2020-08-01, ina:2020-08-02, ina:2020-08-03"
 absente de lmelp,2020-08-08,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
 désaccord de date,2020-08-08,oui,,,"radiofrance:2020-08-08, ina:2020-08-08, ina:2020-08-09, ina:2020-08-10"
+thème inconnu,2020-08-08,oui,,,aucune source ne donne de thème
 désaccord de date,2020-08-15,oui,,,"radiofrance:2020-08-15, wayback_podcast:2020-08-15, ina:2020-08-15, ina:2020-08-16, ina:2020-08-17"
 désaccord de date,2020-08-22,non,,,"radiofrance:2020-08-22, ina:2020-08-22, ina:2020-08-23, ina:2020-08-24"
 absente de lmelp,2020-11-08,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2020-11-08,oui,,,aucune source ne donne de thème
 absente de lmelp,2020-11-22,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2020-11-22,oui,,,aucune source ne donne de thème
 absente de lmelp,2020-12-20,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2020-12-20,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-01-10,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-01-10,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-01-24,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-01-24,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-02-21,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-02-21,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-03-21,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-03-21,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-04-04,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-04-04,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-04-18,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-04-18,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-05-02,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-05-02,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-05-30,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-05-30,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-06-28,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-06-28,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-07-25,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-07-25,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-09-05,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-09-05,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-09-19,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-09-19,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-10-10,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-10-10,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-11-14,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-11-14,oui,,,aucune source ne donne de thème
 absente de lmelp,2021-11-21,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2021-11-21,oui,,,aucune source ne donne de thème
 désaccord de date,2022-01-02,non,,,"radiofrance:2022-01-02, ina:2022-01-02, ina:2022-01-03, wayback_podcast:2022-01-05"
 absente de lmelp,2022-01-23,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2022-01-23,oui,,,aucune source ne donne de thème
 absente de lmelp,2022-04-11,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2022-04-11,oui,,,aucune source ne donne de thème
 absente de lmelp,2022-09-25,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2022-09-25,oui,,,aucune source ne donne de thème
 absente de lmelp,2022-10-16,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2022-10-16,oui,,,aucune source ne donne de thème
 absente de lmelp,2022-10-23,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2022-10-23,oui,,,aucune source ne donne de thème
 absente de lmelp,2022-11-06,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2022-11-06,oui,,,aucune source ne donne de thème
 absente de lmelp,2022-12-04,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2022-12-04,oui,,,aucune source ne donne de thème
 désaccord de date,2022-12-11,oui,,,"radiofrance:2022-12-11, wayback_podcast:2022-12-11, ina:2022-12-11, ina:2022-12-12, ina:2022-12-14"
 absente de lmelp,2023-01-29,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2023-01-29,oui,,,aucune source ne donne de thème
 absente de lmelp,2023-03-05,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2023-03-05,oui,,,aucune source ne donne de thème
+collision,2023-10-29-b,non,,,une autre émission le même jour : 2023-10-29
 rapprochement ambigu,2023-10-29-b,non,wayback_podcast,ITEMA_23534541,rapprochable aussi de 2023-10-29
 rapprochement ambigu,2023-10-29-b,non,ina,RD_14905005.001,rapprochable aussi de 2023-10-29
 rapprochement ambigu,2023-10-29-b,non,ina,RD_14905017.001,rapprochable aussi de 2023-10-29
 désaccord de date,2023-12-10,oui,,,"wayback_podcast:2023-12-08, radiofrance:2023-12-10, wayback_podcast:2023-12-10, ina:2023-12-10, ina:2023-12-10"
 absente de lmelp,2023-12-31,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thème inconnu,2023-12-31,oui,,,aucune source ne donne de thème
 désaccord de date,2024-05-05,oui,,,"radiofrance:2024-05-05, wayback_podcast:2024-05-05, ina:2024-05-05, ina:2024-05-05, wayback_podcast:2024-05-06, radiofrance:2024-05-07, radiofrance:2024-05-07, wayback_podcast:2024-05-07"
 désaccord de date,2024-06-02,non,,,"radiofrance:2024-06-02, radiofrance:2024-06-02, wayback_podcast:2024-06-02, ina:2024-06-02, ina:2024-06-02, radiofrance:2024-06-04, radiofrance:2024-06-04, radiofrance:2024-06-04, wayback_podcast:2024-06-04"
 désaccord de date,2024-06-16,non,,,"radiofrance:2024-06-16, wayback_podcast:2024-06-16, ina:2024-06-16, ina:2024-06-16, radiofrance:2024-06-17, radiofrance:2024-06-17, wayback_podcast:2024-06-17, radiofrance:2024-06-18"
@@ -82,32 +577,58 @@ absente de lmelp,2024-08-18,oui,,,lmelp est complet depuis le 01/01/2017 pour le
 rapprochement ambigu,2024-08-18,oui,wayback_podcast,ITEMA_23830246,rapprochable aussi de 2024-08-18-b
 rapprochement ambigu,2024-08-18,oui,radiofrance,le-roman-de-jim-des-freres-larrieu-6664324,rapprochable aussi de 2024-08-18-b
 rapprochement ambigu,2024-08-18,oui,wayback_podcast,ITEMA_23832933,rapprochable aussi de 2024-08-18-b
+thèmes divergents,2024-08-18,oui,,,"radiofrance:cinéma, radiofrance:cinéma+livres (extrait), radiofrance:cinéma (extrait)"
 absente de lmelp,2024-08-18-b,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+collision,2024-08-18-b,oui,,,une autre émission le même jour : 2024-08-18
 rapprochement ambigu,2024-08-18-b,oui,ina,RD_16239327.001,rapprochable aussi de 2024-08-18
 rapprochement ambigu,2024-08-18-b,oui,ina,RD_16239352.001,rapprochable aussi de 2024-08-18
 rapprochement ambigu,2024-09-08,oui,wayback_podcast,ITEMA_23853361,rapprochable aussi de 2024-09-09
 rapprochement ambigu,2024-09-08,oui,wayback_podcast,ITEMA_23854827,rapprochable aussi de 2024-09-09
+attestation fragile,2024-09-09,non,,,attestée seulement par des extraits
 désaccord de date,2024-10-27,non,,,"wayback_podcast:2024-10-24, radiofrance:2024-10-27, radiofrance:2024-10-27, radiofrance:2024-10-27, wayback_podcast:2024-10-27, ina:2024-10-27, ina:2024-10-27"
+collision,2024-11-03-b,non,,,une autre émission le même jour : 2024-11-03
 rapprochement ambigu,2024-11-03-b,non,wayback_podcast,ITEMA_23913276,rapprochable aussi de 2024-11-03
 rapprochement ambigu,2024-11-03-b,non,ina,RD_16477039.001,rapprochable aussi de 2024-11-03
 rapprochement ambigu,2024-11-03-b,non,ina,RD_16477067.001,rapprochable aussi de 2024-11-03
+attestation fragile,2024-11-10-b,non,,,attestée seulement par des extraits et la Wayback Machine
+collision,2024-11-10-b,non,,,une autre émission le même jour : 2024-11-10
 rapprochement ambigu,2024-11-10-b,non,wayback_podcast,ITEMA_23920569,rapprochable aussi de 2024-11-10
+thèmes divergents,2024-12-29,non,,,"radiofrance:cinéma, radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma+théâtre (extrait), radiofrance:cinéma (extrait)"
 désaccord de date,2025-03-02,non,,,"wayback_podcast:2025-02-28, radiofrance:2025-03-02, wayback_podcast:2025-03-02, ina:2025-03-02, ina:2025-03-02"
 absente de lmelp,2025-03-30,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+thèmes divergents,2025-03-30,oui,,,"radiofrance:cinéma (extrait), radiofrance:cinéma, radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), ina:cinéma+livres, ina:cinéma+livres"
 rapprochement ambigu,2025-04-20,oui,wayback_podcast,ITEMA_24107919,rapprochable aussi de 2025-04-20-b
 rapprochement ambigu,2025-04-20,oui,ina,RD_16960348.001,rapprochable aussi de 2025-04-20-b
 rapprochement ambigu,2025-04-20,oui,ina,RD_16960320.001,rapprochable aussi de 2025-04-20-b
+attestation fragile,2025-04-20-b,non,,,attestée seulement par des extraits
+collision,2025-04-20-b,non,,,une autre émission le même jour : 2025-04-20
 rapprochement ambigu,2025-05-04,oui,wayback_podcast,ITEMA_24123130,rapprochable aussi de 2025-05-04-b
 rapprochement ambigu,2025-05-04,oui,ina,RD_17031482.001,rapprochable aussi de 2025-05-04-b
 rapprochement ambigu,2025-05-04,oui,ina,RD_17031510.001,rapprochable aussi de 2025-05-04-b
+attestation fragile,2025-05-04-b,non,,,attestée seulement par des extraits
+collision,2025-05-04-b,non,,,une autre émission le même jour : 2025-05-04
+attestation fragile,2025-06-01-b,non,,,attestée seulement par des extraits et la Wayback Machine
+collision,2025-06-01-b,non,,,une autre émission le même jour : 2025-06-01
 rapprochement ambigu,2025-06-01-b,non,wayback_podcast,ITEMA_24153905,rapprochable aussi de 2025-06-01
 absente de lmelp,2025-06-29,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+attestation fragile,2025-06-29,oui,,,attestée seulement par la Wayback Machine
+thème inconnu,2025-06-29,oui,,,aucune source ne donne de thème
 rapprochement ambigu,2025-08-03,oui,wayback_podcast,ITEMA_24209925,rapprochable aussi de 2025-08-03-b
+attestation fragile,2025-08-03-b,non,,,attestée seulement par des extraits
+collision,2025-08-03-b,non,,,une autre émission le même jour : 2025-08-03
 désaccord de date,2025-09-07,oui,,,"radiofrance:2025-09-07, radiofrance:2025-09-07, radiofrance:2025-09-07, radiofrance:2025-09-07, wayback_podcast:2025-09-07, ina:2025-09-07, ina:2025-09-07, ina:2025-09-09"
+republication,2025-10-05,non,radiofrance,les-roseaux-sauvages-de-techine-prix-des-auditeurs-du-masque-7332770,"daté du 2025-10-04, enregistrement du 1995-02-12"
 rapprochement ambigu,2025-11-09,oui,wayback_podcast,ITEMA_24305574,rapprochable aussi de 2025-11-09-b
+attestation fragile,2025-11-09-b,non,,,attestée seulement par des extraits
+collision,2025-11-09-b,non,,,une autre émission le même jour : 2025-11-09
 absente de lmelp,2025-11-23,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
 rapprochement ambigu,2025-11-23,oui,wayback_podcast,ITEMA_24320097,rapprochable aussi de 2025-11-23-b
+thèmes divergents,2025-11-23,oui,,,"radiofrance:théâtre (extrait), radiofrance:théâtre, radiofrance:livres+théâtre (extrait), radiofrance:théâtre (extrait), ina:théâtre, ina:théâtre"
+attestation fragile,2025-11-23-b,non,,,attestée seulement par des extraits
+collision,2025-11-23-b,non,,,une autre émission le même jour : 2025-11-23
 rapprochement ambigu,2025-12-07,oui,wayback_podcast,ITEMA_24334855,rapprochable aussi de 2025-12-07-b
+attestation fragile,2025-12-07-b,non,,,attestée seulement par des extraits
+collision,2025-12-07-b,non,,,une autre émission le même jour : 2025-12-07
 désaccord de date,2025-12-21,oui,,,"radiofrance:2025-12-21, radiofrance:2025-12-21, wayback_podcast:2025-12-21, ina:2025-12-21, ina:2025-12-21, ina:2025-12-24"
 rapprochement ambigu,2025-12-21,oui,radiofrance,asterix-5674742,rapprochable aussi de 2025-12-28
 rapprochement ambigu,2025-12-21,oui,radiofrance,le-masque-et-la-plume-du-dimanche-21-decembre-2025-1648054,rapprochable aussi de 2025-12-28
@@ -128,16 +649,30 @@ rapprochement ambigu,2025-12-28,oui,wayback_podcast,ITEMA_24354718,rapprochable 
 rapprochement ambigu,2025-12-28,oui,ina,RD_17632478.001,rapprochable aussi de 2025-12-21
 rapprochement ambigu,2026-01-11,non,wayback_podcast,ITEMA_24369995,rapprochable aussi de 2026-01-14
 absente de lmelp,2026-01-14,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
+attestation fragile,2026-01-14,oui,,,attestée seulement par des extraits
+republication,2026-01-14,oui,radiofrance,le-mage-du-kremlin-de-giuliano-da-empoli-1192090,"daté du 2026-01-14, enregistrement du 2022-03-14"
 rapprochement ambigu,2026-02-01,non,wayback_podcast,ITEMA_24393335,rapprochable aussi de 2026-02-01-b
 rapprochement ambigu,2026-02-01,non,ina,RD_17734979.001,rapprochable aussi de 2026-02-01-b
 rapprochement ambigu,2026-02-01,non,ina,RD_17735007.001,rapprochable aussi de 2026-02-01-b
+collision,2026-02-01-b,non,,,une autre émission le même jour : 2026-02-01
+attestation fragile,2026-02-13,non,,,attestée seulement par des extraits
 désaccord de date,2026-02-15,oui,,,"radiofrance:2026-02-13, radiofrance:2026-02-13, radiofrance:2026-02-13, radiofrance:2026-02-13, wayback_podcast:2026-02-13, radiofrance:2026-02-15, ina:2026-02-15, ina:2026-02-15"
 rapprochement ambigu,2026-02-15,oui,wayback_podcast,ITEMA_24408480,rapprochable aussi de 2026-02-13
+collision,2026-03-15-b,non,,,une autre émission le même jour : 2026-03-15
 rapprochement ambigu,2026-03-15-b,non,wayback_podcast,ITEMA_24441287,rapprochable aussi de 2026-03-15
 rapprochement ambigu,2026-03-15-b,non,ina,RD_17886334.001,rapprochable aussi de 2026-03-15
+thèmes divergents,2026-03-22,non,,,"radiofrance:cinéma (extrait), radiofrance:cinéma, radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma+théâtre (extrait)"
 rapprochement ambigu,2026-03-29,oui,radiofrance,le-masque-et-la-plume-du-dimanche-29-mars-2026-6387393,rapprochable aussi de 2026-03-29-b
 rapprochement ambigu,2026-03-29,oui,wayback_podcast,ITEMA_24457318,rapprochable aussi de 2026-03-29-b
+attestation fragile,2026-03-29-b,non,,,attestée seulement par des extraits
+collision,2026-03-29-b,non,,,une autre émission le même jour : 2026-03-29
 rapprochement ambigu,2026-07-12,non,wayback_podcast,ITEMA_24591982,rapprochable aussi de 2026-07-12-b
 rapprochement ambigu,2026-07-12,non,ina,RD_18253507.001,rapprochable aussi de 2026-07-12-b
 rapprochement ambigu,2026-07-12,non,ina,RD_18253478.001,rapprochable aussi de 2026-07-12-b
+collision,2026-07-12-b,non,,,une autre émission le même jour : 2026-07-12
+thèmes divergents,2026-08-09,non,,,"radiofrance:cinéma+théâtre (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma, radiofrance:cinéma (extrait), radiofrance:cinéma (extrait)"
 rapprochement ambigu,2026-10-04,oui,wayback_podcast,ITEMA_24697779,rapprochable aussi de 2026-10-04-b
+attestation fragile,2026-10-04-b,non,,,attestée seulement par des extraits
+collision,2026-10-04-b,non,,,une autre émission le même jour : 2026-10-04
+thèmes divergents,2026-10-18,non,,,"radiofrance:théâtre (extrait), radiofrance:théâtre (extrait), radiofrance:cinéma+théâtre (extrait), radiofrance:théâtre (extrait), radiofrance:théâtre, radiofrance:théâtre (extrait), radiofrance:théâtre (extrait)"
+thèmes divergents,2026-10-25,oui,,,"radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma, radiofrance:cinéma+livres (extrait), radiofrance:cinéma (extrait)"

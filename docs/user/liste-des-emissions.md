@@ -122,7 +122,14 @@ Types de doute :
 - `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ;
 - `désaccord de date` : les sources d'une même émission donnent des dates de première diffusion écartées de plus d'un jour ;
 - `absente de lmelp` : une émission de la liste, datée de 2017 à la dernière émission de lmelp, que lmelp ne contient pas ;
-- `sans fiche radiofrance` : une attestation lmelp dont la fiche radiofrance.fr est introuvable ; elle est rapprochée par la date.
+- `sans fiche radiofrance` : une attestation lmelp dont la fiche radiofrance.fr est introuvable ; elle est rapprochée par la date ;
+- `thème inconnu` : aucune source ne donne le thème de l'émission ;
+- `thèmes divergents` : les attestations de l'émission entière ne donnent pas les mêmes thèmes, ou un extrait porte un thème qu'aucune d'elles ne donne. Des extraits aux thèmes différents (une fiche par livre, une par film) décrivent une émission mixte, sans divergence ;
+- `collision` : une autre émission a la même date de première diffusion ; le doute porte sur l'émission suffixée (`-b`, `-c`) ;
+- `republication` : un enregistrement d'une attestation porte, dans le nom de son fichier, une date à plus de trois jours de la sienne : une émission remise en ligne plus tard, ou une fiche rattachée à l'enregistrement d'une autre émission ;
+- `attestation fragile` : l'émission n'est attestée que par des extraits, que par la Wayback Machine, ou que par les deux.
+
+Un champ simplement absent (durée, animateur) n'est pas un doute. Une émission attestée par lmelp n'a ni doute de thème (`thème inconnu`, `thèmes divergents`) ni doute d'existence (`republication`, `attestation fragile`).
 
 `lmelp-pap emissions` affiche le nombre de doutes par type à la fin de la construction.
 
