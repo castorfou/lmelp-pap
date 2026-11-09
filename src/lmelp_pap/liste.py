@@ -54,27 +54,24 @@ class Emission:
 
 
 @dataclass(frozen=True)
-class Signalement:
-    """Un cas à vérifier à la main dans le rapport de rapprochement."""
+class Doute:
+    """Un point d'une émission que les sources ne permettent pas d'affirmer."""
 
     type: str
     emission_id: str
+    dans_la_liste: bool
     source: str
     source_id: str
     detail: str
 
 
-@dataclass
-class Rapport:
-    """Le rapport de rapprochement : cas ambigus et désaccords entre sources."""
-
-    signalements: list[Signalement] = field(default_factory=list)
-
-
 def construire_liste(
     attestations: list[Attestation],
-) -> tuple[list[Emission], Rapport]:
-    """Rapproche les attestations et construit la liste des émissions."""
+) -> tuple[list[Emission], list[Doute]]:
+    """Rapproche les attestations, construit la liste et détecte ses doutes.
+
+    Les doutes portent sur toutes les émissions, dans la liste ou non.
+    """
     groupes: list[list[Attestation]] = []
     for a in sorted(attestations, key=lambda a: a.date):
         candidats = [g for g in groupes if _rapprochable(a, g)]
@@ -86,20 +83,22 @@ def construire_liste(
     emissions = sorted((_fusionner(g) for g in groupes), key=_cle_de_tri)
     _attribuer_identifiants(emissions)
     liste = [e for e in emissions if _dans_la_liste(e)]
-    return liste, _rapport(emissions)
+    return liste, _doutes(emissions)
 
 
-def _rapport(liste: list[Emission]) -> Rapport:
-    rapport = Rapport()
-    for emission in liste:
-        autres = [e for e in liste if e is not emission]
+def _doutes(emissions: list[Emission]) -> list[Doute]:
+    doutes: list[Doute] = []
+    for emission in emissions:
+        dans_la_liste = _dans_la_liste(emission)
+        autres = [e for e in emissions if e is not emission]
         for a in emission.attestations:
             rivales = [e.id for e in autres if _rapprochable(a, e.attestations)]
             if rivales:
-                rapport.signalements.append(
-                    Signalement(
-                        type="ambigu",
+                doutes.append(
+                    Doute(
+                        type="rapprochement ambigu",
                         emission_id=emission.id,
+                        dans_la_liste=dans_la_liste,
                         source=a.source,
                         source_id=a.source_id,
                         detail=f"rapprochable aussi de {', '.join(rivales)}",
@@ -107,10 +106,11 @@ def _rapport(liste: list[Emission]) -> Rapport:
                 )
         dates = sorted({a.date for a in emission.attestations})
         if (dates[-1] - dates[0]).days > 1:
-            rapport.signalements.append(
-                Signalement(
+            doutes.append(
+                Doute(
                     type="désaccord de date",
                     emission_id=emission.id,
+                    dans_la_liste=dans_la_liste,
                     source="",
                     source_id="",
                     detail=", ".join(
@@ -119,7 +119,7 @@ def _rapport(liste: list[Emission]) -> Rapport:
                     ),
                 )
             )
-    return rapport
+    return doutes
 
 
 ECART_MAX_JOURS = 3

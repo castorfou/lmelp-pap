@@ -1,0 +1,98 @@
+type,emission_id,dans_la_liste,source,source_id,detail
+rapprochement ambigu,1958-12-04,oui,wayback_podcast,ITEMA_24232446,rapprochable aussi de 1958-12-06
+désaccord de date,1959-03-23,oui,,,"ina:1959-03-23, ina:1959-03-26"
+rapprochement ambigu,1969-10-26-b,non,wayback_podcast,ITEMA_23820430,rapprochable aussi de 1969-10-26
+rapprochement ambigu,1969-11-23-b,non,wayback_podcast,ITEMA_24232457,rapprochable aussi de 1969-11-23
+rapprochement ambigu,1975-10-19,non,wayback_podcast,ITEMA_23820425,rapprochable aussi de 1975-10-18
+désaccord de date,2000-10-29,non,,,"radiofrance:2000-10-27, radiofrance:2000-10-29, ina:2000-10-29"
+rapprochement ambigu,2005-01-23-b,non,wayback_podcast,ITEMA_23951193,rapprochable aussi de 2005-01-23
+rapprochement ambigu,2005-01-23-b,non,ina,RD_2181177.001,rapprochable aussi de 2005-01-23
+désaccord de date,2005-07-31,non,,,"anciennes_listes:2005-07-28, radiofrance:2005-07-31, ina:2005-07-31, anciennes_listes:2005-07-31"
+rapprochement ambigu,2006-02-12-b,non,ina,RD_2670622.001,rapprochable aussi de 2006-02-12
+rapprochement ambigu,2007-01-21-b,non,ina,RD_3004001.001,rapprochable aussi de 2007-01-21
+rapprochement ambigu,2007-03-25,oui,wayback_podcast,ITEMA_20063745,rapprochable aussi de 2007-03-25-b
+rapprochement ambigu,2007-03-25,oui,ina,RD_3061768.001,rapprochable aussi de 2007-03-25-b
+rapprochement ambigu,2008-02-03-b,non,ina,RD_3357265.001,rapprochable aussi de 2008-02-03
+rapprochement ambigu,2011-02-20-b,non,wayback_podcast,ITEMA_20269909,rapprochable aussi de 2011-02-20
+rapprochement ambigu,2011-02-20-b,non,ina,RD_4739054.001,rapprochable aussi de 2011-02-20
+rapprochement ambigu,2012-10-28-b,non,ina,RD_5409914.001,rapprochable aussi de 2012-10-28
+rapprochement ambigu,2016-05-15,oui,ina,RD_6476511.001,rapprochable aussi de 2016-05-15-b
+rapprochement ambigu,2016-05-15,oui,ina,RD_6476526.001,rapprochable aussi de 2016-05-15-b
+désaccord de date,2016-09-25,non,,,"ina:2016-09-23, radiofrance:2016-09-25, ina:2016-09-25, ina:2016-09-26"
+désaccord de date,2019-09-08,oui,,,"wayback_podcast:2019-09-07, radiofrance:2019-09-08, wayback_podcast:2019-09-08, ina:2019-09-08, ina:2019-09-09"
+désaccord de date,2020-06-27,oui,,,"radiofrance:2020-06-27, wayback_podcast:2020-06-27, ina:2020-06-27, ina:2020-06-29"
+désaccord de date,2020-07-04,non,,,"radiofrance:2020-07-04, wayback_podcast:2020-07-04, ina:2020-07-04, ina:2020-07-05, ina:2020-07-06"
+désaccord de date,2020-07-11,non,,,"radiofrance:2020-07-11, wayback_podcast:2020-07-11, ina:2020-07-11, ina:2020-07-12, ina:2020-07-13"
+désaccord de date,2020-07-18,non,,,"radiofrance:2020-07-18, wayback_podcast:2020-07-18, ina:2020-07-18, ina:2020-07-19, ina:2020-07-20"
+désaccord de date,2020-07-25,oui,,,"radiofrance:2020-07-25, wayback_podcast:2020-07-25, ina:2020-07-25, ina:2020-07-26, ina:2020-07-27"
+désaccord de date,2020-08-01,oui,,,"radiofrance:2020-08-01, ina:2020-08-01, ina:2020-08-02, ina:2020-08-03"
+désaccord de date,2020-08-08,oui,,,"radiofrance:2020-08-08, ina:2020-08-08, ina:2020-08-09, ina:2020-08-10"
+désaccord de date,2020-08-15,oui,,,"radiofrance:2020-08-15, wayback_podcast:2020-08-15, ina:2020-08-15, ina:2020-08-16, ina:2020-08-17"
+désaccord de date,2020-08-22,non,,,"radiofrance:2020-08-22, ina:2020-08-22, ina:2020-08-23, ina:2020-08-24"
+désaccord de date,2022-01-02,non,,,"radiofrance:2022-01-02, ina:2022-01-02, ina:2022-01-03, wayback_podcast:2022-01-05"
+désaccord de date,2022-12-11,oui,,,"radiofrance:2022-12-11, wayback_podcast:2022-12-11, ina:2022-12-11, ina:2022-12-12, ina:2022-12-14"
+rapprochement ambigu,2023-10-29-b,non,wayback_podcast,ITEMA_23534541,rapprochable aussi de 2023-10-29
+rapprochement ambigu,2023-10-29-b,non,ina,RD_14905005.001,rapprochable aussi de 2023-10-29
+rapprochement ambigu,2023-10-29-b,non,ina,RD_14905017.001,rapprochable aussi de 2023-10-29
+désaccord de date,2023-12-10,oui,,,"wayback_podcast:2023-12-08, radiofrance:2023-12-10, wayback_podcast:2023-12-10, ina:2023-12-10, ina:2023-12-10"
+désaccord de date,2024-05-05,oui,,,"radiofrance:2024-05-05, wayback_podcast:2024-05-05, ina:2024-05-05, ina:2024-05-05, wayback_podcast:2024-05-06, radiofrance:2024-05-07, radiofrance:2024-05-07, wayback_podcast:2024-05-07"
+désaccord de date,2024-06-02,non,,,"radiofrance:2024-06-02, radiofrance:2024-06-02, wayback_podcast:2024-06-02, ina:2024-06-02, ina:2024-06-02, radiofrance:2024-06-04, radiofrance:2024-06-04, radiofrance:2024-06-04, wayback_podcast:2024-06-04"
+désaccord de date,2024-06-16,non,,,"radiofrance:2024-06-16, wayback_podcast:2024-06-16, ina:2024-06-16, ina:2024-06-16, radiofrance:2024-06-17, radiofrance:2024-06-17, wayback_podcast:2024-06-17, radiofrance:2024-06-18"
+désaccord de date,2024-07-14,non,,,"radiofrance:2024-07-14, wayback_podcast:2024-07-14, ina:2024-07-14, ina:2024-07-14, radiofrance:2024-07-15, radiofrance:2024-07-15, radiofrance:2024-07-15, wayback_podcast:2024-07-16"
+rapprochement ambigu,2024-08-18,oui,wayback_podcast,ITEMA_23830246,rapprochable aussi de 2024-08-18-b
+rapprochement ambigu,2024-08-18,oui,radiofrance,le-roman-de-jim-des-freres-larrieu-6664324,rapprochable aussi de 2024-08-18-b
+rapprochement ambigu,2024-08-18,oui,wayback_podcast,ITEMA_23832933,rapprochable aussi de 2024-08-18-b
+rapprochement ambigu,2024-08-18-b,oui,ina,RD_16239327.001,rapprochable aussi de 2024-08-18
+rapprochement ambigu,2024-08-18-b,oui,ina,RD_16239352.001,rapprochable aussi de 2024-08-18
+rapprochement ambigu,2024-09-08,oui,wayback_podcast,ITEMA_23853361,rapprochable aussi de 2024-09-09
+rapprochement ambigu,2024-09-08,oui,wayback_podcast,ITEMA_23854827,rapprochable aussi de 2024-09-09
+désaccord de date,2024-10-27,non,,,"wayback_podcast:2024-10-24, radiofrance:2024-10-27, radiofrance:2024-10-27, radiofrance:2024-10-27, wayback_podcast:2024-10-27, ina:2024-10-27, ina:2024-10-27"
+rapprochement ambigu,2024-11-03-b,non,wayback_podcast,ITEMA_23913276,rapprochable aussi de 2024-11-03
+rapprochement ambigu,2024-11-03-b,non,ina,RD_16477039.001,rapprochable aussi de 2024-11-03
+rapprochement ambigu,2024-11-03-b,non,ina,RD_16477067.001,rapprochable aussi de 2024-11-03
+rapprochement ambigu,2024-11-10-b,non,wayback_podcast,ITEMA_23920569,rapprochable aussi de 2024-11-10
+désaccord de date,2025-03-02,non,,,"wayback_podcast:2025-02-28, radiofrance:2025-03-02, wayback_podcast:2025-03-02, ina:2025-03-02, ina:2025-03-02"
+rapprochement ambigu,2025-04-20,oui,wayback_podcast,ITEMA_24107919,rapprochable aussi de 2025-04-20-b
+rapprochement ambigu,2025-04-20,oui,ina,RD_16960348.001,rapprochable aussi de 2025-04-20-b
+rapprochement ambigu,2025-04-20,oui,ina,RD_16960320.001,rapprochable aussi de 2025-04-20-b
+rapprochement ambigu,2025-05-04,oui,wayback_podcast,ITEMA_24123130,rapprochable aussi de 2025-05-04-b
+rapprochement ambigu,2025-05-04,oui,ina,RD_17031482.001,rapprochable aussi de 2025-05-04-b
+rapprochement ambigu,2025-05-04,oui,ina,RD_17031510.001,rapprochable aussi de 2025-05-04-b
+rapprochement ambigu,2025-06-01-b,non,wayback_podcast,ITEMA_24153905,rapprochable aussi de 2025-06-01
+rapprochement ambigu,2025-08-03,oui,wayback_podcast,ITEMA_24209925,rapprochable aussi de 2025-08-03-b
+désaccord de date,2025-09-07,oui,,,"radiofrance:2025-09-07, radiofrance:2025-09-07, radiofrance:2025-09-07, radiofrance:2025-09-07, wayback_podcast:2025-09-07, ina:2025-09-07, ina:2025-09-07, ina:2025-09-09"
+rapprochement ambigu,2025-11-09,oui,wayback_podcast,ITEMA_24305574,rapprochable aussi de 2025-11-09-b
+rapprochement ambigu,2025-11-23,oui,wayback_podcast,ITEMA_24320097,rapprochable aussi de 2025-11-23-b
+rapprochement ambigu,2025-12-07,oui,wayback_podcast,ITEMA_24334855,rapprochable aussi de 2025-12-07-b
+désaccord de date,2025-12-21,oui,,,"radiofrance:2025-12-21, radiofrance:2025-12-21, wayback_podcast:2025-12-21, ina:2025-12-21, ina:2025-12-21, ina:2025-12-24"
+rapprochement ambigu,2025-12-21,oui,radiofrance,asterix-5674742,rapprochable aussi de 2025-12-28
+rapprochement ambigu,2025-12-21,oui,radiofrance,le-masque-et-la-plume-du-dimanche-21-decembre-2025-1648054,rapprochable aussi de 2025-12-28
+rapprochement ambigu,2025-12-21,oui,wayback_podcast,ITEMA_24350028,rapprochable aussi de 2025-12-28
+rapprochement ambigu,2025-12-21,oui,ina,RD_17632055.001,rapprochable aussi de 2025-12-28
+rapprochement ambigu,2025-12-21,oui,ina,RD_17632026.001,rapprochable aussi de 2025-12-28
+rapprochement ambigu,2025-12-21,oui,ina,RD_17632288.001,rapprochable aussi de 2025-12-28
+désaccord de date,2025-12-28,oui,,,"radiofrance:2025-12-22, wayback_podcast:2025-12-22, ina:2025-12-22, radiofrance:2025-12-23, wayback_podcast:2025-12-23, ina:2025-12-23, radiofrance:2025-12-24, wayback_podcast:2025-12-24, radiofrance:2025-12-25, wayback_podcast:2025-12-25, ina:2025-12-25, radiofrance:2025-12-26, wayback_podcast:2025-12-26, ina:2025-12-26, radiofrance:2025-12-28, wayback_podcast:2025-12-28, ina:2025-12-28, ina:2025-12-28"
+rapprochement ambigu,2025-12-28,oui,wayback_podcast,ITEMA_24350765,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2025-12-28,oui,ina,RD_17632099.001,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2025-12-28,oui,wayback_podcast,ITEMA_24351838,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2025-12-28,oui,ina,RD_17632193.001,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2025-12-28,oui,wayback_podcast,ITEMA_24352796,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2025-12-28,oui,wayback_podcast,ITEMA_24353699,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2025-12-28,oui,ina,RD_17632383.001,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2025-12-28,oui,wayback_podcast,ITEMA_24354718,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2025-12-28,oui,ina,RD_17632478.001,rapprochable aussi de 2025-12-21
+rapprochement ambigu,2026-01-11,non,wayback_podcast,ITEMA_24369995,rapprochable aussi de 2026-01-14
+rapprochement ambigu,2026-02-01,non,wayback_podcast,ITEMA_24393335,rapprochable aussi de 2026-02-01-b
+rapprochement ambigu,2026-02-01,non,ina,RD_17734979.001,rapprochable aussi de 2026-02-01-b
+rapprochement ambigu,2026-02-01,non,ina,RD_17735007.001,rapprochable aussi de 2026-02-01-b
+désaccord de date,2026-02-15,oui,,,"radiofrance:2026-02-13, radiofrance:2026-02-13, radiofrance:2026-02-13, radiofrance:2026-02-13, wayback_podcast:2026-02-13, radiofrance:2026-02-15, ina:2026-02-15, ina:2026-02-15"
+rapprochement ambigu,2026-02-15,oui,wayback_podcast,ITEMA_24408480,rapprochable aussi de 2026-02-13
+rapprochement ambigu,2026-03-15-b,non,wayback_podcast,ITEMA_24441287,rapprochable aussi de 2026-03-15
+rapprochement ambigu,2026-03-15-b,non,ina,RD_17886334.001,rapprochable aussi de 2026-03-15
+rapprochement ambigu,2026-03-29,oui,radiofrance,le-masque-et-la-plume-du-dimanche-29-mars-2026-6387393,rapprochable aussi de 2026-03-29-b
+rapprochement ambigu,2026-03-29,oui,wayback_podcast,ITEMA_24457318,rapprochable aussi de 2026-03-29-b
+rapprochement ambigu,2026-03-29-b,non,radiofrance,la-mer-et-son-double-de-julia-lepere-1095147,rapprochable aussi de 2026-03-29
+rapprochement ambigu,2026-07-12,non,wayback_podcast,ITEMA_24591982,rapprochable aussi de 2026-07-12-b
+rapprochement ambigu,2026-07-12,non,ina,RD_18253507.001,rapprochable aussi de 2026-07-12-b
+rapprochement ambigu,2026-07-12,non,ina,RD_18253478.001,rapprochable aussi de 2026-07-12-b
+rapprochement ambigu,2026-10-04,oui,wayback_podcast,ITEMA_24697779,rapprochable aussi de 2026-10-04-b

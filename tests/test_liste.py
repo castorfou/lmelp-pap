@@ -17,7 +17,7 @@ def test_une_attestation_donne_une_emission_identifiee_par_sa_date() -> None:
         titre="Théâtre et littérature",
     )
 
-    liste, _rapport = construire_liste([attestation])
+    liste, _doutes = construire_liste([attestation])
 
     assert len(liste) == 1
     emission = liste[0]
@@ -34,7 +34,7 @@ def test_deux_sources_a_la_meme_date_attestent_la_meme_emission() -> None:
         source="wayback_podcast", source_id="ITEMA_23820437", date=date(1967, 1, 1)
     )
 
-    liste, _rapport = construire_liste([ina, podcast])
+    liste, _doutes = construire_liste([ina, podcast])
 
     assert len(liste) == 1
     assert liste[0].attestations == [ina, podcast]
@@ -51,7 +51,7 @@ def test_un_ecart_de_trois_jours_avec_un_theme_inconnu_est_rapproche() -> None:
         source="wayback_podcast", source_id="ITEMA_1", date=date(1956, 1, 22)
     )
 
-    liste, _rapport = construire_liste([ina, podcast])
+    liste, _doutes = construire_liste([ina, podcast])
 
     assert len(liste) == 1
     assert liste[0].attestations == [ina, podcast]
@@ -71,7 +71,7 @@ def test_des_themes_incompatibles_ne_sont_pas_rapproches() -> None:
         themes=frozenset({"cinéma"}),
     )
 
-    liste, _rapport = construire_liste([livres, cinema])
+    liste, _doutes = construire_liste([livres, cinema])
 
     assert [e.attestations for e in liste] == [[livres]]
 
@@ -80,12 +80,12 @@ def test_au_dela_de_trois_jours_ce_sont_deux_emissions() -> None:
     a = Attestation(source="ina", source_id="PHD1", date=date(1960, 3, 6))
     b = Attestation(source="radiofrance", source_id="x-1", date=date(1960, 3, 10))
 
-    liste, _rapport = construire_liste([a, b])
+    liste, _doutes = construire_liste([a, b])
 
     assert len(liste) == 2
 
 
-def test_une_attestation_rapprochable_de_deux_emissions_est_signalee() -> None:
+def test_une_attestation_rapprochable_de_deux_emissions_est_un_doute() -> None:
     livres = Attestation(
         source="ina",
         source_id="PHD1",
@@ -102,13 +102,13 @@ def test_une_attestation_rapprochable_de_deux_emissions_est_signalee() -> None:
         source="wayback_podcast", source_id="ITEMA_9", date=date(1960, 3, 8)
     )
 
-    _liste, rapport = construire_liste([livres, theatre, podcast])
+    _liste, doutes = construire_liste([livres, theatre, podcast])
 
-    ambigus = [s.source_id for s in rapport.signalements if s.type == "ambigu"]
+    ambigus = [d.source_id for d in doutes if d.type == "rapprochement ambigu"]
     assert ambigus == ["ITEMA_9"]
 
 
-def test_un_desaccord_de_date_de_plus_d_un_jour_est_signale() -> None:
+def test_un_desaccord_de_date_de_plus_d_un_jour_est_un_doute() -> None:
     ina = Attestation(
         source="ina",
         source_id="PHD1",
@@ -119,20 +119,42 @@ def test_un_desaccord_de_date_de_plus_d_un_jour_est_signale() -> None:
         source="wayback_podcast", source_id="ITEMA_1", date=date(1956, 1, 22)
     )
 
-    liste, rapport = construire_liste([ina, podcast])
+    liste, doutes = construire_liste([ina, podcast])
 
-    assert [(s.type, s.emission_id) for s in rapport.signalements] == [
-        ("désaccord de date", liste[0].id)
+    assert [(d.type, d.emission_id, d.dans_la_liste) for d in doutes] == [
+        ("désaccord de date", liste[0].id, True)
     ]
 
 
-def test_un_jour_d_ecart_n_est_pas_signale() -> None:
+def test_un_jour_d_ecart_n_est_pas_un_doute() -> None:
     a = Attestation(source="ina", source_id="PHD1", date=date(1990, 5, 6))
     b = Attestation(source="radiofrance", source_id="x-1", date=date(1990, 5, 7))
 
-    _liste, rapport = construire_liste([a, b])
+    _liste, doutes = construire_liste([a, b])
 
-    assert rapport.signalements == []
+    assert doutes == []
+
+
+def test_un_doute_sur_une_emission_hors_de_la_liste_le_dit() -> None:
+    ina = Attestation(
+        source="ina",
+        source_id="PHD1",
+        date=date(1994, 5, 26),
+        themes=frozenset({"cinéma"}),
+    )
+    radiofrance = Attestation(
+        source="radiofrance",
+        source_id="pulp-fiction",
+        date=date(1994, 5, 29),
+        themes=frozenset({"cinéma"}),
+    )
+
+    liste, doutes = construire_liste([ina, radiofrance])
+
+    assert liste == []
+    assert [(d.type, d.emission_id, d.dans_la_liste) for d in doutes] == [
+        ("désaccord de date", "1994-05-29", False)
+    ]
 
 
 def test_chaque_champ_vient_de_la_source_prioritaire_pour_ce_champ() -> None:
@@ -157,7 +179,7 @@ def test_chaque_champ_vient_de_la_source_prioritaire_pour_ce_champ() -> None:
         duree="00:30:00",
     )
 
-    liste, _rapport = construire_liste([ina, radiofrance])
+    liste, _doutes = construire_liste([ina, radiofrance])
 
     emission = liste[0]
     assert emission.date == date(1958, 12, 20)  # radiofrance > ina
@@ -180,7 +202,7 @@ def test_un_champ_absent_de_la_source_prioritaire_vient_de_la_suivante() -> None
         themes=frozenset({"livres"}),
     )
 
-    liste, _rapport = construire_liste([podcast, ancienne_liste])
+    liste, _doutes = construire_liste([podcast, ancienne_liste])
 
     assert liste[0].date == date(1975, 10, 18)  # anciennes listes > podcast
     assert liste[0].themes == frozenset({"livres"})
@@ -349,7 +371,7 @@ def _fiche_par_livre() -> Attestation:
 def test_les_champs_viennent_de_l_emission_entiere_plutot_que_d_un_extrait() -> None:
     # publié le même dimanche et arrivé en premier : sa place ne doit rien changer
     extrait = replace(_fiche_par_livre(), date=DIMANCHE)
-    liste, _rapport = construire_liste([extrait, _fiche_du_dimanche()])
+    liste, _doutes = construire_liste([extrait, _fiche_du_dimanche()])
 
     emission = liste[0]
     assert emission.date == DIMANCHE
@@ -364,7 +386,7 @@ def test_les_champs_viennent_de_l_emission_entiere_plutot_que_d_un_extrait() -> 
 
 
 def test_une_emission_attestee_seulement_par_un_extrait_n_a_pas_de_duree() -> None:
-    liste, _rapport = construire_liste([_fiche_par_livre()])
+    liste, _doutes = construire_liste([_fiche_par_livre()])
 
     emission = liste[0]
     assert emission.titre == "CRITIQUE l Le Masque unanime face à Marie Darrieussecq"
@@ -381,7 +403,7 @@ def test_un_extrait_l_est_pour_tous_les_fichiers_de_son_archive() -> None:
         enregistrements=(Enregistrement(url=mp3_du_fragment, type="intégral"),),
     )
 
-    liste, _rapport = construire_liste(
+    liste, _doutes = construire_liste(
         [_fiche_du_dimanche(), _fiche_par_livre(), wayback]
     )
 
@@ -433,7 +455,7 @@ def _archive_hitchcock(duree: str) -> list[Attestation]:
 def test_une_archive_presque_aussi_longue_que_la_diffusion_est_l_emission_entiere() -> (
     None
 ):
-    liste, _rapport = construire_liste(_archive_hitchcock(duree="00:21:05"))
+    liste, _doutes = construire_liste(_archive_hitchcock(duree="00:21:05"))
 
     emission = liste[0]
     assert [e.type for e in emission.enregistrements] == ["intégral", "intégral"]
@@ -441,7 +463,7 @@ def test_une_archive_presque_aussi_longue_que_la_diffusion_est_l_emission_entier
 
 
 def test_une_archive_nettement_plus_courte_que_la_diffusion_reste_un_extrait() -> None:
-    liste, _rapport = construire_liste(_archive_hitchcock(duree="00:10:00"))
+    liste, _doutes = construire_liste(_archive_hitchcock(duree="00:10:00"))
 
     emission = liste[0]
     assert [e.type for e in emission.enregistrements] == ["extrait", "extrait"]
@@ -452,7 +474,7 @@ def test_la_regle_des_90_pourcent_ne_vaut_que_pour_les_archives_e() -> None:
     # une fiche par livre (lettre S) face à une durée INA du même ordre
     ina = Attestation(source="ina", source_id="RD_1", date=DIMANCHE, duree="00:12:00")
 
-    liste, _rapport = construire_liste([ina, _fiche_par_livre()])
+    liste, _doutes = construire_liste([ina, _fiche_par_livre()])
 
     assert [e.type for e in liste[0].enregistrements] == ["extrait"]
 
@@ -471,6 +493,6 @@ def test_les_themes_se_cumulent_entre_sources_et_extraits() -> None:
         themes=frozenset({"cinéma", "théâtre"}),
     )
 
-    liste, _rapport = construire_liste([entiere, extrait, ina])
+    liste, _doutes = construire_liste([entiere, extrait, ina])
 
     assert liste[0].themes == frozenset({"cinéma", "livres", "théâtre"})

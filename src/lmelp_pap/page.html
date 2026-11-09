@@ -114,6 +114,7 @@ h1 { font-family: var(--f-display); font-weight: 650; font-size: clamp(28px, 4.4
 .detail .alerte { color: var(--alerte); }
 
 .plus { display: flex; justify-content: center; padding: 14px; }
+.plus[hidden] { display: none; }
 .plus button, .vide button { font: inherit; font-size: 14px; color: var(--accent); background: var(--surface); border: 1px solid var(--rule); border-radius: 5px; padding: 7px 14px; cursor: pointer; }
 .vide { padding: 32px 16px; text-align: center; color: var(--muted); display: grid; gap: 10px; justify-items: center; }
 footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
@@ -183,7 +184,12 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
       </select>
     </label>
     <label class="bascule" for="avec-enregistrement"><input type="checkbox" id="avec-enregistrement"> Avec enregistrement</label>
-    <label class="bascule" for="a-verifier"><input type="checkbox" id="a-verifier"> À vérifier</label>
+    <label class="champ" for="doute">Doute
+      <select id="doute">
+        <option value="">Tous</option>
+        <option value="tout">Au moins un doute</option>
+      </select>
+    </label>
   </section>
 
   <div class="resultat" id="resultat" aria-live="polite"></div>
@@ -196,7 +202,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
     <div class="plus" id="plus" hidden><button type="button" id="plus-btn"></button></div>
   </section>
 
-  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter et podcasts archivés par la Wayback Machine. « À vérifier » signale un rapprochement ambigu ou un désaccord de date entre sources.</footer>
+  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter et podcasts archivés par la Wayback Machine. Un doute est un point que les sources ne permettent pas d’affirmer avec certitude : un rapprochement ambigu, ou un désaccord de date entre sources.</footer>
   <button type="button" class="haut" id="haut" aria-label="Revenir en haut de la page" title="Revenir en haut" hidden>↑</button>
 </div>
 
@@ -213,7 +219,7 @@ const emissions = JSON.parse(document.getElementById("donnees").textContent).map
   annee: +e.date.slice(0, 4),
   att: e.attestations.map(a => [a.source, a.date, a.titre, a.url]),
   enreg: e.enregistrements.map(r => [r.url, r.type]),
-  sig: e.signalements.map(s => [s.type, s.detail]),
+  doutes: e.doutes.map(d => [d.type, d.detail]),
   sources: [...new Set(e.attestations.map(a => a.source))],
   texte: sansAccents([e.titre, e.description, e.animateur, ...e.attestations.map(a => a.titre)].join(" ")),
 })).sort((a, b) => (a.id < b.id ? -1 : 1));
@@ -226,6 +232,10 @@ for (const s of [...new Set(emissions.flatMap(e => e.sources))].sort()) {
 const etat = { annee: null, croissant: true, affichees: LOT, ouverte: null };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// Une option du filtre par doute pour chaque type de doute présent dans les données.
+for (const t of [...new Set(emissions.flatMap(e => e.doutes.map(([type]) => type)))].sort()) {
+  document.getElementById("doute").insertAdjacentHTML("beforeend", `<option value="${esc(t)}">${esc(t)}</option>`);
+}
 const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 function jour(date) { const d = new Date(date + "T12:00:00Z"); return JOURS[d.getUTCDay()]; }
@@ -235,12 +245,12 @@ function chiffres() {
   const n = emissions.length;
   const livres = emissions.filter(e => e.themes.includes("livres")).length;
   const avecEnreg = emissions.filter(e => e.enreg.length).length;
-  const sig = emissions.filter(e => e.sig.length).length;
+  const avecDoute = emissions.filter(e => e.doutes.length).length;
   const pat = emissions.filter(e => e.annee <= 2016).length;
   $("chiffres").innerHTML =
     `<span><b>${n}</b> émissions</span><span><b>${pat}</b> de 1955 à 2016</span>` +
     `<span><b>${livres}</b> au thème livres</span><span><b>${n - livres}</b> au thème inconnu</span>` +
-    `<span><b>${avecEnreg}</b> avec enregistrement</span><span><b>${sig}</b> à vérifier</span>`;
+    `<span><b>${avecEnreg}</b> avec enregistrement</span><span><b>${avecDoute}</b> avec un doute</span>`;
 }
 
 function frise() {
@@ -277,7 +287,7 @@ function frise() {
 function filtrer() {
   const q = sansAccents($("q").value.trim());
   const theme = $("theme").value, source = $("source").value;
-  const avecEnreg = $("avec-enregistrement").checked, verif = $("a-verifier").checked;
+  const avecEnreg = $("avec-enregistrement").checked, doute = $("doute").value;
   const r = emissions.filter(e => {
     if (etat.annee && e.annee !== etat.annee) return false;
     if (theme === "livres" && !(e.themes.length === 1 && e.themes[0] === "livres")) return false;
@@ -286,7 +296,8 @@ function filtrer() {
     if (source === "seule" && e.sources.length !== 1) return false;
     if (source && source !== "seule" && !e.sources.includes(source)) return false;
     if (avecEnreg && !e.enreg.length) return false;
-    if (verif && !e.sig.length) return false;
+    if (doute === "tout" && !e.doutes.length) return false;
+    if (doute && doute !== "tout" && !e.doutes.some(([t]) => t === doute)) return false;
     if (q && !q.split(/\s+/).every(m => e.texte.includes(m))) return false;
     return true;
   });
@@ -311,7 +322,7 @@ function ligne(e) {
     `<div class="themes">${puces(e)}</div>` +
     `<div class="duree">${esc(e.duree ? e.duree.replace(/^00:/, "") : "")}</div>` +
     `<div class="sources">${e.sources.map(s => `<span class="src">${NOMS[s] || esc(s)}</span>`).join("")}` +
-    `${e.enreg.length ? `<span class="son">enregistrement</span>` : ""}${e.sig.length ? `<span class="drap">à vérifier</span>` : ""}</div></div>`;
+    `${e.enreg.length ? `<span class="son">enregistrement</span>` : ""}${e.doutes.length ? `<span class="drap">doute</span>` : ""}</div></div>`;
   if (ouverte) h += detail(e);
   return h;
 }
@@ -326,7 +337,7 @@ function detail(e) {
   if (e.enreg.length) h += `<div><h3>Enregistrements</h3><ul>` + e.enreg.map(([u, t]) =>
     `<li><span class="meta">${esc(t)}</span> <a href="${esc(u)}" target="_blank" rel="noopener">${esc(nomCourt(u))}</a></li>`
   ).join("") + `</ul></div>`;
-  if (e.sig.length) h += `<div><h3>À vérifier</h3><ul>` + e.sig.map(([t, d]) =>
+  if (e.doutes.length) h += `<div><h3>Doutes</h3><ul>` + e.doutes.map(([t, d]) =>
     `<li class="alerte">${esc(t)} · ${esc(d)}</li>`).join("") + `</ul></div>`;
   return h + `</div>`;
 }
@@ -346,7 +357,7 @@ function rendre() {
   document.querySelectorAll(".frise .barre").forEach(g => g.classList.toggle("choisie", +g.dataset.annee === etat.annee));
   const reset = $("reset");
   if (reset) reset.addEventListener("click", () => {
-    $("q").value = ""; $("theme").value = ""; $("source").value = ""; $("avec-enregistrement").checked = false; $("a-verifier").checked = false;
+    $("q").value = ""; $("theme").value = ""; $("source").value = ""; $("avec-enregistrement").checked = false; $("doute").value = "";
     etat.annee = null; etat.affichees = LOT; rendre();
   });
 }
@@ -360,7 +371,7 @@ $("lignes").addEventListener("keydown", ev => {
   const l = ev.target.closest(".ligne");
   if (l && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); l.click(); }
 });
-for (const id of ["q", "theme", "source", "avec-enregistrement", "a-verifier"]) {
+for (const id of ["q", "theme", "source", "avec-enregistrement", "doute"]) {
   $(id).addEventListener(id === "q" ? "input" : "change", () => { etat.affichees = LOT; rendre(); });
 }
 $("tri").addEventListener("click", () => { etat.croissant = !etat.croissant; rendre(); });

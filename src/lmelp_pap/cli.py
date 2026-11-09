@@ -49,14 +49,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         collecter(source, args.cache, refresh=args.refresh)
 
     attestations = lire_cache(args.cache)
-    liste, rapport = construire_liste(attestations)
-    ecrire_liste(liste, rapport, args.sortie)
+    liste, doutes = construire_liste(attestations)
+    ecrire_liste(liste, doutes, args.sortie)
 
     par_source = Counter(a.source for a in attestations)
     print(
         f"{len(liste)} émissions, {len(attestations)} attestations "
-        f"({', '.join(f'{s} {n}' for s, n in sorted(par_source.items()))}), "
-        f"{len(rapport.signalements)} signalements → {args.sortie}",
+        f"({', '.join(f'{s} {n}' for s, n in sorted(par_source.items()))}) "
+        f"→ {args.sortie}",
+        file=sys.stderr,
+    )
+    par_type = Counter(d.type for d in doutes)
+    print(
+        "Doutes : "
+        + (", ".join(f"{t} {n}" for t, n in sorted(par_type.items())) or "aucun"),
         file=sys.stderr,
     )
     return 0

@@ -37,8 +37,8 @@ sudo -E env "PATH=$PATH" /tmp/venv/bin/playwright install-deps chromium
 Une page HTML présente la liste des émissions :
 - une frise des émissions par année, où un clic sur une année filtre la liste ;
 - une recherche sans tenir compte des accents ;
-- des filtres par thème, par source, « avec enregistrement » et « à vérifier » ;
-- le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements et signalements.
+- des filtres par thème, par source, « avec enregistrement » et par type de doute ;
+- le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements et doutes.
 
 ```bash
 uv run --active lmelp-pap page
@@ -93,12 +93,24 @@ Une ligne par source et par émission : `emission_id`, `source`, `source_id`, `d
 
 Une ligne par fichier audio : `emission_id`, `url`, `type` (`intégral` ou `extrait`), `sources` qui le donnent.
 
-### `rapport_rapprochement.csv`
+### `doutes.csv`
 
-Les cas à vérifier à la main :
+Une ligne par **doute** : un point d'une émission que les sources ne permettent pas d'affirmer avec certitude. Les doutes sont détectés à chaque construction, sur toutes les émissions rapprochées, qu'elles soient dans la liste ou non : une émission écartée de la liste peut ainsi avoir des doutes.
 
-- `ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ;
+| Colonne | Contenu |
+|---|---|
+| `type` | Type de doute (voir ci-dessous). |
+| `emission_id` | Identifiant de l'émission concernée. |
+| `dans_la_liste` | `oui` si l'émission est dans `emissions.csv`, `non` sinon. |
+| `source`, `source_id` | L'attestation en cause, quand le doute porte sur une seule attestation. |
+| `detail` | Précisions : émissions rivales, dates données par chaque source. |
+
+Types de doute :
+
+- `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ;
 - `désaccord de date` : les sources d'une même émission donnent des dates écartées de plus d'un jour.
+
+`lmelp-pap emissions` affiche le nombre de doutes par type à la fin de la construction.
 
 ## Règles de construction
 

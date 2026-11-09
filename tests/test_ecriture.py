@@ -7,9 +7,9 @@ from pathlib import Path
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import (
     Attestation,
+    Doute,
     Emission,
     Enregistrement,
-    Rapport,
     construire_liste,
 )
 
@@ -22,7 +22,7 @@ def _lire(chemin: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-def _liste_exemple() -> tuple[list[Emission], Rapport]:
+def _liste_exemple() -> tuple[list[Emission], list[Doute]]:
     return construire_liste(
         [
             Attestation(
@@ -48,9 +48,9 @@ def _liste_exemple() -> tuple[list[Emission], Rapport]:
 def test_la_liste_est_ecrite_en_trois_csv_lies_par_l_identifiant(
     tmp_path: Path,
 ) -> None:
-    liste, rapport = _liste_exemple()
+    liste, doutes = _liste_exemple()
 
-    ecrire_liste(liste, rapport, tmp_path)
+    ecrire_liste(liste, doutes, tmp_path)
 
     emissions = _lire(tmp_path / "emissions.csv")
     assert [e["id"] for e in emissions] == ["1956-01-22", "1958-12-04"]
@@ -87,8 +87,8 @@ def test_la_liste_est_ecrite_en_trois_csv_lies_par_l_identifiant(
     ]
 
 
-def test_le_rapport_de_rapprochement_est_ecrit_a_cote(tmp_path: Path) -> None:
-    liste, rapport = construire_liste(
+def test_les_doutes_sont_ecrits_a_cote_dans_la_liste_ou_non(tmp_path: Path) -> None:
+    liste, doutes = construire_liste(
         [
             Attestation(
                 source="ina",
@@ -99,14 +99,42 @@ def test_le_rapport_de_rapprochement_est_ecrit_a_cote(tmp_path: Path) -> None:
             Attestation(
                 source="wayback_podcast", source_id="ITEMA_1", date=date(1956, 1, 22)
             ),
+            Attestation(
+                source="ina",
+                source_id="PH_PHD2",
+                date=date(1994, 5, 26),
+                themes=frozenset({"cinéma"}),
+            ),
+            Attestation(
+                source="radiofrance",
+                source_id="pulp-fiction",
+                date=date(1994, 5, 29),
+                themes=frozenset({"cinéma"}),
+            ),
         ]
     )
 
-    ecrire_liste(liste, rapport, tmp_path)
+    ecrire_liste(liste, doutes, tmp_path)
 
-    (signalement,) = _lire(tmp_path / "rapport_rapprochement.csv")
-    assert signalement["type"] == "désaccord de date"
-    assert signalement["emission_id"] == "1956-01-19"
+    assert _lire(tmp_path / "doutes.csv") == [
+        {
+            "type": "désaccord de date",
+            "emission_id": "1956-01-19",
+            "dans_la_liste": "oui",
+            "source": "",
+            "source_id": "",
+            "detail": "ina:1956-01-19, wayback_podcast:1956-01-22",
+        },
+        {
+            "type": "désaccord de date",
+            "emission_id": "1994-05-29",
+            "dans_la_liste": "non",
+            "source": "",
+            "source_id": "",
+            "detail": "ina:1994-05-26, radiofrance:1994-05-29",
+        },
+    ]
+    assert not (tmp_path / "rapport_rapprochement.csv").exists()
 
 
 def test_un_enregistrement_retype_garde_les_sources_qui_le_donnent(
@@ -116,7 +144,7 @@ def test_un_enregistrement_retype_garde_les_sources_qui_le_donnent(
     # que la lettre S du fichier et le donne pour intégral
     mp3 = "https://media.radiofrance-podcast.net/podcast09/14007-12.02.2024-ITEMA_2-2024F4007S0043-22.mp3"
     m4a = mp3.replace("-22.mp3", "-27.m4a")
-    liste, rapport = construire_liste(
+    liste, doutes = construire_liste(
         [
             Attestation(
                 source="radiofrance",
@@ -135,7 +163,7 @@ def test_un_enregistrement_retype_garde_les_sources_qui_le_donnent(
         ]
     )
 
-    ecrire_liste(liste, rapport, tmp_path)
+    ecrire_liste(liste, doutes, tmp_path)
 
     lignes = _lire(tmp_path / "enregistrements.csv")
     assert [(r["url"], r["type"], r["sources"]) for r in lignes] == [
