@@ -117,6 +117,17 @@ h1 { font-family: var(--f-display); font-weight: 650; font-size: clamp(28px, 4.4
 .plus button, .vide button { font: inherit; font-size: 14px; color: var(--accent); background: var(--surface); border: 1px solid var(--rule); border-radius: 5px; padding: 7px 14px; cursor: pointer; }
 .vide { padding: 32px 16px; text-align: center; color: var(--muted); display: grid; gap: 10px; justify-items: center; }
 footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+.haut {
+  position: fixed; z-index: 5;
+  right: calc(max(16px, env(safe-area-inset-right, 0px)) + 4px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center;
+  font: 600 20px/1 var(--f-body); color: var(--surface); background: var(--accent);
+  border: 0; cursor: pointer; box-shadow: 0 2px 10px rgb(0 0 0 / .25);
+}
+.haut[hidden] { display: none; }
+.haut:hover { filter: brightness(1.1); }
 
 @media (max-width: 760px) {
   .entete { display: none; }
@@ -128,7 +139,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
   .date small { display: inline; margin-left: 8px; }
   .detail { padding-left: 16px; }
 }
-@media (prefers-reduced-motion: no-preference) { .ligne, .frise .barre rect.zone { transition: background-color .12s, fill .12s; } }
+@media (prefers-reduced-motion: no-preference) { .ligne, .frise .barre rect.zone { transition: background-color .12s, fill .12s; } html { scroll-behavior: smooth; } }
 </style>
 </head>
 <body>
@@ -186,6 +197,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
   </section>
 
   <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter et podcasts archivés par la Wayback Machine. « À vérifier » signale un rapprochement ambigu ou un désaccord de date entre sources.</footer>
+  <button type="button" class="haut" id="haut" aria-label="Revenir en haut de la page" title="Revenir en haut" hidden>↑</button>
 </div>
 
 <script type="application/json" id="donnees">__DONNEES__</script>
@@ -355,7 +367,12 @@ $("tri").addEventListener("click", () => { etat.croissant = !etat.croissant; ren
 $("plus-btn").addEventListener("click", () => { etat.affichees += LOT; rendre(); });
 $("frise-tout").addEventListener("click", () => { etat.annee = null; etat.affichees = LOT; rendre(); });
 
-chiffres(); frise(); rendre();
+// Bouton « haut de page » : visible dès qu'on a descendu d'un écran.
+const afficherHaut = () => { $("haut").hidden = window.scrollY < window.innerHeight * 0.8; };
+window.addEventListener("scroll", afficherHaut, { passive: true });
+$("haut").addEventListener("click", () => { window.scrollTo({ top: 0 }); $("q").focus({ preventScroll: true }); });
+
+chiffres(); frise(); rendre(); afficherHaut();
 </script>
 </body>
 </html>
