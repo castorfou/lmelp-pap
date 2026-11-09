@@ -90,3 +90,21 @@ def test_une_page_de_serie_n_atteste_aucune_emission() -> None:
 
 def test_le_theme_se_lit_dans_un_titre_le_masque_et_la_plume_cinema() -> None:
     assert _fiche("le-masque-et-la-plume-cinema-1964672").themes == {"cinéma"}
+
+
+def test_une_fiche_par_livre_est_un_extrait_de_l_emission() -> None:
+    attestation = _fiche("fabriquer-une-femme-de-marie-darrieussecq-3613378")
+
+    assert attestation.extrait
+    assert [e.type for e in attestation.enregistrements] == ["extrait"]
+
+
+def test_la_fiche_du_dimanche_decrit_l_emission_entiere() -> None:
+    attestation = _fiche("le-masque-et-la-plume-du-dimanche-11-fevrier-2024-2491269")
+
+    assert not attestation.extrait
+    assert [e.type for e in attestation.enregistrements] == ["intégral"]
+
+
+def test_une_archive_e_est_un_extrait() -> None:
+    assert _fiche("louis-aragon-4684213").extrait

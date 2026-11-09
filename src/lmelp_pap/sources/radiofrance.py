@@ -38,6 +38,9 @@ def lire_fiche(page: str) -> Attestation | None:
     audio = episode.get("mainEntity") or {}
 
     titre = _texte(article.get("headline") or episode.get("name"))
+    duree = _duree(audio.get("duration"))
+    enregistrements = _enregistrements(audio.get("contentUrl"))
+    extrait = _est_un_extrait(duree, enregistrements)
     return Attestation(
         source=SOURCE,
         source_id=slug,
@@ -45,10 +48,13 @@ def lire_fiche(page: str) -> Attestation | None:
         themes=_themes(slug, titre, _etiquettes(page)),
         titre=titre,
         description=_texte(article.get("description")),
-        duree=_duree(audio.get("duration")),
+        duree=duree,
         animateur=", ".join(p["name"] for p in episode.get("director", [])) or None,
         url=url,
-        enregistrements=_enregistrements(audio.get("contentUrl")),
+        enregistrements=tuple(
+            Enregistrement(e.url, "extrait") if extrait else e for e in enregistrements
+        ),
+        extrait=extrait,
     )
 
 
@@ -104,6 +110,19 @@ def _duree(iso: str | None) -> str | None:
         return None
     h, mn, s = (int(x or 0) for x in m.groups())
     return f"{h:02d}:{mn:02d}:{s:02d}"
+
+
+# Une émission entière dure de 40 min à 1 h, une fiche par livre ou par film
+# moins de 20 min : rien entre les deux sur radiofrance.fr. Seuil à 25 min.
+_DUREE_MIN_ENTIERE = "00:25:00"
+
+
+def _est_un_extrait(
+    duree: str | None, enregistrements: tuple[Enregistrement, ...]
+) -> bool:
+    """Une fiche courte, ou une archive (lettre ``E`` du fichier audio)."""
+    courte = duree is not None and duree < _DUREE_MIN_ENTIERE
+    return courte or any(e.type == "extrait" for e in enregistrements)
 
 
 def _enregistrements(url: str | None) -> tuple[Enregistrement, ...]:

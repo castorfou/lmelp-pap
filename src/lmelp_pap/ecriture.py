@@ -79,8 +79,15 @@ def ecrire_liste(liste: list[Emission], rapport: Rapport, dossier: Path) -> None
                 "emission_id": e.id,
                 "url": r.url,
                 "type": r.type,
+                # par l'URL : la fusion peut avoir retypé le fichier (ITEMA)
                 "sources": ";".join(
-                    sorted({a.source for a in e.attestations if r in a.enregistrements})
+                    sorted(
+                        {
+                            a.source
+                            for a in e.attestations
+                            if any(x.url == r.url for x in a.enregistrements)
+                        }
+                    )
                 ),
             }
             for e in emissions

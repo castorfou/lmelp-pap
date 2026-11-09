@@ -19,7 +19,7 @@ Une diffusion d'une émission déjà diffusée auparavant. Elle se rattache à l
 _Avoid_ : redif, reprise
 
 **Extrait** :
-Un fragment d'une émission, republié plus tard (en podcast, par exemple). Il atteste l'émission d'origine à sa date, sans être une rediffusion.
+Un fragment d'une émission publié séparément : au moment de la diffusion (un livre ou un film par fragment), ou plus tard (archives). Il atteste l'émission d'origine à sa date, sans la décrire en entier ni être une rediffusion.
 _Avoid_ : clip, morceau choisi
 
 **Republication** :

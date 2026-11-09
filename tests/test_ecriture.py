@@ -107,3 +107,38 @@ def test_le_rapport_de_rapprochement_est_ecrit_a_cote(tmp_path: Path) -> None:
     (signalement,) = _lire(tmp_path / "rapport_rapprochement.csv")
     assert signalement["type"] == "désaccord de date"
     assert signalement["emission_id"] == "1956-01-19"
+
+
+def test_un_enregistrement_retype_garde_les_sources_qui_le_donnent(
+    tmp_path: Path,
+) -> None:
+    # radiofrance.fr sait que l'archive est un extrait ; la Wayback ne voit
+    # que la lettre S du fichier et le donne pour intégral
+    mp3 = "https://media.radiofrance-podcast.net/podcast09/14007-12.02.2024-ITEMA_2-2024F4007S0043-22.mp3"
+    m4a = mp3.replace("-22.mp3", "-27.m4a")
+    liste, rapport = construire_liste(
+        [
+            Attestation(
+                source="radiofrance",
+                source_id="fabriquer-une-femme",
+                date=date(2024, 2, 11),
+                duree="00:11:22",
+                enregistrements=(Enregistrement(url=m4a, type="extrait"),),
+                extrait=True,
+            ),
+            Attestation(
+                source="wayback_podcast",
+                source_id="ITEMA_2",
+                date=date(2024, 2, 11),
+                enregistrements=(Enregistrement(url=mp3, type="intégral"),),
+            ),
+        ]
+    )
+
+    ecrire_liste(liste, rapport, tmp_path)
+
+    lignes = _lire(tmp_path / "enregistrements.csv")
+    assert [(r["url"], r["type"], r["sources"]) for r in lignes] == [
+        (m4a, "extrait", "radiofrance"),
+        (mp3, "extrait", "wayback_podcast"),
+    ]

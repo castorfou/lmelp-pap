@@ -32,7 +32,12 @@ def lire_cdx(texte: str) -> list[Attestation]:
         _attestation, enregistrements = par_itema.setdefault(
             fichier.itema,
             (
-                Attestation(source=SOURCE, source_id=fichier.itema, date=fichier.date),
+                Attestation(
+                    source=SOURCE,
+                    source_id=fichier.itema,
+                    date=fichier.date,
+                    extrait=fichier.type == "extrait",
+                ),
                 [],
             ),
         )
@@ -46,6 +51,7 @@ def lire_cdx(texte: str) -> list[Attestation]:
             source_id=a.source_id,
             date=a.date,
             enregistrements=tuple(enregistrements),
+            extrait=a.extrait,
         )
         for a, enregistrements in par_itema.values()
     ]

@@ -52,3 +52,12 @@ def test_une_capture_en_echec_atteste_l_emission_sans_enregistrement() -> None:
     assert attestations["ITEMA_20496304"].enregistrements == ()  # capture 404
     assert attestations["ITEMA_24153905"].date == date(2025, 6, 1)
     assert attestations["ITEMA_24153905"].enregistrements == ()  # capture sans statut
+
+
+def test_une_archive_e_est_un_extrait_une_emission_s_non() -> None:
+    texte = (FIXTURES / "cdx_podcast.txt").read_text(encoding="utf-8")
+
+    attestations = {a.source_id: a for a in lire_cdx(texte)}
+
+    assert attestations["ITEMA_23820437"].extrait  # 1967F4007E0001
+    assert not attestations["ITEMA_21183424"].extrait
