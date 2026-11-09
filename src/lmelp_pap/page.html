@@ -367,8 +367,8 @@ $("tri").addEventListener("click", () => { etat.croissant = !etat.croissant; ren
 $("plus-btn").addEventListener("click", () => { etat.affichees += LOT; rendre(); });
 $("frise-tout").addEventListener("click", () => { etat.annee = null; etat.affichees = LOT; rendre(); });
 
-// Bouton « haut de page » : visible dès qu'on a descendu d'un écran.
-const afficherHaut = () => { $("haut").hidden = window.scrollY < window.innerHeight * 0.8; };
+// Bouton « haut de page » : visible dès qu'on a un peu descendu, même sur une liste courte.
+const afficherHaut = () => { $("haut").hidden = window.scrollY < 300; };
 window.addEventListener("scroll", afficherHaut, { passive: true });
 $("haut").addEventListener("click", () => { window.scrollTo({ top: 0 }); $("q").focus({ preventScroll: true }); });
 
