@@ -81,6 +81,7 @@ h1 { font-family: var(--f-display); font-weight: 650; font-size: clamp(28px, 4.4
 }
 .champ.recherche { flex: 1 1 260px; }
 .champ.recherche input { width: 100%; }
+.effacer { font: inherit; font-size: 14px; color: var(--accent); background: var(--surface); border: 1px solid var(--rule); border-radius: 5px; padding: 7px 12px; cursor: pointer; margin-left: auto; }
 .bascule { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--fg); padding-bottom: 7px; cursor: pointer; }
 .resultat { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
@@ -190,6 +191,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
         <option value="tout">Au moins un doute</option>
       </select>
     </label>
+    <button type="button" class="effacer" id="effacer">Effacer les filtres</button>
   </section>
 
   <div class="resultat" id="resultat" aria-live="polite"></div>
@@ -356,10 +358,12 @@ function rendre() {
   $("frise-titre").textContent = etat.annee ? `Année ${etat.annee} sélectionnée` : "Émissions par année · cliquez une année pour filtrer";
   document.querySelectorAll(".frise .barre").forEach(g => g.classList.toggle("choisie", +g.dataset.annee === etat.annee));
   const reset = $("reset");
-  if (reset) reset.addEventListener("click", () => {
-    $("q").value = ""; $("theme").value = ""; $("source").value = ""; $("avec-enregistrement").checked = false; $("doute").value = "";
-    etat.annee = null; etat.affichees = LOT; rendre();
-  });
+  if (reset) reset.addEventListener("click", effacerFiltres);
+}
+
+function effacerFiltres() {
+  $("q").value = ""; $("theme").value = ""; $("source").value = ""; $("avec-enregistrement").checked = false; $("doute").value = "";
+  etat.annee = null; etat.affichees = LOT; rendre();
 }
 
 $("lignes").addEventListener("click", ev => {
@@ -374,6 +378,7 @@ $("lignes").addEventListener("keydown", ev => {
 for (const id of ["q", "theme", "source", "avec-enregistrement", "doute"]) {
   $(id).addEventListener(id === "q" ? "input" : "change", () => { etat.affichees = LOT; rendre(); });
 }
+$("effacer").addEventListener("click", effacerFiltres);
 $("tri").addEventListener("click", () => { etat.croissant = !etat.croissant; rendre(); });
 $("plus-btn").addEventListener("click", () => { etat.affichees += LOT; rendre(); });
 $("frise-tout").addEventListener("click", () => { etat.annee = null; etat.affichees = LOT; rendre(); });

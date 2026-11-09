@@ -37,7 +37,7 @@ sudo -E env "PATH=$PATH" /tmp/venv/bin/playwright install-deps chromium
 Une page HTML présente la liste des émissions :
 - une frise des émissions par année, où un clic sur une année filtre la liste ;
 - une recherche sans tenir compte des accents ;
-- des filtres par thème, par source, « avec enregistrement » et par type de doute ;
+- des filtres par thème, par source, « avec enregistrement » et par type de doute, et un bouton « Effacer les filtres » ;
 - le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements et doutes.
 
 ```bash
