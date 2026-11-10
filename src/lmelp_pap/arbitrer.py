@@ -26,8 +26,9 @@ from typing import Any
 
 from lmelp_pap.arbitrages import (
     THEMES,
-    ecrire_arbitrages,
+    ajouter_arbitrage,
     lire_arbitrages,
+    retirer_arbitrages,
     valeur,
 )
 from lmelp_pap.collecte import lire_cache
@@ -64,6 +65,7 @@ class Atelier:
             return self._donnees()
 
     def page(self) -> str:
+        """La page de la liste en mode arbitrage."""
         with self._verrou:
             return construire_page(self.sortie, arbitrage=True)
 
@@ -91,7 +93,7 @@ class Atelier:
                 justification=str(demande.get("justification") or "").strip(),
                 date=datetime.now().replace(microsecond=0),
             )
-            ecrire_arbitrages(self.fichier, [*lire_arbitrages(self.fichier), arbitrage])
+            ajouter_arbitrage(self.fichier, arbitrage)
             self._reconstruire()
             return self._donnees()
 
@@ -107,15 +109,13 @@ class Atelier:
                 raise DemandeInvalideError(
                     "emission_id, ou source et source_id, attendus"
                 )
-            arbitrages = lire_arbitrages(self.fichier)
-            gardes = [a for a in arbitrages if a.cle not in cles]
-            if len(gardes) == len(arbitrages):
+            if not retirer_arbitrages(self.fichier, cles):
                 raise DemandeInvalideError("aucun arbitrage à annuler")
-            ecrire_arbitrages(self.fichier, gardes)
             self._reconstruire()
             return self._donnees()
 
     def _emission(self, emission_id: object) -> Emission:
+        """L'émission de la liste qui porte cet identifiant."""
         if not isinstance(emission_id, str) or emission_id not in self._emissions:
             raise DemandeInvalideError(f"émission inconnue : {emission_id!r}")
         return self._emissions[emission_id]
@@ -187,8 +187,10 @@ def creer_serveur(
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
-            actions = {"/api/arbitrages": atelier.arbitrer}
-            actions["/api/annulations"] = atelier.annuler
+            actions = {
+                "/api/arbitrages": atelier.arbitrer,
+                "/api/annulations": atelier.annuler,
+            }
             action = actions.get(self.path)
             if action is None:
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)

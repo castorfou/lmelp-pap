@@ -201,3 +201,22 @@ def test_la_page_servie_porte_les_controles_d_arbitrage(url: str) -> None:
 
     assert 'id="arbitrage"' in page
     assert "/api/arbitrages" in page
+
+
+def test_les_lignes_ecrites_a_la_main_restent_intactes(url: str, sortie: Path) -> None:
+    a_la_main = (
+        "source,source_id,sorte,valeur,justification,date\n"
+        "ina,PH_INCONNUE,thème,théâtre;livres,à la main,2026-11-10\n"
+    )
+    (sortie / "arbitrages.csv").write_text(a_la_main, encoding="utf-8")
+
+    _post(f"{url}/api/arbitrages", {"emission_id": "2013-06-30", "sorte": "existence"})
+    texte = (sortie / "arbitrages.csv").read_text(encoding="utf-8")
+    assert texte.startswith(a_la_main)
+    assert len(texte.splitlines()) == 3
+
+    _post(
+        f"{url}/api/annulations",
+        {"source": "wayback_podcast", "source_id": "ITEMA_20496304"},
+    )
+    assert (sortie / "arbitrages.csv").read_text(encoding="utf-8") == a_la_main

@@ -22,7 +22,7 @@
 .arb button:disabled, .arbitrage button:disabled { opacity: .5; cursor: wait; }
 </style>
 <script>
-const THEMES = ["livres", "cinéma", "théâtre", "opéra", "télévision", "musique", "variétés"];
+const THEMES = __THEMES__;  // lmelp_pap.arbitrages.THEMES
 const RAISONS = ["titre explicite", "écouté l'enregistrement", "connaissance de l'émission"];
 
 document.querySelector("header").insertAdjacentHTML("afterend",

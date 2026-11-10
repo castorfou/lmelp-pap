@@ -59,23 +59,48 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
     )
 
 
-def ecrire_arbitrages(chemin: Path, arbitrages: list[Arbitrage]) -> None:
-    """Réécrit le fichier avec ces arbitrages, dans cet ordre."""
+def ajouter_arbitrage(chemin: Path, arbitrage: Arbitrage) -> None:
+    """Ajoute l'arbitrage en fin de fichier, sans toucher aux lignes existantes."""
     chemin.parent.mkdir(parents=True, exist_ok=True)
-    with chemin.open("w", encoding="utf-8", newline="") as f:
+    nouveau = not chemin.exists() or not chemin.read_text(encoding="utf-8").strip()
+    if not nouveau and not chemin.read_bytes().endswith(b"\n"):
+        with chemin.open("a", encoding="utf-8") as f:
+            f.write("\n")
+    with chemin.open("w" if nouveau else "a", encoding="utf-8", newline="") as f:
         ecrivain = csv.DictWriter(f, fieldnames=COLONNES, lineterminator="\n")
-        ecrivain.writeheader()
-        ecrivain.writerows(
+        if nouveau:
+            ecrivain.writeheader()
+        ecrivain.writerow(
             {
-                "source": a.source,
-                "source_id": a.source_id,
-                "sorte": a.sorte,
-                "valeur": valeur(a),
-                "justification": a.justification,
-                "date": _date(a.date),
+                "source": arbitrage.source,
+                "source_id": arbitrage.source_id,
+                "sorte": arbitrage.sorte,
+                "valeur": valeur(arbitrage),
+                "justification": arbitrage.justification,
+                "date": _date(arbitrage.date),
             }
-            for a in arbitrages
         )
+
+
+def retirer_arbitrages(chemin: Path, cles: set[tuple[str, str]]) -> int:
+    """Retire les lignes des attestations ``cles``, sans réécrire les autres.
+
+    Rend le nombre de lignes retirées.
+    """
+    if not chemin.exists():
+        return 0
+    entete, *lignes = chemin.read_text(encoding="utf-8").splitlines(keepends=True)
+    gardees = [
+        ligne
+        for ligne in lignes
+        if not (
+            (champs := next(csv.DictReader([entete, ligne]), None))
+            and (champs["source"].strip(), champs["source_id"].strip()) in cles
+        )
+    ]
+    if len(gardees) < len(lignes):
+        chemin.write_text(entete + "".join(gardees), encoding="utf-8")
+    return len(lignes) - len(gardees)
 
 
 def valeur(arbitrage: Arbitrage) -> str:

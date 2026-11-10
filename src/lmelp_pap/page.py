@@ -11,6 +11,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from lmelp_pap.arbitrages import THEMES
+
 
 def construire_page(dossier: Path, arbitrage: bool = False) -> str:
     """Le HTML complet de la page, à partir des CSV de ``dossier``.
@@ -19,7 +21,12 @@ def construire_page(dossier: Path, arbitrage: bool = False) -> str:
     ``lmelp-pap arbitrer`` ; elle ne fonctionne alors que servie par lui.
     """
     gabarit = _ressource("page.html").replace(
-        "__ARBITRAGE__", _ressource("arbitrage.html") if arbitrage else ""
+        "__ARBITRAGE__",
+        _ressource("arbitrage.html").replace(
+            "__THEMES__", json.dumps(THEMES, ensure_ascii=False)
+        )
+        if arbitrage
+        else "",
     )
     # « </ » fermerait le bloc <script> : « <\/ » est le même JSON.
     donnees = json.dumps(donnees_page(dossier), ensure_ascii=False)
@@ -57,6 +64,7 @@ def donnees_page(dossier: Path) -> list[dict[str, Any]]:
 
 
 def _ressource(nom: str) -> str:
+    """Un fichier livré avec le paquet (gabarit de la page, mode arbitrage)."""
     return files("lmelp_pap").joinpath(nom).read_text(encoding="utf-8")
 
 

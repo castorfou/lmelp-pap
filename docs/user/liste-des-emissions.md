@@ -188,7 +188,7 @@ La page garde la frise et les filtres de la page publiée (année, thème, sourc
 
 L'outil attache l'arbitrage à l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr, sinon une autre attestation. À chaque décision, il écrit `arbitrages.csv`, reconstruit la liste, réécrit ses CSV, et la page se met à jour aussitôt : l'émission change d'aspect, ou sort de la liste (arbitrée sans le thème livres, ou inexistante). Un message sous le bandeau « Mode arbitrage » confirme la décision.
 
-Le panneau **Arbitrages enregistrés** du bandeau liste tous les arbitrages du fichier, du plus récent au plus ancien, chacun avec un bouton **Annuler** : c'est ainsi qu'on annule l'arbitrage d'une émission sortie de la liste. Annuler retire du fichier les arbitrages de l'attestation, et l'émission retrouve les thèmes que lui donnent les sources.
+Le panneau **Arbitrages enregistrés** du bandeau liste tous les arbitrages du fichier, du plus récent au plus ancien, chacun avec un bouton **Annuler** : c'est ainsi qu'on annule l'arbitrage d'une émission sortie de la liste. Annuler depuis ce panneau retire du fichier les lignes de cette attestation ; **Annuler l'arbitrage** sous une émission retire celles de toutes ses attestations. L'émission retrouve alors les thèmes que lui donnent les sources. Un arbitrage s'ajoute en fin de fichier et une annulation retire seulement ses lignes : les autres lignes, écrites à la main ou non, restent telles quelles.
 
 Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans la frise, choisir « thème inconnu » dans le filtre Doute, ouvrir l'émission du 11 juillet 2010 (Avignon), cocher « théâtre », cliquer « titre explicite », puis **Arbitrer le thème** : l'émission sort de la liste.
 
