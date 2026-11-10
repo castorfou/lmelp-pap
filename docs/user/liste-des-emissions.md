@@ -39,7 +39,7 @@ Une page HTML présente la liste des émissions :
 - une frise des émissions par année, où un clic sur une année filtre la liste ;
 - une recherche sans tenir compte des accents ;
 - des filtres par thème, par source, « avec enregistrement » et par type de doute, et un bouton « Effacer les filtres » ;
-- le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements et doutes ;
+- le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements avec leur durée quand elle est connue (`extrait · 3:56 · 14007-18.10.1975-…m4a`) et doutes ;
 - une marque « ✎ arbitré » à côté d'un thème fixé par un arbitrage, avec la justification au survol.
 
 ```bash
@@ -107,7 +107,9 @@ Une ligne par source et par émission : `emission_id`, `source`, `source_id`, `d
 
 ### `enregistrements.csv`
 
-Une ligne par fichier audio : `emission_id`, `url`, `type` (`intégral` ou `extrait`), `sources` qui le donnent.
+Une ligne par fichier audio : `emission_id`, `url`, `type` (`intégral` ou `extrait`), `sources` qui le donnent, `duree`.
+
+La `duree` (`HH:MM:SS`) est celle de la fiche radiofrance.fr qui publie le fichier ; elle vaut aussi pour les autres encodages du même fichier (même nom au suffixe près : `-22.mp3`, `-27.m4a`). Elle est vide quand aucune source ne la connaît, par exemple pour un fichier connu seulement par la Wayback Machine. Elle permet de juger, sans l'écouter, si un enregistrement est un court extrait : la durée de l'émission, dans `emissions.csv`, ne vient jamais d'un extrait.
 
 ### `doutes.csv`
 

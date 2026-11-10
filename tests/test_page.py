@@ -51,6 +51,7 @@ def test_chaque_emission_porte_ses_attestations_enregistrements_et_doutes() -> N
         {
             "url": "https://media.radiofrance-podcast.net/podcast09/14007-04.12.1958-ITEMA_24232446-1958F4007E0005.m4a",
             "type": "extrait",
+            "duree": "00:30:15",
         }
     ]
     assert aragon["doutes"] == [

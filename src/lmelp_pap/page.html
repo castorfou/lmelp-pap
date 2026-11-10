@@ -230,7 +230,7 @@ const preparer = donnees => donnees.map(e => ({
   ...e,
   annee: +e.date.slice(0, 4),
   att: e.attestations.map(a => [a.source, a.date, a.titre, a.url]),
-  enreg: e.enregistrements.map(r => [r.url, r.type]),
+  enreg: e.enregistrements.map(r => [r.url, r.type, r.duree]),
   doutes: e.doutes.map(d => [d.type, d.detail]),
   sources: [...new Set(e.attestations.map(a => a.source))],
   texte: sansAccents([e.titre, e.description, e.animateur, ...e.attestations.map(a => a.titre)].join(" ")),
@@ -357,6 +357,11 @@ function filtrer() {
   return etat.croissant ? r : r.slice().reverse();
 }
 
+// « 00:03:56 » → « 3:56 », « 01:02:03 » → « 1:02:03 ».
+function dureeCourte(duree) {
+  return duree.replace(/^00:/, "").replace(/^0(\d)/, "$1");
+}
+
 function nomCourt(url) {
   const nom = url.split("/").pop();
   return nom.length > 60 ? nom.slice(0, 60) + "…" : nom;
@@ -396,8 +401,8 @@ function detail(e) {
   h += `<div><h3>Attestations</h3><ul>` + e.att.map(([s, d, t, u]) =>
     `<li><span class="meta">${NOMS[s] || esc(s)} · ${esc(d)}</span> ${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t || u)}</a>` : esc(t || "enregistrement archivé")}</li>`
   ).join("") + `</ul></div>`;
-  if (e.enreg.length) h += `<div><h3>Enregistrements</h3><ul>` + e.enreg.map(([u, t]) =>
-    `<li><span class="meta">${esc(t)}</span> <a href="${esc(u)}" target="_blank" rel="noopener">${esc(nomCourt(u))}</a></li>`
+  if (e.enreg.length) h += `<div><h3>Enregistrements</h3><ul>` + e.enreg.map(([u, t, d]) =>
+    `<li><span class="meta">${esc(t)}${d ? " · " + esc(dureeCourte(d)) : ""} ·</span> <a href="${esc(u)}" target="_blank" rel="noopener">${esc(nomCourt(u))}</a></li>`
   ).join("") + `</ul></div>`;
   if (e.doutes.length) h += `<div><h3>Doutes</h3><ul>` + e.doutes.map(([t, d]) =>
     `<li class="alerte">${esc(t)} · ${esc(d)}</li>`).join("") + `</ul></div>`;

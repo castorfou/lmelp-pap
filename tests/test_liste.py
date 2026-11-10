@@ -939,3 +939,63 @@ def test_un_arbitrage_qui_contredit_lmelp_est_un_doute() -> None:
     assert [(d.type, d.emission_id, d.dans_la_liste, d.source_id) for d in doutes] == [
         ("contradiction lmelp", "2018-01-21", False, "elena-ferrante-1")
     ]
+
+
+URL_AJAR = "https://media.radiofrance-podcast.net/podcast09/14007-18.10.1975-ITEMA_23787751-2024F4007E0106"
+
+
+def test_la_duree_d_un_enregistrement_vaut_pour_ses_autres_encodages() -> None:
+    fiche = Attestation(
+        source="radiofrance",
+        source_id="la-vie-devant-soi-d-emile-ajar",
+        date=date(1975, 10, 18),
+        duree="00:03:56",
+        enregistrements=(
+            Enregistrement(f"{URL_AJAR}-27.m4a", "extrait", duree="00:03:56"),
+        ),
+        extrait=True,
+    )
+    wayback = Attestation(
+        source="wayback_podcast",
+        source_id="ITEMA_23787751",
+        date=date(1975, 10, 18),
+        enregistrements=(Enregistrement(f"{URL_AJAR}-22.mp3", "extrait"),),
+        extrait=True,
+    )
+    autre_fichier = Attestation(
+        source="wayback_podcast",
+        source_id="ITEMA_1",
+        date=date(1975, 10, 18),
+        enregistrements=(
+            Enregistrement(
+                "https://media.radiofrance-podcast.net/podcast09/14007-18.10.1975-ITEMA_1-1975F4007E0001-22.mp3",
+                "extrait",
+            ),
+        ),
+        extrait=True,
+    )
+
+    liste, _doutes = construire_liste([fiche, wayback, autre_fichier])
+
+    assert [(e.url, e.duree) for e in liste[0].enregistrements] == [
+        (f"{URL_AJAR}-27.m4a", "00:03:56"),
+        (f"{URL_AJAR}-22.mp3", "00:03:56"),
+        (autre_fichier.enregistrements[0].url, None),
+    ]
+    assert liste[0].duree is None  # un extrait ne dure pas autant que l'émission
+
+
+def test_une_archive_redevenue_integrale_garde_sa_duree() -> None:
+    attestations = _archive_hitchcock(duree="00:21:05")
+    fiche = attestations[1]
+    attestations[1] = replace(
+        fiche,
+        enregistrements=(replace(fiche.enregistrements[0], duree="00:21:05"),),
+    )
+
+    liste, _doutes = construire_liste(attestations)
+
+    assert [(e.type, e.duree) for e in liste[0].enregistrements] == [
+        ("intégral", "00:21:05"),
+        ("intégral", "00:21:05"),
+    ]

@@ -38,6 +38,7 @@ def test_un_extrait_d_archive_atteste_l_emission_d_origine() -> None:
         Enregistrement(
             url="https://media.radiofrance-podcast.net/podcast09/14007-04.12.1958-ITEMA_24232446-1958F4007E0005-NET_MFI_9DB9F391-96BF-40A6-B343-C1ED9E574CB1-27.m4a",
             type="extrait",
+            duree="00:30:15",
         ),
     )
 
