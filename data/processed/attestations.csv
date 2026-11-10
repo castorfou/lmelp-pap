@@ -320,14 +320,9 @@ emission_id,source,source_id,date,themes,titre,url
 1988-01-24,ina,PH_00283023,1988-01-24,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00283023/litterature
 1988-02-07,ina,PH_00284298,1988-02-07,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00284298/litterature
 1988-03-06,ina,PH_00287712,1988-03-06,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00287712/litterature
-1988-03-27,ina,PH_PHD99255959,1988-03-27,,La mode,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255959/la-mode
-1988-05-01,ina,PH_PHD99255960,1988-05-01,,Le MIP TV Cannes 1988,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255960/le-mip-tv-cannes-1988
 1988-05-15,ina,PH_PHD99255961,1988-05-15,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255961/litterature
-1988-05-29,ina,PH_PHD99255962,1988-05-29,,Festival de Cannes,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255962/festival-de-cannes
 1988-07-03,ina,PH_PHD99255965,1988-07-03,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255965/litterature
 1988-07-17,ina,PH_PHD99255967,1988-07-17,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255967/litterature
-1988-07-24,ina,PH_PHD99255968,1988-07-24,,Festival d'Avignon ; 1,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255968/festival-d-avignon-1
-1988-07-31,ina,PH_00333478,1988-07-31,,Festival d'Avignon ; 2,https://catalogue.ina.fr/doc/TV-RADIO/PH_00333478/festival-d-avignon-2
 1988-09-04,ina,PH_PHD99255972,1988-09-04,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255972/litterature
 1988-09-11,ina,PH_PHD99255973,1988-09-11,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255973/litterature
 1988-09-11,radiofrance,erik-orsenna-l-exposition-coloniale-7229843,1988-09-11,livres,"""L'Exposition coloniale"" d'Erik Orsenna, prix Goncourt 1988",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/erik-orsenna-l-exposition-coloniale-7229843
@@ -337,13 +332,9 @@ emission_id,source,source_id,date,themes,titre,url
 1989-01-08,ina,PH_PHD99255989,1989-01-08,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255989/litterature
 1989-02-19,ina,PH_PHD99255996,1989-02-19,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255996/litterature
 1989-04-16,ina,PH_PHD99256003,1989-04-16,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256003/litterature
-1989-04-23,ina,PH_PHD99256004,1989-04-23,,Le MIP TV,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256004/le-mip-tv
 1989-06-11,ina,PH_PHD99256012,1989-06-11,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256012/litterature
 1989-07-09,ina,PH_PHD99256016,1989-07-09,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256016/litterature
 1989-07-16,ina,PH_PHD99256017,1989-07-16,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256017/litterature
-1989-07-23,ina,PH_PHD99256018,1989-07-23,,Festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256018/festival-d-aix-en-provence
-1989-07-30,ina,PH_PHD99256019,1989-07-30,,Festival d'Avignon ; 1,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256019/festival-d-avignon-1
-1989-08-06,ina,PH_PHD99256023,1989-08-06,,Festival d'Avignon ; 2,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256023/festival-d-avignon-2
 1989-09-10,ina,PH_PHD99256022,1989-09-10,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99256022/litterature
 1989-09-10,radiofrance,jean-vautrin-un-grand-pas-vers-le-bon-dieu-3365826,1989-09-10,livres,"""Un grand pas vers le Bon Dieu"" de Jean Vautrin, 1989",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/jean-vautrin-un-grand-pas-vers-le-bon-dieu-3365826
 1989-09-10,wayback_podcast,ITEMA_23787862,1989-09-10,,,
@@ -360,7 +351,6 @@ emission_id,source,source_id,date,themes,titre,url
 1990-06-17,ina,PH_00482359,1990-06-17,,Le masque et la plume ; spécial général De GAULLE,https://catalogue.ina.fr/doc/TV-RADIO/PH_00482359/le-masque-et-la-plume-special-general-de-gaulle
 1990-07-01,ina,PH_00494535,1990-07-01,livres,Spéciale Jean-Paul Sartre,https://catalogue.ina.fr/doc/TV-RADIO/PH_00494535/speciale-jean-paul-sartre
 1990-07-15,ina,PH_00495633,1990-07-15,livres,Le masque et la plume : littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00495633/le-masque-et-la-plume-litterature
-1990-08-05,ina,PH_00497204,1990-08-05,,Le masque et la plume : art lyrique ; Festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/PH_00497204/le-masque-et-la-plume-art-lyrique-festival-d-aix-en-provence
 1990-09-09,ina,PH_00499830,1990-09-09,livres,Le masque et la plume : littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00499830/le-masque-et-la-plume-litterature
 1990-09-23,ina,PH_00500845,1990-09-23,livres,Le masque et la plume : littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00500845/le-masque-et-la-plume-litterature
 1990-10-14,ina,PH_00502370,1990-10-14,livres,"Emission spéciale ""Fureur de lire 1990""",https://catalogue.ina.fr/doc/TV-RADIO/PH_00502370/emission-speciale-quot-fureur-de-lire-1990-quot
@@ -376,12 +366,10 @@ emission_id,source,source_id,date,themes,titre,url
 1991-03-17,ina,PH_00623742,1991-03-17,,Le masque et la plume du 17 mars 1991,https://catalogue.ina.fr/doc/TV-RADIO/PH_00623742/le-masque-et-la-plume-du-17-mars-1991
 1991-03-24,ina,PH_00624217,1991-03-24,,Hommage à Jean-Louis Bory,https://catalogue.ina.fr/doc/TV-RADIO/PH_00624217/hommage-a-jean-louis-bory
 1991-03-31,ina,PH_00624696,1991-03-31,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00624696/litterature
-1991-04-21,ina,PH_00626136,1991-04-21,,Le masque et la plume : MIP TV,https://catalogue.ina.fr/doc/TV-RADIO/PH_00626136/le-masque-et-la-plume-mip-tv
 1991-05-12,ina,PH_PHY05065881,1991-05-12,livres,Le masque et la plume : littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHY05065881/le-masque-et-la-plume-litterature
 1991-06-16,ina,PH_00629933,1991-06-16,,Le masque et la plume du 16 juin 1991,https://catalogue.ina.fr/doc/TV-RADIO/PH_00629933/le-masque-et-la-plume-du-16-juin-1991
 1991-06-23,ina,PH_00630402,1991-06-23,,Le masque et la plume du 23 juin 1991,https://catalogue.ina.fr/doc/TV-RADIO/PH_00630402/le-masque-et-la-plume-du-23-juin-1991
 1991-07-14,ina,PH_00636101,1991-07-14,livres,Le masque et la plume : spécial littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00636101/le-masque-et-la-plume-special-litterature
-1991-07-28,ina,PH_00637069,1991-07-28,,Art lyrique : 44ème Festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/PH_00637069/art-lyrique-44eme-festival-d-aix-en-provence
 1991-09-15,ina,PH_00648839,1991-09-15,,Le masque et la plume du 15 septembre 1991,https://catalogue.ina.fr/doc/TV-RADIO/PH_00648839/le-masque-et-la-plume-du-15-septembre-1991
 1991-09-15,radiofrance,1991-pierre-combescot-les-filles-du-calvaire-7513060,1991-09-15,livres,"""Les Filles du Calvaire"" de Pierre Combescot, 1991",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/1991-pierre-combescot-les-filles-du-calvaire-7513060
 1991-09-15,wayback_podcast,ITEMA_23787737,1991-09-15,,,
@@ -416,9 +404,6 @@ emission_id,source,source_id,date,themes,titre,url
 1993-05-02,radiofrance,journal-du-dehors-2348160,1993-05-02,livres,"""Journal du dehors"" : des avis partagé sur ce recueil de notes prises sur le vif",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/journal-du-dehors-2348160
 1993-06-06,ina,PH_00838798,1993-06-06,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00838798/litterature
 1993-07-04,ina,PH_00846668,1993-07-04,livres,Littérature : bilan de l'année écoulée,https://catalogue.ina.fr/doc/TV-RADIO/PH_00846668/litterature-bilan-de-l-annee-ecoulee
-1993-07-18,ina,PH_00847566,1993-07-18,,Spécial 47e Festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/PH_00847566/special-47e-festival-d-avignon
-1993-08-01,ina,PH_00848458,1993-08-01,,Actualité du 46e Festival international d'art lyrique d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/PH_00848458/actualite-du-46e-festival-international-d-art-lyrique-d-aix-en-provence
-1993-08-08,ina,PH_00848901,1993-08-08,,L'actualité lyrique en direct d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/PH_00848901/l-actualite-lyrique-en-direct-d-aix-en-provence
 1993-08-15,ina,PH_00849345,1993-08-15,livres,Littérature : bilan de l'année et avant-goût de la rentrée,https://catalogue.ina.fr/doc/TV-RADIO/PH_00849345/litterature-bilan-de-l-annee-et-avant-gout-de-la-rentree
 1993-09-05,ina,PH_00850603,1993-09-05,livres,Spécial rentrée littéraire,https://catalogue.ina.fr/doc/TV-RADIO/PH_00850603/special-rentree-litteraire
 1993-10-10,ina,PH_00852774,1993-10-10,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_00852774/litterature
@@ -491,15 +476,11 @@ emission_id,source,source_id,date,themes,titre,url
 1995-04-16,ina,RD_23675.001,1995-04-16,,Le masque et la plume du 16 avril 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_23675.001/le-masque-et-la-plume-du-16-avril-1995
 1995-04-30,ina,RD_26752.001,1995-04-30,,Le masque et la plume du 30 avril 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_26752.001/le-masque-et-la-plume-du-30-avril-1995
 1995-05-21,ina,RD_31414.001,1995-05-21,,Le masque et la plume du 21 mai 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_31414.001/le-masque-et-la-plume-du-21-mai-1995
-1995-05-28,ina,RD_33036.001,1995-05-28,,Spécial festival de Cannes,https://catalogue.ina.fr/doc/TV-RADIO/RD_33036.001/special-festival-de-cannes
 1995-06-04,ina,RD_34579.001,1995-06-04,,Le masque et la plume du 04 juin 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_34579.001/le-masque-et-la-plume-du-04-juin-1995
 1995-07-02,ina,RD_40729.001,1995-07-02,,Le masque et la plume du 02 juillet 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_40729.001/le-masque-et-la-plume-du-02-juillet-1995
 1995-07-02,radiofrance,la-classe-de-neige-d-emmanuel-carrere-2146846,1995-07-02,livres,"""La Classe de neige"", un roman épatant, angoissant, inracontable",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/la-classe-de-neige-d-emmanuel-carrere-2146846
 1995-07-02,wayback_podcast,ITEMA_24244969,1995-07-02,,,
 1995-07-09,ina,RD_42339.001,1995-07-09,,Le masque et la plume du 09 juillet 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_42339.001/le-masque-et-la-plume-du-09-juillet-1995
-1995-07-16,ina,RD_43817.001,1995-07-16,,Spécial festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/RD_43817.001/special-festival-d-avignon
-1995-07-23,ina,RD_45296.001,1995-07-23,,Spécial festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/RD_45296.001/special-festival-d-avignon
-1995-07-30,ina,RD_46688.001,1995-07-30,,Spécial festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/RD_46688.001/special-festival-d-aix-en-provence
 1995-08-06,ina,RD_47992.001,1995-08-06,,Le masque et la plume du 06 août 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_47992.001/le-masque-et-la-plume-du-06-aout-1995
 1995-08-13,ina,RD_49364.001,1995-08-13,,Le masque et la plume du 13 août 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_49364.001/le-masque-et-la-plume-du-13-aout-1995
 1995-08-20,ina,RD_50738.001,1995-08-20,,Le masque et la plume du 20 août 1995,https://catalogue.ina.fr/doc/TV-RADIO/RD_50738.001/le-masque-et-la-plume-du-20-aout-1995
@@ -546,10 +527,8 @@ emission_id,source,source_id,date,themes,titre,url
 1996-06-16,ina,RD_139586.001,1996-06-16,,Le masque et la plume du 16 juin 1996,https://catalogue.ina.fr/doc/TV-RADIO/RD_139586.001/le-masque-et-la-plume-du-16-juin-1996
 1996-06-23,ina,RD_141457.001,1996-06-23,,Le masque et la plume du 23 juin 1996,https://catalogue.ina.fr/doc/TV-RADIO/RD_141457.001/le-masque-et-la-plume-du-23-juin-1996
 1996-06-30,ina,RD_143828.001,1996-06-30,,Le masque et la plume du 30 juin 1996,https://catalogue.ina.fr/doc/TV-RADIO/RD_143828.001/le-masque-et-la-plume-du-30-juin-1996
-1996-07-14,ina,RD_149334.001,1996-07-14,,Spécial Festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/RD_149334.001/special-festival-d-avignon
 1996-07-21,ina,RD_151641.001,1996-07-21,,Le masque et la plume du 21 juillet 1996,https://catalogue.ina.fr/doc/TV-RADIO/RD_151641.001/le-masque-et-la-plume-du-21-juillet-1996
 1996-07-28,ina,RD_152917.001,1996-07-28,,Le masque et la plume du 28 juillet 1996,https://catalogue.ina.fr/doc/TV-RADIO/RD_152917.001/le-masque-et-la-plume-du-28-juillet-1996
-1996-08-04,ina,RD_156392.001,1996-08-04,,Bilan de l'année lyrique : 2ème émission,https://catalogue.ina.fr/doc/TV-RADIO/RD_156392.001/bilan-de-l-annee-lyrique-2eme-emission
 1996-08-11,ina,RD_158164.001,1996-08-11,livres,Les livres de l'été,https://catalogue.ina.fr/doc/TV-RADIO/RD_158164.001/les-livres-de-l-ete
 1996-08-18,ina,RD_159899.001,1996-08-18,,Le masque et la plume du 18 août 1996,https://catalogue.ina.fr/doc/TV-RADIO/RD_159899.001/le-masque-et-la-plume-du-18-aout-1996
 1996-09-01,ina,RD_163528.001,1996-09-01,,Le masque et la plume du 01 septembre 1996,https://catalogue.ina.fr/doc/TV-RADIO/RD_163528.001/le-masque-et-la-plume-du-01-septembre-1996
@@ -629,8 +608,6 @@ emission_id,source,source_id,date,themes,titre,url
 1998-06-21,ina,RD_917121.001,1998-06-21,,Le masque et la plume du 21 juin 1998,https://catalogue.ina.fr/doc/TV-RADIO/RD_917121.001/le-masque-et-la-plume-du-21-juin-1998
 1998-06-28,ina,RD_918783.001,1998-06-28,,Le masque et la plume du 28 juin 1998,https://catalogue.ina.fr/doc/TV-RADIO/RD_918783.001/le-masque-et-la-plume-du-28-juin-1998
 1998-07-05,ina,RD_920563.001,1998-07-05,,Le masque et la plume du 05 juillet 1998,https://catalogue.ina.fr/doc/TV-RADIO/RD_920563.001/le-masque-et-la-plume-du-05-juillet-1998
-1998-07-19,ina,RD_925384.001,1998-07-19,,Le festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/RD_925384.001/le-festival-d-aix-en-provence
-1998-07-26,ina,RD_927015.001,1998-07-26,,Spécial Festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/RD_927015.001/special-festival-d-avignon
 1998-09-06,ina,RD_940143.001,1998-09-06,,Le masque et la plume du 06 septembre 1998,https://catalogue.ina.fr/doc/TV-RADIO/RD_940143.001/le-masque-et-la-plume-du-06-septembre-1998
 1998-09-13,ina,RD_941947.001,1998-09-13,,Le masque et la plume du 13 septembre 1998,https://catalogue.ina.fr/doc/TV-RADIO/RD_941947.001/le-masque-et-la-plume-du-13-septembre-1998
 1998-10-11,ina,RD_949417.001,1998-10-11,,Le masque et la plume du 11 octobre 1998,https://catalogue.ina.fr/doc/TV-RADIO/RD_949417.001/le-masque-et-la-plume-du-11-octobre-1998
@@ -668,7 +645,6 @@ emission_id,source,source_id,date,themes,titre,url
 1999-06-27,ina,RD_1029609.001,1999-06-27,,Le masque et la plume du 27 juin 1999,https://catalogue.ina.fr/doc/TV-RADIO/RD_1029609.001/le-masque-et-la-plume-du-27-juin-1999
 1999-07-04,ina,RD_1031391.001,1999-07-04,,Le masque et la plume du 04 juillet 1999,https://catalogue.ina.fr/doc/TV-RADIO/RD_1031391.001/le-masque-et-la-plume-du-04-juillet-1999
 1999-07-11,ina,RD_1032965.001,1999-07-11,,Le masque et la plume du 11 juillet 1999,https://catalogue.ina.fr/doc/TV-RADIO/RD_1032965.001/le-masque-et-la-plume-du-11-juillet-1999
-1999-07-18,ina,RD_1035147.001,1999-07-18,,Festival d'Avignon : 1ère partie,https://catalogue.ina.fr/doc/TV-RADIO/RD_1035147.001/festival-d-avignon-1ere-partie
 1999-07-25,ina,RD_1036684.001,1999-07-25,,Le masque et la plume du 25 juillet 1999,https://catalogue.ina.fr/doc/TV-RADIO/RD_1036684.001/le-masque-et-la-plume-du-25-juillet-1999
 1999-08-01,ina,RD_1038481.001,1999-08-01,,Lyrique à Aix en Provence : 1ère émission,https://catalogue.ina.fr/doc/TV-RADIO/RD_1038481.001/lyrique-a-aix-en-provence-1ere-emission
 1999-08-08,ina,RD_1040892.001,1999-08-08,,Le masque et la plume du 08 août 1999,https://catalogue.ina.fr/doc/TV-RADIO/RD_1040892.001/le-masque-et-la-plume-du-08-aout-1999
@@ -713,9 +689,7 @@ emission_id,source,source_id,date,themes,titre,url
 2000-06-18,ina,RD_1153648.001,2000-06-18,,Le masque et la plume du 18 juin 2000,https://catalogue.ina.fr/doc/TV-RADIO/RD_1153648.001/le-masque-et-la-plume-du-18-juin-2000
 2000-07-02,ina,RD_1157261.001,2000-07-02,,Le masque et la plume du 02 juillet 2000,https://catalogue.ina.fr/doc/TV-RADIO/RD_1157261.001/le-masque-et-la-plume-du-02-juillet-2000
 2000-07-09,ina,RD_1159203.001,2000-07-09,,Le masque et la plume du 09 juillet 2000,https://catalogue.ina.fr/doc/TV-RADIO/RD_1159203.001/le-masque-et-la-plume-du-09-juillet-2000
-2000-07-16,ina,RD_1162167.001,2000-07-16,,54ème Festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/RD_1162167.001/54eme-festival-d-avignon
 2000-07-23,ina,RD_1164020.001,2000-07-23,,Le masque et la plume du 23 juillet 2000,https://catalogue.ina.fr/doc/TV-RADIO/RD_1164020.001/le-masque-et-la-plume-du-23-juillet-2000
-2000-08-06,ina,RD_1167661.001,2000-08-06,,Le festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/RD_1167661.001/le-festival-d-aix-en-provence
 2000-08-13,ina,RD_1169741.001,2000-08-13,,Le masque et la plume du 13 août 2000,https://catalogue.ina.fr/doc/TV-RADIO/RD_1169741.001/le-masque-et-la-plume-du-13-aout-2000
 2000-08-27,ina,RD_1180149.001,2000-08-27,,Le masque et la plume du 27 août 2000,https://catalogue.ina.fr/doc/TV-RADIO/RD_1180149.001/le-masque-et-la-plume-du-27-aout-2000
 2000-08-27,wayback_podcast,ITEMA_24065244,2000-08-27,,,
@@ -752,9 +726,6 @@ emission_id,source,source_id,date,themes,titre,url
 2001-06-03,ina,RD_1281677.001,2001-06-03,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/RD_1281677.001/litterature
 2001-06-17,ina,RD_1287572.001,2001-06-17,,Le masque et la plume du 11 février 2001,https://catalogue.ina.fr/doc/TV-RADIO/RD_1287572.001/le-masque-et-la-plume-du-11-fevrier-2001
 2001-06-24,ina,RD_1289609.001,2001-06-24,,Le masque et la plume du 24 juin 2001,https://catalogue.ina.fr/doc/TV-RADIO/RD_1289609.001/le-masque-et-la-plume-du-24-juin-2001
-2001-07-15,ina,RD_1296732.001,2001-07-15,,Spécial festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/RD_1296732.001/special-festival-d-avignon
-2001-07-22,ina,RD_1298166.001,2001-07-22,,Spéciale Festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/RD_1298166.001/speciale-festival-d-aix-en-provence
-2001-07-29,ina,RD_1299617.001,2001-07-29,,Le Festival d'Avignon 2ème partie,https://catalogue.ina.fr/doc/TV-RADIO/RD_1299617.001/le-festival-d-avignon-2eme-partie
 2001-08-05,ina,RD_1303458.001,2001-08-05,,Le masque et la plume du 05 août 2001,https://catalogue.ina.fr/doc/TV-RADIO/RD_1303458.001/le-masque-et-la-plume-du-05-aout-2001
 2001-08-12,ina,RD_1304969.001,2001-08-12,,Le masque et la plume du 12 août 2001,https://catalogue.ina.fr/doc/TV-RADIO/RD_1304969.001/le-masque-et-la-plume-du-12-aout-2001
 2001-08-19,ina,RD_1308897.001,2001-08-19,,Le masque et la plume du 19 août 2001,https://catalogue.ina.fr/doc/TV-RADIO/RD_1308897.001/le-masque-et-la-plume-du-19-aout-2001
@@ -788,8 +759,6 @@ emission_id,source,source_id,date,themes,titre,url
 2002-06-23,ina,RD_1476858.001,2002-06-23,,Le masque et la plume du 23 juin 2002,https://catalogue.ina.fr/doc/TV-RADIO/RD_1476858.001/le-masque-et-la-plume-du-23-juin-2002
 2002-07-07,ina,RD_1494005.001,2002-07-07,,Le masque et la plume du 07 juillet 2002,https://catalogue.ina.fr/doc/TV-RADIO/RD_1494005.001/le-masque-et-la-plume-du-07-juillet-2002
 2002-07-21,ina,RD_1505933.001,2002-07-21,,Le masque et la plume du 21 juillet 2002,https://catalogue.ina.fr/doc/TV-RADIO/RD_1505933.001/le-masque-et-la-plume-du-21-juillet-2002
-2002-07-28,ina,RD_1510205.001,2002-07-28,,56ème festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/RD_1510205.001/56eme-festival-d-avignon
-2002-08-04,ina,RD_1511477.001,2002-08-04,,54ème festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/RD_1511477.001/54eme-festival-d-aix-en-provence
 2002-08-11,ina,RD_1512832.001,2002-08-11,livres,Les livres de l'été,https://catalogue.ina.fr/doc/TV-RADIO/RD_1512832.001/les-livres-de-l-ete
 2002-08-18,ina,RD_1513994.001,2002-08-18,,Le masque et la plume du 18 août 2002,https://catalogue.ina.fr/doc/TV-RADIO/RD_1513994.001/le-masque-et-la-plume-du-18-aout-2002
 2002-08-25,ina,RD_1515534.001,2002-08-25,,Le masque et la plume du 25 août 2002,https://catalogue.ina.fr/doc/TV-RADIO/RD_1515534.001/le-masque-et-la-plume-du-25-aout-2002
@@ -936,9 +905,6 @@ emission_id,source,source_id,date,themes,titre,url
 2005-06-19,anciennes_listes,em-33560,2005-06-19,livres,Livres,
 2005-06-19,ina,RD_2450229.001,2005-06-19,,Le masque et la plume : émission du 19 juin 2005,https://catalogue.ina.fr/doc/TV-RADIO/RD_2450229.001/le-masque-et-la-plume-emission-du-19-juin-2005
 2005-06-19,radiofrance,livres-3367351,2005-06-19,livres,Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/livres-3367351
-2005-07-03,anciennes_listes,em-34255,2005-07-03,,Lyrique,
-2005-07-03,ina,RD_2458837.001,2005-07-03,,Le masque et la plume : émission du 03 juillet 2005,https://catalogue.ina.fr/doc/TV-RADIO/RD_2458837.001/le-masque-et-la-plume-emission-du-03-juillet-2005
-2005-07-03,radiofrance,lyrique-5231580,2005-07-03,,Lyrique,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/lyrique-5231580
 2005-07-24,anciennes_listes,em-32808,2005-07-24,livres,Livres,
 2005-07-24,ina,RD_2477759.001,2005-07-24,,Le masque et la plume : émission du 24 juillet 2005,https://catalogue.ina.fr/doc/TV-RADIO/RD_2477759.001/le-masque-et-la-plume-emission-du-24-juillet-2005
 2005-07-24,radiofrance,livres-4298600,2005-07-24,livres,Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/livres-4298600
@@ -1149,8 +1115,6 @@ emission_id,source,source_id,date,themes,titre,url
 2009-05-17,radiofrance,livres-9591415,2009-05-17,livres,Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/livres-9591415
 2009-07-05,ina,RD_3887523.001,2009-07-05,,Le masque et la plume : émission du 05 juillet 2009,https://catalogue.ina.fr/doc/TV-RADIO/RD_3887523.001/le-masque-et-la-plume-emission-du-05-juillet-2009
 2009-07-05,radiofrance,livres-4662719,2009-07-05,livres,Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/livres-4662719
-2009-07-12,ina,RD_3895302.001,2009-07-12,,Festival d'Avignon,https://catalogue.ina.fr/doc/TV-RADIO/RD_3895302.001/festival-d-avignon
-2009-07-12,radiofrance,festival-d-avignon-enregistrement-public-de-9h30-a-10h30-dans-la-cour-du-musee-calvet-5116772,2009-07-12,,Festival d'Avignon Enregistrement public de 9h30 à 10h30 dans la cour du Musée Calvet.,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/festival-d-avignon-enregistrement-public-de-9h30-a-10h30-dans-la-cour-du-musee-calvet-5116772
 2009-07-19,ina,RD_3906820.001,2009-07-19,,Le masque et la plume du 19 juillet 2009,https://catalogue.ina.fr/doc/TV-RADIO/RD_3906820.001/le-masque-et-la-plume-du-19-juillet-2009
 2009-07-19,radiofrance,festival-d-avignon-avec-jeanne-moreau-invitee-speciale-du-masque-9686716,2009-07-19,,"Festival d'Avignon Avec Jeanne Moreau, invitée spéciale du Masque.",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/festival-d-avignon-avec-jeanne-moreau-invitee-speciale-du-masque-9686716
 2009-08-02,ina,RD_3917639.001,2009-08-02,,Le masque et la plume : émission du 02 août 2009,https://catalogue.ina.fr/doc/TV-RADIO/RD_3917639.001/le-masque-et-la-plume-emission-du-02-aout-2009
@@ -1453,12 +1417,6 @@ emission_id,source,source_id,date,themes,titre,url
 2016-07-03,lmelp,le-masque-et-la-plume-livres-8105902,2016-07-03,livres,Le masque et la plume livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-livres-8105902
 2016-07-03,radiofrance,le-masque-et-la-plume-livres-8105902,2016-07-03,livres,Le masque et la plume livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-livres-8105902
 2016-07-03,wayback_podcast,ITEMA_21025139,2016-07-03,,,
-2016-07-10,ina,RD_6512989.001,2016-07-10,,Le masque et la plume : émission du 10 juillet 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6512989.001/le-masque-et-la-plume-emission-du-10-juillet-2016
-2016-07-10,ina,RD_6513007.001,2016-07-11,,Le masque et la plume : émission du 11 juillet 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6513007.001/le-masque-et-la-plume-emission-du-11-juillet-2016
-2016-07-10,radiofrance,le-masque-et-la-plume-au-festival-d-avignon-1858636,2016-07-10,,Le masque et la plume au Festival d'Avignon,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-au-festival-d-avignon-1858636
-2016-07-17,ina,RD_6517984.001,2016-07-17,,"Festival d'Avignon "" Off",https://catalogue.ina.fr/doc/TV-RADIO/RD_6517984.001/festival-d-avignon-quot-off
-2016-07-17,ina,RD_6517999.001,2016-07-18,,Le masque et la plume : émission du 18 juillet 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6517999.001/le-masque-et-la-plume-emission-du-18-juillet-2016
-2016-07-17,radiofrance,le-masque-et-la-plume-au-festival-d-avignon-7863800,2016-07-17,,Le masque et la plume au Festival d'Avignon,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-au-festival-d-avignon-7863800
 2016-07-31,ina,RD_6531006.001,2016-07-31,,Le masque et la plume : émission du 31 juillet 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6531006.001/le-masque-et-la-plume-emission-du-31-juillet-2016
 2016-07-31,ina,RD_6531024.001,2016-08-01,,Le masque et la plume : émission du 01 août 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6531024.001/le-masque-et-la-plume-emission-du-01-aout-2016
 2016-07-31,lmelp,le-masque-et-la-plume-livres-7861063,2016-07-31,livres,Le masque et la plume Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-livres-7861063
