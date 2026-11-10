@@ -16,6 +16,8 @@ from lmelp_pap.page import construire_page
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page`` et
+    ``arbitrer``. Rend le code de sortie."""
     parser = argparse.ArgumentParser(prog="lmelp-pap")
     commandes = parser.add_subparsers(dest="commande", required=True)
     emissions = commandes.add_parser(

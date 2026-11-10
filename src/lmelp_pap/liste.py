@@ -226,6 +226,8 @@ def _arbitrer(
 
 
 def _doutes(emissions: list[Emission]) -> list[Doute]:
+    """Les doutes des émissions, dans la liste ou non : rapprochement, date,
+    collision, thème, republication, fragilité, absence de lmelp."""
     doutes: list[Doute] = []
     # la première diffusion de la dernière émission vérifiée, pas sa publication
     derniere_verifiee = max(
@@ -445,6 +447,7 @@ def _valeur(champ: str, groupe: list[Attestation]) -> Any:
 
 
 def _rang(source: str, ordre: tuple[str, ...]) -> int:
+    """Le rang de la source dans l'ordre de priorité ; inconnue, elle passe après."""
     return ordre.index(source) if source in ordre else len(ordre)
 
 
@@ -523,6 +526,7 @@ def _archives_entieres(groupe: list[Attestation]) -> list[Attestation]:
 
 
 def _fusionner(groupe: list[Attestation]) -> Emission:
+    """L'émission d'un groupe d'attestations rapprochées, champ par champ."""
     groupe = _archives_entieres(groupe)
     jour: date = _valeur("date", groupe)
     return Emission(
@@ -622,6 +626,7 @@ def _dates_de_diffusion(groupe: list[Attestation]) -> list[date]:
 
 
 def _ecart(a: Attestation, groupe: list[Attestation]) -> int:
+    """L'écart en jours entre l'attestation et la date la plus proche du groupe."""
     return min(abs((a.date - jour).days) for jour in _dates_de_diffusion(groupe))
 
 

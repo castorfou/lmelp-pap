@@ -55,6 +55,8 @@ def _identifiant(url: str) -> str:
 
 
 def _themes(ligne: dict[str, str]) -> frozenset[str]:
+    """Les thèmes lus dans le titre de la notice ; la facette littérature ajoute
+    les livres."""
     titre = (ligne.get("titre") or "").lower()
     themes = {t for t, motif in _MOTS_CLES.items() if re.search(motif, titre)}
     if ligne.get("facette_litterature") == "oui":

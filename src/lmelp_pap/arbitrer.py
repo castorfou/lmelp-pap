@@ -50,6 +50,7 @@ class Atelier:
     """La liste en cours d'arbitrage : le cache lu une fois, les CSV réécrits."""
 
     def __init__(self, cache: Path, sortie: Path, fichier: Path | None = None):
+        """Lit le cache et construit une première fois la liste."""
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
         self.attestations = lire_cache(cache)
@@ -121,6 +122,7 @@ class Atelier:
         return self._emissions[emission_id]
 
     def _reconstruire(self) -> None:
+        """Reconstruit la liste avec les arbitrages du fichier et réécrit ses CSV."""
         liste, doutes = construire_liste(
             self.attestations, lire_arbitrages(self.fichier)
         )
@@ -128,6 +130,7 @@ class Atelier:
         self._emissions = {e.id: e for e in liste}
 
     def _donnees(self) -> dict[str, Any]:
+        """Les données de la page et les arbitrages, du plus récent au plus ancien."""
         return {
             "emissions": donnees_page(self.sortie),
             "arbitrages": [
@@ -178,7 +181,10 @@ def creer_serveur(
     atelier = Atelier(cache, sortie, arbitrages)
 
     class Requetes(BaseHTTPRequestHandler):
+        """Les routes de la page et de l'API JSON."""
+
         def do_GET(self) -> None:
+            """La page, ou les données courantes."""
             if self.path in ("/", "/index.html"):
                 self._repondre(atelier.page().encode(), "text/html; charset=utf-8")
             elif self.path == "/api/donnees":
@@ -187,6 +193,7 @@ def creer_serveur(
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
+            """Un arbitrage ou une annulation ; erreur 400 si invalide."""
             actions = {
                 "/api/arbitrages": atelier.arbitrer,
                 "/api/annulations": atelier.annuler,
@@ -205,12 +212,14 @@ def creer_serveur(
                 self._json({"erreur": str(e)}, HTTPStatus.BAD_REQUEST)
 
         def _json(self, donnees: object, statut: HTTPStatus = HTTPStatus.OK) -> None:
+            """Répond en JSON."""
             corps = json.dumps(donnees, ensure_ascii=False).encode()
             self._repondre(corps, "application/json; charset=utf-8", statut)
 
         def _repondre(
             self, corps: bytes, type_: str, statut: HTTPStatus = HTTPStatus.OK
         ) -> None:
+            """Envoie la réponse, jamais mise en cache par le navigateur."""
             self.send_response(statut)
             self.send_header("Content-Type", type_)
             self.send_header("Content-Length", str(len(corps)))
@@ -219,6 +228,6 @@ def creer_serveur(
             self.wfile.write(corps)
 
         def log_message(self, format: str, *args: Any) -> None:
-            pass  # pas de ligne par requête dans le terminal
+            """Pas de ligne par requête dans le terminal."""
 
     return ThreadingHTTPServer((hote, port), Requetes)

@@ -61,6 +61,7 @@ def lire_liste(page: str) -> list[Attestation]:
 
 
 def _texte(valeur: str | None) -> str | None:
+    """Le texte d'un fragment HTML, entités décodées, espaces réduits, ou None."""
     if not valeur:
         return None
     texte = re.sub(r"\s+", " ", html_lib.unescape(valeur)).strip()
