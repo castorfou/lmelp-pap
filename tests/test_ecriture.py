@@ -85,6 +85,7 @@ def test_la_liste_est_ecrite_en_trois_csv_lies_par_l_identifiant(
             "url": AUDIO,
             "type": "extrait",
             "sources": "wayback_podcast",
+            "duree": "",
         }
     ]
 
@@ -172,3 +173,30 @@ def test_un_enregistrement_retype_garde_les_sources_qui_le_donnent(
         (m4a, "extrait", "radiofrance"),
         (mp3, "extrait", "wayback_podcast"),
     ]
+
+
+def test_un_enregistrement_porte_sa_duree_quand_une_source_la_connait(
+    tmp_path: Path,
+) -> None:
+    m4a = "https://media.radiofrance-podcast.net/podcast09/14007-18.10.1975-ITEMA_23787751-2024F4007E0106-27.m4a"
+    liste, doutes = construire_liste(
+        [
+            Attestation(
+                source="radiofrance",
+                source_id="la-vie-devant-soi",
+                date=date(1975, 10, 18),
+                duree="00:03:56",
+                enregistrements=(
+                    Enregistrement(url=m4a, type="extrait", duree="00:03:56"),
+                ),
+                extrait=True,
+            ),
+        ]
+    )
+
+    ecrire_liste(liste, doutes, tmp_path)
+
+    assert [
+        (r["url"], r["duree"]) for r in _lire(tmp_path / "enregistrements.csv")
+    ] == [(m4a, "00:03:56")]
+    assert _lire(tmp_path / "emissions.csv")[0]["duree"] == ""

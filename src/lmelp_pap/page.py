@@ -38,7 +38,9 @@ def donnees_page(dossier: Path) -> list[dict[str, Any]]:
     attestations = _par_emission(
         dossier / "attestations.csv", ("source", "date", "titre", "url")
     )
-    enregistrements = _par_emission(dossier / "enregistrements.csv", ("url", "type"))
+    enregistrements = _par_emission(
+        dossier / "enregistrements.csv", ("url", "type", "duree")
+    )
     doutes = _par_emission(dossier / "doutes.csv", ("type", "detail"))
     return [
         {

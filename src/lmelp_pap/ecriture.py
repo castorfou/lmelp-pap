@@ -29,7 +29,7 @@ COLONNES_ATTESTATIONS = [
     "titre",
     "url",
 ]
-COLONNES_ENREGISTREMENTS = ["emission_id", "url", "type", "sources"]
+COLONNES_ENREGISTREMENTS = ["emission_id", "url", "type", "sources", "duree"]
 COLONNES_DOUTES = [
     "type",
     "emission_id",
@@ -102,6 +102,7 @@ def ecrire_liste(liste: list[Emission], doutes: list[Doute], dossier: Path) -> N
                         }
                     )
                 ),
+                "duree": r.duree,
             }
             for e in emissions
             for r in e.enregistrements

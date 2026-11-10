@@ -8,6 +8,7 @@ Les fiches d'émission portent leurs données dans du JSON-LD schema.org
 import html as html_lib
 import json
 import re
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -39,7 +40,7 @@ def lire_fiche(page: str) -> Attestation | None:
 
     titre = _texte(article.get("headline") or episode.get("name"))
     duree = _duree(audio.get("duration"))
-    enregistrements = _enregistrements(audio.get("contentUrl"))
+    enregistrements = _enregistrements(audio.get("contentUrl"), duree)
     extrait = _est_un_extrait(duree, enregistrements)
     return Attestation(
         source=SOURCE,
@@ -52,7 +53,7 @@ def lire_fiche(page: str) -> Attestation | None:
         animateur=", ".join(p["name"] for p in episode.get("director", [])) or None,
         url=url,
         enregistrements=tuple(
-            Enregistrement(e.url, "extrait") if extrait else e for e in enregistrements
+            replace(e, type="extrait") if extrait else e for e in enregistrements
         ),
         extrait=extrait,
     )
@@ -127,12 +128,17 @@ def _est_un_extrait(
     return courte or any(e.type == "extrait" for e in enregistrements)
 
 
-def _enregistrements(url: str | None) -> tuple[Enregistrement, ...]:
-    """Le fichier audio de la fiche, typé d'après son nom (intégral ou extrait)."""
+def _enregistrements(url: str | None, duree: str | None) -> tuple[Enregistrement, ...]:
+    """Le fichier audio de la fiche, typé d'après son nom (intégral ou extrait),
+    avec la durée que la fiche donne."""
     if not url:
         return ()
     fichier = lire_nom_fichier(url)
-    return (Enregistrement(url=url, type=fichier.type if fichier else "intégral"),)
+    return (
+        Enregistrement(
+            url=url, type=fichier.type if fichier else "intégral", duree=duree
+        ),
+    )
 
 
 def lire_page_liste(page: str) -> list[str]:

@@ -19,6 +19,7 @@ class Enregistrement:
 
     url: str
     type: str  # "intégral" ou "extrait"
+    duree: str | None = None  # HH:MM:SS, quand une source la connaît
 
 
 @dataclass(frozen=True)
@@ -517,7 +518,7 @@ def _archives_entieres(groupe: list[Attestation]) -> list[Attestation]:
             a,
             extrait=False,
             enregistrements=tuple(
-                Enregistrement(e.url, "intégral") if _itema(e.url) in entieres else e
+                replace(e, type="intégral") if _itema(e.url) in entieres else e
                 for e in a.enregistrements
             ),
         )
@@ -559,16 +560,32 @@ def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
     """Les enregistrements de toutes les sources, typés par archive (ITEMA).
 
     Une source qui sait qu'une archive est un extrait (radiofrance.fr connaît
-    la durée) l'emporte sur une autre qui ne voit que le nom du fichier.
+    la durée) l'emporte sur une autre qui ne voit que le nom du fichier. La
+    durée d'un fichier vaut pour ses autres encodages (``-22.mp3``, ``-27.m4a``).
     """
     tous = [e for a in groupe for e in a.enregistrements]
     extraits = {_itema(e.url) for e in tous if e.type == "extrait"} - {None}
+    durees: dict[str, str] = {}
+    for e in tous:
+        if e.duree:
+            durees.setdefault(_fichier(e.url), e.duree)
     return list(
         dict.fromkeys(
-            Enregistrement(e.url, "extrait") if _itema(e.url) in extraits else e
+            replace(
+                e,
+                type="extrait" if _itema(e.url) in extraits else e.type,
+                duree=e.duree or durees.get(_fichier(e.url)),
+            )
             for e in tous
         )
     )
+
+
+def _fichier(url: str) -> str:
+    """Le nom d'un fichier audio sans son suffixe d'encodage (``-27.m4a``) :
+    le même pour tous ses encodages."""
+    nom = url.rsplit("/", 1)[-1]
+    return re.sub(r"(-\d+)?\.\w+$", "", nom)
 
 
 def _themes(groupe: list[Attestation]) -> frozenset[str]:
