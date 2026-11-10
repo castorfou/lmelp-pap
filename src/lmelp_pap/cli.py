@@ -2,11 +2,13 @@
 
 import argparse
 import sys
+import webbrowser
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
 from lmelp_pap.arbitrages import lire_arbitrages
+from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import construire_liste
@@ -14,6 +16,8 @@ from lmelp_pap.page import construire_page
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page`` et
+    ``arbitrer``. Rend le code de sortie."""
     parser = argparse.ArgumentParser(prog="lmelp-pap")
     commandes = parser.add_subparsers(dest="commande", required=True)
     emissions = commandes.add_parser(
@@ -42,7 +46,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     page.add_argument("--donnees", type=Path, default=Path("data/processed"))
     page.add_argument("--sortie", type=Path, default=Path("docs/emissions/index.html"))
+    arbitrer = commandes.add_parser(
+        "arbitrer",
+        help="ouvre la liste en mode arbitrage dans un serveur local",
+    )
+    arbitrer.add_argument("--cache", type=Path, default=Path("data/raw/cache"))
+    arbitrer.add_argument("--sortie", type=Path, default=Path("data/processed"))
+    arbitrer.add_argument(
+        "--arbitrages",
+        type=Path,
+        help="fichier des arbitrages (par défaut : arbitrages.csv dans --sortie)",
+    )
+    arbitrer.add_argument("--port", type=int, default=8765)
+    arbitrer.add_argument(
+        "--sans-navigateur",
+        action="store_true",
+        help="n'ouvre pas la page dans le navigateur",
+    )
     args = parser.parse_args(argv)
+
+    if args.commande == "arbitrer":
+        return _arbitrer(args)
 
     if args.commande == "page":
         args.sortie.parent.mkdir(parents=True, exist_ok=True)
@@ -72,6 +96,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         + (", ".join(f"{t} {n}" for t, n in sorted(par_type.items())) or "aucun"),
         file=sys.stderr,
     )
+    return 0
+
+
+def _arbitrer(args: argparse.Namespace) -> int:
+    """Sert la page en mode arbitrage jusqu'à Ctrl+C."""
+    print("Lecture du cache et construction de la liste…", file=sys.stderr)
+    serveur = creer_serveur(
+        args.cache, args.sortie, port=args.port, arbitrages=args.arbitrages
+    )
+    # VS Code redirige le port vers la machine hôte et y ouvre l'adresse.
+    url = f"http://localhost:{serveur.server_address[1]}/"
+    print(f"Arbitrage de la liste : {url} (Ctrl+C pour arrêter)", file=sys.stderr)
+    if not args.sans_navigateur:
+        webbrowser.open(url)
+    try:
+        serveur.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        serveur.server_close()
     return 0
 
 

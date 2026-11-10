@@ -79,6 +79,7 @@ def _texte(valeur: str | None) -> str | None:
 
 
 def _etiquettes(page: str) -> list[str]:
+    """Les étiquettes de la fiche (``<meta property="article:tag">``)."""
     m = re.search(r'<meta property="article:tag" content="([^"]*)"', page)
     return html_lib.unescape(m.group(1)).split(",") if m else []
 
@@ -97,6 +98,7 @@ def _themes(slug: str, titre: str | None, etiquettes: list[str]) -> frozenset[st
 
 
 def _date_paris(horodatage: str) -> Any:
+    """Le jour, à l'heure de Paris, d'un horodatage ISO 8601."""
     instant = datetime.fromisoformat(horodatage)
     return instant.astimezone(_PARIS).date()
 
@@ -126,6 +128,7 @@ def _est_un_extrait(
 
 
 def _enregistrements(url: str | None) -> tuple[Enregistrement, ...]:
+    """Le fichier audio de la fiche, typé d'après son nom (intégral ou extrait)."""
     if not url:
         return ()
     fichier = lire_nom_fichier(url)

@@ -1,0 +1,132 @@
+<!-- Mode arbitrage : ajouté à la page par « lmelp-pap arbitrer », absent de la page publiée. -->
+<style>
+.arbitrage { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 12px 16px; display: grid; gap: 8px; font-size: 14px; }
+.arbitrage .titre-mode { font-weight: 600; color: var(--accent); }
+.arbitrage .statut { min-height: 1.4em; }
+.arbitrage .statut.echec { color: var(--alerte); font-weight: 600; }
+.arbitrage summary { cursor: pointer; color: var(--muted); }
+.arbitrage ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; max-height: 40vh; overflow-y: auto; }
+.arbitrage li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; overflow-wrap: anywhere; }
+.arbitrage .meta { font-family: var(--f-data); font-size: 12px; color: var(--muted); }
+.arb { display: grid; gap: 8px; border-top: 1px solid var(--rule); padding-top: 10px; }
+.arb fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.arb legend, .arb .libelle { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-right: 6px; }
+.arb label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+.arb-raisons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.arb-raisons input { font: inherit; font-size: 13px; flex: 1 1 220px; min-width: 0; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); color: var(--fg); }
+.arb button, .arbitrage button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer; }
+.arb .arb-raison[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.arb-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.arb .arb-principal { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.arb .arb-danger { color: var(--alerte); border-color: var(--alerte); }
+.arb button:disabled, .arbitrage button:disabled { opacity: .5; cursor: wait; }
+</style>
+<script>
+const THEMES = __THEMES__;  // lmelp_pap.arbitrages.THEMES
+const RAISONS = ["titre explicite", "écouté l'enregistrement", "connaissance de l'émission"];
+
+document.querySelector("header").insertAdjacentHTML("afterend",
+  `<section class="arbitrage" id="arbitrage" aria-label="Mode arbitrage">` +
+  `<div><span class="titre-mode">Mode arbitrage</span> · ouvrir une émission pour arbitrer son thème ou son existence. ` +
+  `Chaque décision est écrite dans <code>arbitrages.csv</code> et la liste est reconstruite aussitôt.</div>` +
+  `<div class="statut" id="arb-statut" role="status" aria-live="polite"></div>` +
+  `<details><summary>Arbitrages enregistrés (<span id="arb-nombre">…</span>)</summary><ul id="arb-journal"></ul></details>` +
+  `</section>`);
+
+// Les contrôles d'arbitrage d'une émission, sous son détail.
+function controlesArbitrage(e) {
+  const coches = THEMES.map(t =>
+    `<label><input type="checkbox" value="${esc(t)}"${e.themes.includes(t) ? " checked" : ""}> ${esc(t)}</label>`).join("");
+  const raisons = RAISONS.map(r =>
+    `<button type="button" class="arb-raison" data-raison="${esc(r)}" aria-pressed="false">${esc(r)}</button>`).join("");
+  return `<div class="arb" data-id="${esc(e.id)}">` +
+    `<fieldset><legend>Thèmes</legend>${coches}</fieldset>` +
+    `<div class="arb-raisons"><span class="libelle">Justification</span>${raisons}` +
+    `<input type="text" class="arb-texte" placeholder="ou texte libre (facultatif)" aria-label="Justification libre"></div>` +
+    `<div class="arb-actions">` +
+    `<button type="button" class="arb-principal" data-action="theme">Arbitrer le thème</button>` +
+    `<button type="button" class="arb-danger" data-action="existence">N'existe pas</button>` +
+    (e.arbitrage ? `<button type="button" data-action="annuler">Annuler l'arbitrage</button>` : "") +
+    `</div></div>`;
+}
+
+function statut(texte, echec = false) {
+  const s = $("arb-statut");
+  s.textContent = texte;
+  s.classList.toggle("echec", echec);
+}
+
+function dateDecision(d) { return d.slice(0, 16).replace("T", " ").replace(/ 00:00$/, ""); }
+
+function journal(arbitrages) {
+  $("arb-nombre").textContent = arbitrages.length;
+  $("arb-journal").innerHTML = arbitrages.length ? arbitrages.map(a =>
+    `<li><span class="meta">${esc(dateDecision(a.date))}</span>` +
+    `<b>${esc(a.attestation ? a.attestation.date : "attestation introuvable")}</b>` +
+    `<span>${esc(a.attestation && a.attestation.titre || "")}</span>` +
+    `<span class="meta">${NOMS[a.source] || esc(a.source)} · ${esc(a.source_id)}</span>` +
+    `<span>→ ${esc(a.valeur)}${a.justification ? ` (${esc(a.justification)})` : ""}</span>` +
+    `<button type="button" data-source="${esc(a.source)}" data-source-id="${esc(a.source_id)}">Annuler</button></li>`
+  ).join("") : `<li class="meta">Aucun arbitrage.</li>`;
+}
+
+// Remplace les données de la page par celles que renvoie le serveur.
+function appliquer(d) {
+  emissions = preparer(d.emissions);
+  if (!emissions.some(e => e.id === etat.ouverte)) etat.ouverte = null;
+  remplirFiltres(); chiffres(); frise(); rendre(); journal(d.arbitrages);
+}
+
+async function envoyer(chemin, corps, message) {
+  document.querySelectorAll(".arb button, .arbitrage button").forEach(b => { b.disabled = true; });
+  statut("Enregistrement…");
+  try {
+    const r = await fetch(chemin, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erreur || r.statusText);
+    appliquer(d);
+    statut(message(d));
+  } catch (err) {
+    statut(`Échec : ${err.message}`, true);
+    document.querySelectorAll(".arb button, .arbitrage button").forEach(b => { b.disabled = false; });
+  }
+}
+
+const encore = (d, id) => d.emissions.some(e => e.id === id);
+
+$("lignes").addEventListener("click", ev => {
+  const bloc = ev.target.closest(".arb"); if (!bloc) return;
+  const id = bloc.dataset.id, champ = bloc.querySelector(".arb-texte");
+  const raison = ev.target.closest(".arb-raison");
+  if (raison) {
+    const active = raison.getAttribute("aria-pressed") === "true";
+    bloc.querySelectorAll(".arb-raison").forEach(b => b.setAttribute("aria-pressed", "false"));
+    raison.setAttribute("aria-pressed", String(!active));
+    champ.value = active ? "" : raison.dataset.raison;
+    return;
+  }
+  const bouton = ev.target.closest("button[data-action]"); if (!bouton) return;
+  const justification = champ.value.trim();
+  if (bouton.dataset.action === "theme") {
+    const themes = [...bloc.querySelectorAll("input[type=checkbox]:checked")].map(c => c.value);
+    if (!themes.length) { statut("Cocher au moins un thème.", true); return; }
+    envoyer("/api/arbitrages", { emission_id: id, sorte: "thème", themes, justification }, d =>
+      `${id} : thème arbitré ${themes.join(" + ")}` + (encore(d, id) ? "." : ", l'émission sort de la liste."));
+  } else if (bouton.dataset.action === "existence") {
+    envoyer("/api/arbitrages", { emission_id: id, sorte: "existence", justification }, () =>
+      `${id} : arbitrée inexistante, l'émission sort de la liste.`);
+  } else {
+    envoyer("/api/annulations", { emission_id: id }, () => `${id} : arbitrage annulé.`);
+  }
+});
+// Une émission sortie de la liste s'annule depuis la liste des arbitrages.
+$("arb-journal").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-source]"); if (!b) return;
+  const { source, sourceId } = b.dataset;
+  envoyer("/api/annulations", { source, source_id: sourceId }, d =>
+    `Arbitrage de ${NOMS[source] || source} · ${sourceId} annulé · ${d.emissions.length} émissions dans la liste.`);
+});
+
+fetch("/api/donnees").then(r => r.json()).then(appliquer)
+  .catch(err => statut(`Serveur injoignable : ${err.message}`, true));
+</script>

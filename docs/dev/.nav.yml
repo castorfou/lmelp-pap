@@ -1,4 +1,5 @@
 nav:
   - Contenu: README.md
+  - Référence du code: reference.md
   - Héritage PyFoundry: pyfoundry.md
   - Bloc notes : bloc_notes.md

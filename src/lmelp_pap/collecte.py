@@ -43,16 +43,19 @@ _RADIOFRANCE = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-
 
 
 def lire_radiofrance(dossier: Path) -> list[Attestation]:
+    """Les fiches radiofrance.fr du cache ; les pages illisibles sont sautées."""
     fiches = sorted((dossier / "fiches").glob("*.html"))
     lues = (radiofrance.lire_fiche(f.read_text(encoding="utf-8")) for f in fiches)
     return [a for a in lues if a is not None]
 
 
 def lire_wayback_podcast(dossier: Path) -> list[Attestation]:
+    """Les fichiers audio du podcast listés par l'API CDX de la Wayback Machine."""
     return wayback_podcast.lire_cdx((dossier / "cdx_podcast.txt").read_text("utf-8"))
 
 
 def lire_ina(dossier: Path) -> list[Attestation]:
+    """Les notices du catalogue INA, telles que la collecte les a enregistrées."""
     with (dossier / "notices.csv").open(encoding="utf-8", newline="") as f:
         return ina.lire_notices(csv.DictReader(f))
 
@@ -97,6 +100,10 @@ def _get(
 
 
 def collecter_radiofrance(dossier: Path) -> None:
+    """Télécharge les fiches d'émission listées page à page sur radiofrance.fr.
+
+    Une fiche déjà en cache n'est pas téléchargée de nouveau.
+    """
     fiches = dossier / "fiches"
     fiches.mkdir(parents=True, exist_ok=True)
     vues: set[str] = set()
@@ -120,6 +127,7 @@ def collecter_radiofrance(dossier: Path) -> None:
 
 
 def collecter_wayback_podcast(dossier: Path) -> None:
+    """Enregistre la liste CDX des fichiers audio du podcast archivés."""
     reponse = _get(
         _CDX,
         {
@@ -134,6 +142,11 @@ def collecter_wayback_podcast(dossier: Path) -> None:
 
 
 def collecter_ina(dossier: Path) -> None:
+    """Parcourt le catalogue INA (Playwright) et enregistre ses notices.
+
+    Deux recherches : toutes les notices de la collection, puis celles de la
+    facette « littérature », qui renseigne la colonne ``facette_litterature``.
+    """
     from lmelp_pap.sources.ina_catalogue import scrape_ina_catalogue_raw
 
     def sans_rang(urls: pd.Series) -> pd.Series:
@@ -155,6 +168,7 @@ _ANCIENNES_LISTES = (
 
 
 def collecter_anciennes_listes(dossier: Path) -> None:
+    """Télécharge la dernière capture Wayback de chaque page des anciennes listes."""
     for prefixe, encodage in _ANCIENNES_LISTES:
         reponse = _get(
             _CDX,

@@ -125,12 +125,14 @@ def ecrire_liste(liste: list[Emission], doutes: list[Doute], dossier: Path) -> N
 
 
 def _themes(themes: frozenset[str]) -> str:
+    """Les thèmes triés, séparés par ``;``."""
     return ";".join(sorted(themes))
 
 
 def _ecrire(
     chemin: Path, colonnes: list[str], lignes: Iterable[dict[str, object]]
 ) -> None:
+    """Écrit un CSV ; une valeur ``None`` donne une cellule vide."""
     with chemin.open("w", encoding="utf-8", newline="") as f:
         ecrivain = csv.DictWriter(f, fieldnames=colonnes, lineterminator="\n")
         ecrivain.writeheader()

@@ -4,9 +4,10 @@ Vocabulaire : voir CONTEXT.md. Décisions : docs/adr/0001, 0002 et 0003.
 """
 
 import re
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from lmelp_pap.sources.audio_radiofrance import lire_nom_fichier
@@ -108,16 +109,18 @@ def construire_liste(
     Les doutes portent sur toutes les émissions, dans la liste ou non.
     """
     groupes: list[list[Attestation]] = []
+    index: _Index = defaultdict(list)
     for a in sorted(attestations, key=lambda a: a.date):
         if a.source not in SOURCES_VERIFIEES:
-            _rapprocher(a, groupes)
+            _rapprocher(a, groupes, index)
     for a in attestations:
         if a.source in SOURCES_VERIFIEES:
             fiche = [g for g in groupes if any(_meme_fiche(a, b) for b in g)]
             if fiche:
                 fiche[0].append(a)
+                index[a.date].append(groupes.index(fiche[0]))
             else:
-                _rapprocher(a, groupes)
+                _rapprocher(a, groupes, index)
 
     emissions, retirees = _arbitrer([_fusionner(g) for g in groupes], arbitrages)
     emissions.sort(key=_cle_de_tri)
@@ -223,12 +226,18 @@ def _arbitrer(
 
 
 def _doutes(emissions: list[Emission]) -> list[Doute]:
+    """Les doutes des émissions, dans la liste ou non : rapprochement, date,
+    collision, thème, republication, fragilité, absence de lmelp."""
     doutes: list[Doute] = []
     # la première diffusion de la dernière émission vérifiée, pas sa publication
     derniere_verifiee = max(
         (e.date for e in emissions if _verifiee(e)),
         default=None,
     )
+    par_jour: _Index = defaultdict(list)
+    for i, e in enumerate(emissions):
+        for a in e.attestations:
+            par_jour[a.date].append(i)
     for emission in emissions:
         dans_la_liste = _dans_la_liste(emission)
 
@@ -251,14 +260,18 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
             )
 
         # Rapprochement et date.
-        autres = [e for e in emissions if e is not emission]
         for a in emission.attestations:
             if a.source in SOURCES_VERIFIEES:
                 # rattachée par sa fiche, sans ambiguïté ; sinon par la date
                 if not any(_meme_fiche(a, b) for b in emission.attestations):
                     ajouter("sans fiche radiofrance", f"aucune fiche {a.url}", a)
                 continue
-            rivales = [e.id for e in autres if _rapprochable(a, e.attestations)]
+            rivales = [
+                emissions[i].id
+                for i in _proches(a.date, par_jour)
+                if emissions[i] is not emission
+                and _rapprochable(a, emissions[i].attestations)
+            ]
             if rivales:
                 ajouter(
                     "rapprochement ambigu",
@@ -434,6 +447,7 @@ def _valeur(champ: str, groupe: list[Attestation]) -> Any:
 
 
 def _rang(source: str, ordre: tuple[str, ...]) -> int:
+    """Le rang de la source dans l'ordre de priorité ; inconnue, elle passe après."""
     return ordre.index(source) if source in ordre else len(ordre)
 
 
@@ -512,6 +526,7 @@ def _archives_entieres(groupe: list[Attestation]) -> list[Attestation]:
 
 
 def _fusionner(groupe: list[Attestation]) -> Emission:
+    """L'émission d'un groupe d'attestations rapprochées, champ par champ."""
     groupe = _archives_entieres(groupe)
     jour: date = _valeur("date", groupe)
     return Emission(
@@ -565,13 +580,38 @@ def _themes(groupe: list[Attestation]) -> frozenset[str]:
     return frozenset().union(*(a.themes for a in verifiees or groupe))
 
 
-def _rapprocher(a: Attestation, groupes: list[list[Attestation]]) -> None:
+# Les positions des groupes (ou des émissions) par date de leurs attestations.
+_Index = defaultdict[date, list[int]]
+
+
+def _proches(jour: date, index: _Index) -> list[int]:
+    """Les positions, dans l'ordre, de ce qui a une attestation à moins de
+    ECART_MAX_JOURS jours : les seuls candidats possibles d'un rapprochement.
+
+    Indexer toutes les dates d'attestation, et pas seulement celles de
+    diffusion, donne un sur-ensemble des candidats : ``_rapprochable`` tranche.
+    """
+    return sorted(
+        {
+            i
+            for ecart in range(-ECART_MAX_JOURS, ECART_MAX_JOURS + 1)
+            for i in index.get(jour + timedelta(days=ecart), ())
+        }
+    )
+
+
+def _rapprocher(
+    a: Attestation, groupes: list[list[Attestation]], index: _Index
+) -> None:
     """Ajoute l'attestation au groupe le plus proche, ou en crée un."""
-    candidats = [g for g in groupes if _rapprochable(a, g)]
+    candidats = [i for i in _proches(a.date, index) if _rapprochable(a, groupes[i])]
     if candidats:
-        min(candidats, key=lambda g: _ecart(a, g)).append(a)
+        position = min(candidats, key=lambda i: _ecart(a, groupes[i]))
+        groupes[position].append(a)
     else:
+        position = len(groupes)
         groupes.append([a])
+    index[a.date].append(position)
 
 
 def _meme_fiche(verifiee: Attestation, b: Attestation) -> bool:
@@ -586,6 +626,7 @@ def _dates_de_diffusion(groupe: list[Attestation]) -> list[date]:
 
 
 def _ecart(a: Attestation, groupe: list[Attestation]) -> int:
+    """L'écart en jours entre l'attestation et la date la plus proche du groupe."""
     return min(abs((a.date - jour).days) for jour in _dates_de_diffusion(groupe))
 
 
