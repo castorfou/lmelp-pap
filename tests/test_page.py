@@ -92,3 +92,20 @@ def test_un_theme_arbitre_porte_sa_justification_dans_les_donnees() -> None:
         {"sorte": "thème", "justification": "titre explicite"},
         None,
     ]
+
+
+def test_la_page_publiee_n_a_aucun_controle_d_arbitrage() -> None:
+    page = construire_page(FIXTURES)
+
+    assert "__ARBITRAGE__" not in page
+    assert 'id="arbitrage"' not in page
+    assert "/api/" not in page
+    assert "N'existe pas" not in page
+
+
+def test_la_page_en_mode_arbitrage_a_les_memes_donnees_et_ses_controles() -> None:
+    publiee, arbitrage = construire_page(FIXTURES), construire_page(FIXTURES, True)
+
+    assert _donnees(arbitrage) == _donnees(publiee)
+    assert 'id="arbitrage"' in arbitrage
+    assert "/api/arbitrages" in arbitrage

@@ -15,6 +15,16 @@ from lmelp_pap.liste import Arbitrage
 
 
 INEXISTANTE = "n'existe pas"
+THEMES = (
+    "livres",
+    "cinéma",
+    "théâtre",
+    "opéra",
+    "télévision",
+    "musique",
+    "variétés",
+)
+COLONNES = ["source", "source_id", "sorte", "valeur", "justification", "date"]
 
 
 def lire_arbitrages(chemin: Path) -> list[Arbitrage]:
@@ -47,3 +57,36 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
         justification=(ligne.get("justification") or "").strip(),
         date=datetime.fromisoformat(ligne["date"].strip()),
     )
+
+
+def ecrire_arbitrages(chemin: Path, arbitrages: list[Arbitrage]) -> None:
+    """Réécrit le fichier avec ces arbitrages, dans cet ordre."""
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    with chemin.open("w", encoding="utf-8", newline="") as f:
+        ecrivain = csv.DictWriter(f, fieldnames=COLONNES, lineterminator="\n")
+        ecrivain.writeheader()
+        ecrivain.writerows(
+            {
+                "source": a.source,
+                "source_id": a.source_id,
+                "sorte": a.sorte,
+                "valeur": valeur(a),
+                "justification": a.justification,
+                "date": _date(a.date),
+            }
+            for a in arbitrages
+        )
+
+
+def valeur(arbitrage: Arbitrage) -> str:
+    """La colonne ``valeur`` : les thèmes séparés par ``;``, ou ``n'existe pas``."""
+    if arbitrage.sorte == "existence":
+        return INEXISTANTE
+    return ";".join(sorted(arbitrage.themes))
+
+
+def _date(moment: datetime) -> str:
+    """Le jour seul à minuit (saisie à la main), sinon le jour et l'heure."""
+    if moment.time() == datetime.min.time():
+        return moment.date().isoformat()
+    return moment.isoformat(timespec="seconds")

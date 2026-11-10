@@ -141,7 +141,7 @@ Un champ simplement absent (durée, animateur) n'est pas un doute. Une émission
 
 ## Arbitrages
 
-Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une émission, ou le fait qu'elle n'existe pas. Les arbitrages sont enregistrés dans `data/processed/arbitrages.csv`, versionné, rédigé à la main, et appliqués à chaque construction de la liste : une décision survit ainsi aux régénérations.
+Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une émission, ou le fait qu'elle n'existe pas. Les arbitrages sont enregistrés dans `data/processed/arbitrages.csv`, versionné, écrit par l'outil `lmelp-pap arbitrer` ou rédigé à la main, et appliqués à chaque construction de la liste : une décision survit ainsi aux régénérations.
 
 | Colonne | Contenu |
 |---|---|
@@ -170,6 +170,49 @@ radiofrance,le-mage-du-kremlin-de-giuliano-da-empoli-1192090,existence,n'existe 
 - un arbitrage qui contredit lmelp s'applique, et produit un doute `contradiction lmelp`.
 
 Un arbitrage n'atteste aucune émission : il tranche entre ce que disent les sources. La commande `lmelp-pap emissions` indique le nombre d'arbitrages lus.
+
+### Arbitrer depuis la liste
+
+```bash
+uv run --active lmelp-pap arbitrer
+```
+
+La commande lit le cache, reconstruit la liste et lance un serveur local qui sert la page de la liste en **mode arbitrage**. Elle ouvre la page dans le navigateur : dans le devcontainer, VS Code redirige le port vers la machine hôte. Le serveur tourne jusqu'à `Ctrl+C`. Il n'accède jamais au réseau : la liste est reconstruite depuis le cache.
+
+La page garde la frise et les filtres de la page publiée (année, thème, source, type de doute). Sous le détail de chaque émission s'ajoutent :
+
+- une case par thème (livres, cinéma, théâtre, opéra, télévision, musique, variétés), cochée pour les thèmes actuels, et le bouton **Arbitrer le thème** ;
+- le bouton **N'existe pas** ;
+- les justifications en un clic, « titre explicite », « écouté l'enregistrement » et « connaissance de l'émission », et un champ libre facultatif ;
+- le bouton **Annuler l'arbitrage**, pour une émission dont le thème est arbitré.
+
+L'outil attache l'arbitrage à l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr, sinon une autre attestation. À chaque décision, il écrit `arbitrages.csv`, reconstruit la liste, réécrit ses CSV, et la page se met à jour aussitôt : l'émission change d'aspect, ou sort de la liste (arbitrée sans le thème livres, ou inexistante). Un message sous le bandeau « Mode arbitrage » confirme la décision.
+
+Le panneau **Arbitrages enregistrés** du bandeau liste tous les arbitrages du fichier, du plus récent au plus ancien, chacun avec un bouton **Annuler** : c'est ainsi qu'on annule l'arbitrage d'une émission sortie de la liste. Annuler retire du fichier les arbitrages de l'attestation, et l'émission retrouve les thèmes que lui donnent les sources.
+
+Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans la frise, choisir « thème inconnu » dans le filtre Doute, ouvrir l'émission du 11 juillet 2010 (Avignon), cocher « théâtre », cliquer « titre explicite », puis **Arbitrer le thème** : l'émission sort de la liste.
+
+| Option | Effet |
+|---|---|
+| `--cache DOSSIER` | Dossier du cache (par défaut `data/raw/cache`). |
+| `--sortie DOSSIER` | Dossier des CSV de la liste, réécrits à chaque décision (par défaut `data/processed`). |
+| `--arbitrages FICHIER` | Fichier des arbitrages (par défaut `arbitrages.csv` dans le dossier de sortie). |
+| `--port PORT` | Port du serveur (par défaut 8765). |
+| `--sans-navigateur` | N'ouvre pas la page ; l'adresse s'affiche dans le terminal. |
+
+La page publiée (`lmelp-pap page`) n'a aucun de ces contrôles. Après une séance d'arbitrage, la régénérer pour qu'elle reflète les décisions.
+
+#### API
+
+Le serveur expose une petite API JSON, utilisée par la page :
+
+| Requête | Effet |
+|---|---|
+| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). |
+| `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes. |
+| `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
+
+Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
 
 ## Règles de construction
 

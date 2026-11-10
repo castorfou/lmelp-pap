@@ -9,16 +9,31 @@ import json
 from collections import defaultdict
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
 
-def construire_page(dossier: Path) -> str:
-    """Le HTML complet de la page, à partir des CSV de ``dossier``."""
+def construire_page(dossier: Path, arbitrage: bool = False) -> str:
+    """Le HTML complet de la page, à partir des CSV de ``dossier``.
+
+    En mode ``arbitrage``, la page porte en plus les contrôles de l'outil
+    ``lmelp-pap arbitrer`` ; elle ne fonctionne alors que servie par lui.
+    """
+    gabarit = _ressource("page.html").replace(
+        "__ARBITRAGE__", _ressource("arbitrage.html") if arbitrage else ""
+    )
+    # « </ » fermerait le bloc <script> : « <\/ » est le même JSON.
+    donnees = json.dumps(donnees_page(dossier), ensure_ascii=False)
+    return gabarit.replace("__DONNEES__", donnees.replace("</", "<\\/"))
+
+
+def donnees_page(dossier: Path) -> list[dict[str, Any]]:
+    """Les émissions de la liste, telles que la page les affiche."""
     attestations = _par_emission(
         dossier / "attestations.csv", ("source", "date", "titre", "url")
     )
     enregistrements = _par_emission(dossier / "enregistrements.csv", ("url", "type"))
     doutes = _par_emission(dossier / "doutes.csv", ("type", "detail"))
-    emissions = [
+    return [
         {
             "id": e["id"],
             "date": e["date"],
@@ -39,10 +54,10 @@ def construire_page(dossier: Path) -> str:
         }
         for e in _lire(dossier / "emissions.csv")
     ]
-    gabarit = files("lmelp_pap").joinpath("page.html").read_text(encoding="utf-8")
-    # « </ » fermerait le bloc <script> : « <\/ » est le même JSON.
-    donnees = json.dumps(emissions, ensure_ascii=False).replace("</", "<\\/")
-    return gabarit.replace("__DONNEES__", donnees)
+
+
+def _ressource(nom: str) -> str:
+    return files("lmelp_pap").joinpath(nom).read_text(encoding="utf-8")
 
 
 def _par_emission(

@@ -224,7 +224,9 @@ const sansAccents = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036
 
 const LIBELLES = { radiofrance: "radiofrance.fr", ina: "INA", anciennes_listes: "anciennes listes France Inter", wayback_podcast: "podcast archivé (Wayback)", lmelp: "lmelp (vérifiée)" };
 
-const emissions = JSON.parse(document.getElementById("donnees").textContent).map(e => ({
+// Les émissions telles que la page les manipule. L'outil d'arbitrage les remplace
+// par les données à jour après chaque décision.
+const preparer = donnees => donnees.map(e => ({
   ...e,
   annee: +e.date.slice(0, 4),
   att: e.attestations.map(a => [a.source, a.date, a.titre, a.url]),
@@ -233,19 +235,28 @@ const emissions = JSON.parse(document.getElementById("donnees").textContent).map
   sources: [...new Set(e.attestations.map(a => a.source))],
   texte: sansAccents([e.titre, e.description, e.animateur, ...e.attestations.map(a => a.titre)].join(" ")),
 })).sort((a, b) => (a.id < b.id ? -1 : 1));
-
-// Une option du filtre par source pour chaque source présente dans les données.
-for (const s of [...new Set(emissions.flatMap(e => e.sources))].sort()) {
-  document.getElementById("source").insertAdjacentHTML("beforeend", `<option value="${s}">${LIBELLES[s] || s}</option>`);
-}
+let emissions = preparer(JSON.parse(document.getElementById("donnees").textContent));
 
 const etat = { annee: null, croissant: true, affichees: LOT, ouverte: null };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-// Une option du filtre par doute pour chaque type de doute présent dans les données.
-for (const t of [...new Set(emissions.flatMap(e => e.doutes.map(([type]) => type)))].sort()) {
-  document.getElementById("doute").insertAdjacentHTML("beforeend", `<option value="${esc(t)}">${esc(t)}</option>`);
+
+// Les options d'un filtre : ses options fixes, puis une par valeur présente dans
+// les données. La valeur choisie reste proposée même si plus aucune émission ne l'a.
+function options(id, valeurs, libelle) {
+  const sel = $(id), choisie = sel.value;
+  sel.querySelectorAll("option[data-donnee]").forEach(o => o.remove());
+  const toutes = new Set(valeurs);
+  if (choisie && ![...sel.options].some(o => o.value === choisie)) toutes.add(choisie);
+  for (const v of [...toutes].sort()) sel.insertAdjacentHTML("beforeend", `<option data-donnee value="${esc(v)}">${esc(libelle(v))}</option>`);
+  sel.value = choisie;
 }
+// Une option du filtre par source pour chaque source, par doute pour chaque type de doute.
+function remplirFiltres() {
+  options("source", emissions.flatMap(e => e.sources), s => LIBELLES[s] || s);
+  options("doute", emissions.flatMap(e => e.doutes.map(([type]) => type)), t => t);
+}
+remplirFiltres();
 const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 function jour(date) { const d = new Date(date + "T12:00:00Z"); return JOURS[d.getUTCDay()]; }
@@ -390,6 +401,8 @@ function detail(e) {
   ).join("") + `</ul></div>`;
   if (e.doutes.length) h += `<div><h3>Doutes</h3><ul>` + e.doutes.map(([t, d]) =>
     `<li class="alerte">${esc(t)} · ${esc(d)}</li>`).join("") + `</ul></div>`;
+  // Les contrôles de l'outil d'arbitrage, absents de la page publiée.
+  if (typeof controlesArbitrage === "function") h += controlesArbitrage(e);
   return h + `</div>`;
 }
 
@@ -439,5 +452,6 @@ $("haut").addEventListener("click", () => { window.scrollTo({ top: 0 }); $("q").
 
 chiffres(); frise(); rendre(); afficherHaut();
 </script>
+__ARBITRAGE__
 </body>
 </html>
