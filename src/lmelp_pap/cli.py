@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
+from lmelp_pap.arbitrages import lire_arbitrages
 from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import construire_liste
@@ -31,6 +32,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     emissions.add_argument("--cache", type=Path, default=Path("data/raw/cache"))
     emissions.add_argument("--sortie", type=Path, default=Path("data/processed"))
+    emissions.add_argument(
+        "--arbitrages",
+        type=Path,
+        help="fichier des arbitrages (par défaut : arbitrages.csv dans --sortie)",
+    )
     page = commandes.add_parser(
         "page", help="génère la page HTML de la liste des émissions"
     )
@@ -49,14 +55,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         collecter(source, args.cache, refresh=args.refresh)
 
     attestations = lire_cache(args.cache)
-    liste, doutes = construire_liste(attestations)
+    arbitrages = lire_arbitrages(args.arbitrages or args.sortie / "arbitrages.csv")
+    liste, doutes = construire_liste(attestations, arbitrages)
     ecrire_liste(liste, doutes, args.sortie)
 
     par_source = Counter(a.source for a in attestations)
     print(
         f"{len(liste)} émissions, {len(attestations)} attestations "
-        f"({', '.join(f'{s} {n}' for s, n in sorted(par_source.items()))}) "
-        f"→ {args.sortie}",
+        f"({', '.join(f'{s} {n}' for s, n in sorted(par_source.items()))}), "
+        f"{len(arbitrages)} arbitrages → {args.sortie}",
         file=sys.stderr,
     )
     par_type = Counter(d.type for d in doutes)

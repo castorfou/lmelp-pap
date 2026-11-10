@@ -64,6 +64,8 @@ def test_la_liste_est_ecrite_en_trois_csv_lies_par_l_identifiant(
         "chaine": "Paris Inter",
         "heure": "",
         "duree": "",
+        "arbitrage": "",
+        "justification_arbitrage": "",
     }
     assert emissions[0]["themes"] == ""  # thème inconnu
 

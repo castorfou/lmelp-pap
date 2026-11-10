@@ -31,6 +31,11 @@ def construire_page(dossier: Path) -> str:
             "attestations": attestations[e["id"]],
             "enregistrements": enregistrements[e["id"]],
             "doutes": doutes[e["id"]],
+            "arbitrage": (
+                {"sorte": e["arbitrage"], "justification": e["justification_arbitrage"]}
+                if e["arbitrage"]
+                else None
+            ),
         }
         for e in _lire(dossier / "emissions.csv")
     ]

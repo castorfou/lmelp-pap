@@ -82,3 +82,13 @@ def test_la_page_est_un_document_html_complet_qui_s_ouvre_seul() -> None:
     assert '<meta charset="utf-8">' in page
     assert "<title>Liste des émissions du Masque et la Plume</title>" in page
     assert page.rstrip().endswith("</html>")
+
+
+def test_un_theme_arbitre_porte_sa_justification_dans_les_donnees() -> None:
+    emissions = _donnees(construire_page(FIXTURES))
+
+    assert [e["arbitrage"] for e in emissions] == [
+        None,
+        {"sorte": "thème", "justification": "titre explicite"},
+        None,
+    ]

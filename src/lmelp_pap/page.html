@@ -106,6 +106,7 @@ h1 { font-family: var(--f-display); font-weight: 650; font-size: clamp(28px, 4.4
 .puce { font-size: 11.5px; padding: 1px 7px; border-radius: 99px; background: var(--autre-soft); color: var(--autre); white-space: nowrap; }
 .puce.livres { background: var(--accent-soft); color: var(--livres); }
 .puce.inconnu { background: transparent; color: var(--inconnu); border: 1px dashed var(--inconnu); }
+.arbitre { font-size: 11.5px; padding: 1px 6px; border-radius: 99px; color: var(--muted); border: 1px solid var(--rule); cursor: help; white-space: nowrap; }
 .duree { font-family: var(--f-data); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sources { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .src { font-family: var(--f-data); font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--rule); border-radius: 3px; color: var(--muted); }
@@ -211,7 +212,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
     <div class="plus" id="plus" hidden><button type="button" id="plus-btn"></button></div>
   </section>
 
-  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter, podcasts archivés par la Wayback Machine, et lmelp, source vérifiée (« lmelp ✓ ») : ses émissions, vérifiées à la main, sont littéraires et leur thème fait foi. Un doute est un point que les sources ne permettent pas d’affirmer avec certitude : l’existence de l’émission, sa date, son rapprochement ou son thème. Le filtre « Doute » en donne les types.</footer>
+  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter, podcasts archivés par la Wayback Machine, et lmelp, source vérifiée (« lmelp ✓ ») : ses émissions, vérifiées à la main, sont littéraires et leur thème fait foi. Un doute est un point que les sources ne permettent pas d’affirmer avec certitude : l’existence de l’émission, sa date, son rapprochement ou son thème. Le filtre « Doute » en donne les types. Un thème marqué « ✎ arbitré » vient d’un arbitrage, une décision humaine qui lève un doute ; sa justification s’affiche au survol.</footer>
   <button type="button" class="haut" id="haut" aria-label="Revenir en haut de la page" title="Revenir en haut" hidden>↑</button>
 </div>
 
@@ -350,9 +351,17 @@ function nomCourt(url) {
   return nom.length > 60 ? nom.slice(0, 60) + "…" : nom;
 }
 
+// Un thème arbitré vient d'une décision humaine, pas d'une source : il porte une marque,
+// avec la justification au survol.
+function marqueArbitrage(e) {
+  if (!e.arbitrage || e.arbitrage.sorte !== "thème") return "";
+  const raison = e.arbitrage.justification ? ` : ${e.arbitrage.justification}` : "";
+  return `<span class="arbitre" title="${esc("Thème arbitré" + raison)}" aria-label="${esc("Thème arbitré" + raison)}">✎ arbitré</span>`;
+}
+
 function puces(e) {
   if (!e.themes.length) return `<span class="puce inconnu">inconnu</span>`;
-  return e.themes.map(t => `<span class="puce ${t === "livres" ? "livres" : ""}">${esc(t)}</span>`).join("");
+  return e.themes.map(t => `<span class="puce ${t === "livres" ? "livres" : ""}">${esc(t)}</span>`).join("") + marqueArbitrage(e);
 }
 
 function ligne(e) {
@@ -372,6 +381,7 @@ function detail(e) {
   let h = `<div class="detail">`;
   h += `<div class="meta">${dateLisible(e.date)}${e.chaine ? " · " + esc(e.chaine) : ""}${e.duree ? " · " + esc(e.duree) : ""}</div>`;
   if (e.description) h += `<p>${esc(e.description)}</p>`;
+  if (e.arbitrage && e.arbitrage.sorte === "thème") h += `<p class="meta">Thème arbitré${e.arbitrage.justification ? " · " + esc(e.arbitrage.justification) : ""}</p>`;
   h += `<div><h3>Attestations</h3><ul>` + e.att.map(([s, d, t, u]) =>
     `<li><span class="meta">${NOMS[s] || esc(s)} · ${esc(d)}</span> ${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t || u)}</a>` : esc(t || "enregistrement archivé")}</li>`
   ).join("") + `</ul></div>`;

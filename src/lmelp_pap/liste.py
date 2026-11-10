@@ -4,8 +4,9 @@ Vocabulaire : voir CONTEXT.md. Décisions : docs/adr/0001, 0002 et 0003.
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal
 
 from lmelp_pap.sources.audio_radiofrance import lire_nom_fichier
@@ -40,6 +41,11 @@ class Attestation:
     # une date de publication ne date pas l'émission.
     nature_date: Literal["première diffusion", "publication"] = "première diffusion"
 
+    @property
+    def cle(self) -> tuple[str, str]:
+        """L'attestation dans sa source : à quoi un arbitrage s'attache."""
+        return (self.source, self.source_id)
+
 
 @dataclass
 class Emission:
@@ -56,6 +62,28 @@ class Emission:
     animateur: str | None = None
     attestations: list[Attestation] = field(default_factory=list)
     enregistrements: list[Enregistrement] = field(default_factory=list)
+    arbitrage: "Arbitrage | None" = None  # l'arbitrage de thème appliqué
+
+
+@dataclass(frozen=True)
+class Arbitrage:
+    """Une décision humaine qui lève un doute, attachée à une attestation.
+
+    Sa clé est l'attestation (source et identifiant dans la source), pas
+    l'identifiant de l'émission, qui peut changer d'une construction à l'autre.
+    """
+
+    source: str
+    source_id: str
+    sorte: Literal["thème", "existence"]
+    themes: frozenset[str] = frozenset()  # pour un arbitrage de thème
+    justification: str = ""
+    date: datetime = datetime.min  # date de la décision
+
+    @property
+    def cle(self) -> tuple[str, str]:
+        """L'attestation arbitrée."""
+        return (self.source, self.source_id)
 
 
 @dataclass(frozen=True)
@@ -72,8 +100,10 @@ class Doute:
 
 def construire_liste(
     attestations: list[Attestation],
+    arbitrages: Sequence[Arbitrage] = (),
 ) -> tuple[list[Emission], list[Doute]]:
-    """Rapproche les attestations, construit la liste et détecte ses doutes.
+    """Rapproche les attestations, applique les arbitrages, construit la liste
+    et détecte ses doutes.
 
     Les doutes portent sur toutes les émissions, dans la liste ou non.
     """
@@ -89,10 +119,107 @@ def construire_liste(
             else:
                 _rapprocher(a, groupes)
 
-    emissions = sorted((_fusionner(g) for g in groupes), key=_cle_de_tri)
+    emissions, retirees = _arbitrer([_fusionner(g) for g in groupes], arbitrages)
+    emissions.sort(key=_cle_de_tri)
     _attribuer_identifiants(emissions)
     liste = [e for e in emissions if _dans_la_liste(e)]
-    return liste, _doutes(emissions)
+    return liste, (
+        _doutes(emissions)
+        + [_contradiction(e, a, dans_la_liste=False) for e, a in retirees]
+        + _orphelins(attestations, arbitrages)
+    )
+
+
+def _orphelins(
+    attestations: list[Attestation], arbitrages: Sequence[Arbitrage]
+) -> list[Doute]:
+    """Un doute par attestation arbitrée introuvable : l'arbitrage est sans effet."""
+    connues = {a.cle for a in attestations}
+    return [
+        Doute(
+            type="arbitrage orphelin",
+            emission_id="",
+            dans_la_liste=False,
+            source=a.source,
+            source_id=a.source_id,
+            detail=f"attestation introuvable ; {_decision(a)}",
+        )
+        for cle, (_rang, a) in sorted(_derniers(arbitrages).items())
+        if cle not in connues
+    ]
+
+
+def _contradiction(
+    emission: Emission, arbitrage: Arbitrage, dans_la_liste: bool
+) -> Doute:
+    """Un arbitrage qui contredit une source vérifiée n'est pas tranché en silence
+    (ADR 0003) : il s'applique, et c'est un doute."""
+    return Doute(
+        type="contradiction lmelp",
+        emission_id=emission.id,
+        dans_la_liste=dans_la_liste,
+        source=arbitrage.source,
+        source_id=arbitrage.source_id,
+        detail=f"vérifiée livres par lmelp, {_decision(arbitrage)}",
+    )
+
+
+def _contredit_lmelp(emission: Emission, arbitrage: Arbitrage) -> bool:
+    """L'arbitrage dit autre chose que lmelp : émission livres, qui existe."""
+    return _verifiee(emission) and (
+        arbitrage.sorte == "existence" or arbitrage.themes != {"livres"}
+    )
+
+
+def _decision(arbitrage: Arbitrage) -> str:
+    """La décision d'un arbitrage, en clair, pour le détail d'un doute."""
+    if arbitrage.sorte == "existence":
+        return "arbitrée inexistante"
+    return f"arbitrée {'+'.join(sorted(arbitrage.themes))}"
+
+
+def _derniers(
+    arbitrages: Sequence[Arbitrage],
+) -> dict[tuple[str, str], tuple[int, Arbitrage]]:
+    """Le plus récent arbitrage de chaque attestation, avec son rang.
+
+    Le rang ordonne les arbitrages par date, puis par position dans la
+    séquence : à date égale, le dernier l'emporte.
+    """
+    chronologie = sorted(arbitrages, key=lambda a: a.date)  # tri stable
+    return {a.cle: (rang, a) for rang, a in enumerate(chronologie)}
+
+
+def _arbitrer(
+    emissions: list[Emission], arbitrages: Sequence[Arbitrage]
+) -> tuple[list[Emission], list[tuple[Emission, Arbitrage]]]:
+    """Applique à chaque émission le dernier arbitrage de ses attestations.
+
+    Un arbitrage de thème remplace exactement ses thèmes ; un arbitrage
+    d'existence la retire de l'ensemble des émissions. Rend les émissions
+    gardées, et les émissions vérifiées retirées avec leur arbitrage.
+    """
+    par_attestation = _derniers(arbitrages)
+    gardees: list[Emission] = []
+    retirees: list[tuple[Emission, Arbitrage]] = []
+    for emission in emissions:
+        siens = [
+            par_attestation[a.cle]
+            for a in emission.attestations
+            if a.cle in par_attestation
+        ]
+        if not siens:
+            gardees.append(emission)
+            continue
+        _rang, arbitrage = max(siens, key=lambda r: r[0])
+        if arbitrage.sorte == "existence":
+            if _contredit_lmelp(emission, arbitrage):
+                retirees.append((emission, arbitrage))
+            continue
+        emission.themes = arbitrage.themes
+        emission.arbitrage = arbitrage
+        gardees.append(emission)
+    return gardees, retirees
 
 
 def _doutes(emissions: list[Emission]) -> list[Doute]:
@@ -153,6 +280,10 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
 
         # Une source vérifiée lève les doutes de thème et d'existence (ADR 0003).
         if _verifiee(emission):
+            if emission.arbitrage and _contredit_lmelp(emission, emission.arbitrage):
+                doutes.append(
+                    _contradiction(emission, emission.arbitrage, dans_la_liste)
+                )
             continue
         if (
             dans_la_liste
@@ -164,11 +295,13 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                 f"lmelp est complet depuis le {LMELP_COMPLET_DEPUIS:%d/%m/%Y}"
                 " pour les émissions littéraires",
             )
-        if not emission.themes:
-            ajouter("thème inconnu", "aucune source ne donne de thème")
-        divergence = _themes_divergents(emission.attestations)
-        if divergence:
-            ajouter("thèmes divergents", divergence)
+        # Un arbitrage de thème lève les doutes de thème.
+        if emission.arbitrage is None:
+            if not emission.themes:
+                ajouter("thème inconnu", "aucune source ne donne de thème")
+            divergence = _themes_divergents(emission.attestations)
+            if divergence:
+                ajouter("thèmes divergents", divergence)
         for a in emission.attestations:
             dates_des_fichiers = sorted(
                 {
