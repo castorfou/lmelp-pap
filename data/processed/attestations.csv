@@ -57,7 +57,6 @@ emission_id,source,source_id,date,themes,titre,url
 1960-02-11,ina,PH_PHD88020974,1960-02-11,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020974/litterature
 1960-03-10,ina,PH_PHD88020976,1960-03-10,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020976/litterature
 1960-03-10,ina,PH_PHZ16044883,1960-03-10,livres,Le masque et la plume : Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHZ16044883/le-masque-et-la-plume-litterature
-1960-03-17,ina,PH_PHD88020977,1960-03-17,,Georges FRANJU,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020977/georges-franju
 1960-04-07,ina,PH_PHD88020978,1960-04-07,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020978/litterature
 1960-06-09,ina,PH_PHD88020986,1960-06-09,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020986/litterature
 1960-06-30,ina,PH_PHD88020988,1960-06-30,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020988/litterature
@@ -65,13 +64,10 @@ emission_id,source,source_id,date,themes,titre,url
 1960-09-15,ina,PH_PHD88020990,1960-09-15,livres,Littéraire,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020990/litteraire
 1960-12-15,ina,PH_PHD88020991,1960-12-15,livres,Littéraire,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020991/litteraire
 1960-12-15,radiofrance,vintila-horia-dieu-est-ne-en-exil-fayard-attribue-mais-non-decerne-2053783,1960-12-15,livres,"""Dieu est né en exil"" de Vintila Horia, attribué, mais non décerné, 1960",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/vintila-horia-dieu-est-ne-en-exil-fayard-attribue-mais-non-decerne-2053783
-1961-01-05,ina,PH_PHD88020993,1961-01-05,,Chronique théâtrale,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020993/chronique-theatrale
 1961-02-21,ina,PH_PHD88020996,1961-02-21,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020996/litterature
 1961-03-02,ina,PH_PHD88020998,1961-03-02,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020998/litterature
-1961-03-16,ina,PH_PHD88021000,1961-03-16,,Luchino Visconti,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021000/luchino-visconti
 1961-05-11,ina,PH_PHD88021002,1961-05-11,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021002/litterature
 1961-06-15,ina,PH_PHD88021006,1961-06-15,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021006/litterature
-1961-10-12,ina,PH_PHD88021062,1961-10-12,cinéma;livres,Cinéma,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021062/cinema
 1961-10-26,ina,PH_PHD88021064,1961-10-26,livres,Littéraire,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021064/litteraire
 1961-11-16,ina,PH_PHD88021067,1961-11-16,livres,Jean CAU et Michel MOHRT invités du Masque et la plume,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021067/jean-cau-et-michel-mohrt-invites-du-masque-et-la-plume
 1961-11-16,radiofrance,georges-conchon-l-etat-sauvage-1624736,1961-11-16,livres,"""L'Etat sauvage"" de Georges Conchon, 1964",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/georges-conchon-l-etat-sauvage-1624736
@@ -89,7 +85,6 @@ emission_id,source,source_id,date,themes,titre,url
 1962-07-19,ina,PH_PHD88021047,1962-07-19,livres,Tribune sur Albert CAMUS,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021047/tribune-sur-albert-camus
 1962-10-25,ina,PH_PHD88021053,1962-10-25,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021053/litterature
 1962-11-11,ina,PH_PHD88021055,1962-11-11,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021055/litterature
-1962-11-22,ina,PH_PHD88021056,1962-11-22,,Cinema,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021056/cinema
 1962-11-29,ina,PH_PHD88021057,1962-11-29,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021057/litterature
 1962-11-29,radiofrance,anna-langfus-les-bagages-de-sable-3208120,1962-11-29,livres,"""Les Bagages de sable"" d'Anna Langfus, 1962",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/anna-langfus-les-bagages-de-sable-3208120
 1962-11-29,wayback_podcast,ITEMA_23787919,1962-11-29,,,
@@ -197,8 +192,6 @@ emission_id,source,source_id,date,themes,titre,url
 1975-11-02,radiofrance,villa-triste-5222355,1975-11-02,livres,"""Villa triste"" : un roman qui a le charme d'une aquarelle un peu délavée",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/villa-triste-5222355
 1976-01-04,ina,DA_CPC76051443,1976-01-04,,1ere émission,https://catalogue.ina.fr/doc/TV-RADIO/DA_CPC76051443/1ere-emission
 1976-01-04,ina,PH_PHD99227816,1976-01-04,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99227816/litterature
-1976-02-29,ina,DA_CPC76068375,1976-02-29,,Le western,https://catalogue.ina.fr/doc/TV-RADIO/DA_CPC76068375/le-western
-1976-02-29,ina,PH_PHD99227821,1976-02-29,,Spéciale Culture,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99227821/speciale-culture
 1976-03-14,ina,DA_CPC76053262,1976-03-14,,Le masque et la plume : émission du 14 mars 1976,https://catalogue.ina.fr/doc/TV-RADIO/DA_CPC76053262/le-masque-et-la-plume-emission-du-14-mars-1976
 1976-04-18,ina,PH_PHD99255798,1976-04-18,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255798/litterature
 1976-05-09,ina,PH_PHD99227825,1976-05-09,cinéma;livres,Les livres de cinéma,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99227825/les-livres-de-cinema
@@ -230,9 +223,6 @@ emission_id,source,source_id,date,themes,titre,url
 1981-04-12,ina,PH_PHD99255847,1981-04-12,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255847/litterature
 1981-10-25,ina,PH_PHD99255859,1981-10-25,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255859/litterature
 1982-01-17,ina,PH_PHY01001501,1982-01-17,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHY01001501/litterature
-1982-04-11,ina,PH_PHY02000910,1982-04-11,cinéma;livres,Cinéma,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHY02000910/cinema
-1982-05-16,ina,PH_PHY02000895,1982-05-16,,Spécial Vittorio Gassman,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHY02000895/special-vittorio-gassman
-1982-07-11,ina,PH_PHD99240788,1982-07-11,,Spécial Régine CRESPIN,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99240788/special-regine-crespin
 1982-11-14,ina,PH_PHD99255884,1982-11-14,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255884/litterature
 1982-11-14,radiofrance,de-si-braves-garcons-5273712,1982-11-14,livres,"""De si braves garçons"" : ce récit de l'enfance de Modiano suscite admiration et ironie chez les critiques",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/de-si-braves-garcons-5273712
 1982-11-14,radiofrance,dominique-fernandez-dans-la-main-de-l-ange-3799898,1982-11-14,livres,"""Dans la main de l'Ange"" de Dominique Fernandez, 1982",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/dominique-fernandez-dans-la-main-de-l-ange-3799898
@@ -240,7 +230,6 @@ emission_id,source,source_id,date,themes,titre,url
 1983-04-24,ina,PH_PHD99255904,1983-04-24,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255904/litterature
 1983-06-19,ina,PH_PHD99255913,1983-06-19,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255913/litterature
 1983-07-17,ina,PH_PHD99255917,1983-07-17,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255917/litterature
-1983-08-07,ina,PH_PHD99255920,1983-08-07,,Art lyrique : Festival d'Aix en Provence,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255920/art-lyrique-festival-d-aix-en-provence
 1983-10-02,ina,PH_PHD99255924,1983-10-02,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255924/litterature
 1983-10-30,ina,PH_PHD99255927,1983-10-30,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255927/litterature
 1984-01-08,ina,PH_PHD99255937,1984-01-08,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99255937/litterature
