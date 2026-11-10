@@ -1,11 +1,17 @@
 """Construction de la liste des émissions à partir des attestations des sources."""
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
-from lmelp_pap.liste import Attestation, Doute, Enregistrement, construire_liste
+from lmelp_pap.liste import (
+    Arbitrage,
+    Attestation,
+    Doute,
+    Enregistrement,
+    construire_liste,
+)
 
 
 def test_une_attestation_donne_une_emission_identifiee_par_sa_date() -> None:
@@ -806,3 +812,130 @@ def test_une_fiche_de_l_emission_entiere_n_est_pas_fragile() -> None:
     _liste, doutes = construire_liste([fiche, podcast])
 
     assert "attestation fragile" not in _types(doutes, "2025-06-01")
+
+
+# --- Arbitrages ----------------------------------------------------------------
+
+
+def _avignon() -> list[Attestation]:
+    """2010-07-11 : « Festival d'Avignon », notice INA et extrait sans thème."""
+    return [
+        Attestation(
+            source="ina",
+            source_id="RD_4294389.001",
+            date=date(2010, 7, 11),
+            titre="Le masque et la plume du 11 juillet 2010",
+        ),
+        Attestation(
+            source="radiofrance",
+            source_id="festival-d-avignon-5488789",
+            date=date(2010, 7, 11),
+            titre="Festival d'Avignon",
+            extrait=True,
+        ),
+    ]
+
+
+def _theme(
+    source: str, source_id: str, themes: set[str], jour: date = date(2026, 11, 10)
+) -> Arbitrage:
+    return Arbitrage(
+        source=source,
+        source_id=source_id,
+        sorte="thème",
+        themes=frozenset(themes),
+        justification="titre explicite",
+        date=datetime.combine(jour, datetime.min.time()),
+    )
+
+
+def test_un_arbitrage_de_theme_theatre_sort_l_emission_de_la_liste() -> None:
+    arbitrage = _theme("radiofrance", "festival-d-avignon-5488789", {"théâtre"})
+
+    liste, doutes = construire_liste(_avignon(), [arbitrage])
+
+    assert liste == []
+    assert _types(doutes, "2010-07-11") == []
+
+
+def test_une_emission_coupee_en_deux_arbitree_cinema_sort_de_la_liste() -> None:
+    # une attestation de chacune des deux émissions du 18 août 2024
+    arbitrages = [
+        _theme(
+            "radiofrance",
+            "le-masque-et-la-plume-du-dimanche-18-aout-2024-5609935",
+            {"cinéma"},
+        ),
+        _theme("ina", "RD_16239327.001", {"cinéma"}),
+    ]
+
+    liste, doutes = construire_liste(_dimanche_18_aout_2024(), arbitrages)
+
+    assert [e.id for e in liste] == []
+    assert "thèmes divergents" not in _types(doutes, "2024-08-18")
+    assert "thèmes divergents" not in _types(doutes, "2024-08-18-b")
+
+
+def test_un_arbitrage_d_existence_retire_l_emission_et_ses_doutes() -> None:
+    mage = _mage_du_kremlin()
+    arbitrage = Arbitrage(
+        source=mage.source,
+        source_id=mage.source_id,
+        sorte="existence",
+        date=datetime(2026, 11, 10),
+    )
+
+    liste, doutes = construire_liste([mage], [arbitrage])
+
+    assert liste == []
+    assert doutes == []
+
+
+def test_entre_deux_arbitrages_d_une_attestation_le_plus_recent_l_emporte() -> None:
+    recent = _theme("radiofrance", "festival-d-avignon-5488789", {"livres", "théâtre"})
+    ancien = _theme(
+        "radiofrance", "festival-d-avignon-5488789", {"théâtre"}, date(2026, 1, 1)
+    )
+
+    liste, _doutes = construire_liste(_avignon(), [recent, ancien])
+
+    assert [(e.id, e.themes) for e in liste] == [
+        ("2010-07-11", frozenset({"livres", "théâtre"}))
+    ]
+    assert liste[0].arbitrage == recent
+
+
+def test_un_arbitrage_sur_une_attestation_introuvable_est_orphelin() -> None:
+    orphelin = _theme("radiofrance", "fiche-disparue-1", {"cinéma"})
+
+    liste, doutes = construire_liste(_avignon(), [orphelin])
+
+    assert [(e.id, e.themes) for e in liste] == [("2010-07-11", frozenset())]
+    assert [
+        (d.type, d.emission_id, d.dans_la_liste, d.source, d.source_id)
+        for d in doutes
+        if d.type == "arbitrage orphelin"
+    ] == [("arbitrage orphelin", "", False, "radiofrance", "fiche-disparue-1")]
+
+
+def test_a_date_egale_le_dernier_arbitrage_de_l_emission_l_emporte() -> None:
+    ina = _theme("ina", "RD_4294389.001", {"théâtre"})
+    fiche = _theme("radiofrance", "festival-d-avignon-5488789", {"livres", "théâtre"})
+
+    liste, _doutes = construire_liste(_avignon(), [ina, fiche])
+
+    assert liste[0].arbitrage == fiche
+
+
+def test_un_arbitrage_qui_contredit_lmelp_est_un_doute() -> None:
+    # 2018-01-21 : vérifiée par lmelp (livres), arbitrée cinéma
+    fiche = _fiche("elena-ferrante-1", date(2018, 1, 21), {"livres"})
+    lmelp = _lmelp("elena-ferrante-1", date(2018, 1, 21))
+    arbitrage = _theme("radiofrance", "elena-ferrante-1", {"cinéma"})
+
+    liste, doutes = construire_liste([fiche, lmelp], [arbitrage])
+
+    assert liste == []
+    assert [(d.type, d.emission_id, d.dans_la_liste, d.source_id) for d in doutes] == [
+        ("contradiction lmelp", "2018-01-21", False, "elena-ferrante-1")
+    ]

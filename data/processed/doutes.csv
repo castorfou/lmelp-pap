@@ -459,7 +459,6 @@ collision,2008-02-03-b,non,,,une autre émission le même jour : 2008-02-03
 rapprochement ambigu,2008-02-03-b,non,ina,RD_3357265.001,rapprochable aussi de 2008-02-03
 thème inconnu,2009-07-12,oui,,,aucune source ne donne de thème
 thème inconnu,2009-07-19,oui,,,aucune source ne donne de thème
-thème inconnu,2010-07-11,oui,,,aucune source ne donne de thème
 thème inconnu,2010-07-18,oui,,,aucune source ne donne de thème
 collision,2011-02-20-b,non,,,une autre émission le même jour : 2011-02-20
 rapprochement ambigu,2011-02-20-b,non,wayback_podcast,ITEMA_20269909,rapprochable aussi de 2011-02-20
@@ -573,15 +572,12 @@ désaccord de date,2024-06-02,non,,,"radiofrance:2024-06-02, radiofrance:2024-06
 désaccord de date,2024-06-16,non,,,"radiofrance:2024-06-16, wayback_podcast:2024-06-16, ina:2024-06-16, ina:2024-06-16, radiofrance:2024-06-17, radiofrance:2024-06-17, wayback_podcast:2024-06-17, radiofrance:2024-06-18"
 désaccord de date,2024-07-14,non,,,"radiofrance:2024-07-14, wayback_podcast:2024-07-14, ina:2024-07-14, ina:2024-07-14, radiofrance:2024-07-15, radiofrance:2024-07-15, radiofrance:2024-07-15, wayback_podcast:2024-07-16"
 absente de lmelp,2024-07-21,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
-absente de lmelp,2024-08-18,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
-rapprochement ambigu,2024-08-18,oui,wayback_podcast,ITEMA_23830246,rapprochable aussi de 2024-08-18-b
-rapprochement ambigu,2024-08-18,oui,radiofrance,le-roman-de-jim-des-freres-larrieu-6664324,rapprochable aussi de 2024-08-18-b
-rapprochement ambigu,2024-08-18,oui,wayback_podcast,ITEMA_23832933,rapprochable aussi de 2024-08-18-b
-thèmes divergents,2024-08-18,oui,,,"radiofrance:cinéma, radiofrance:cinéma+livres (extrait), radiofrance:cinéma (extrait)"
-absente de lmelp,2024-08-18-b,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
-collision,2024-08-18-b,oui,,,une autre émission le même jour : 2024-08-18
-rapprochement ambigu,2024-08-18-b,oui,ina,RD_16239327.001,rapprochable aussi de 2024-08-18
-rapprochement ambigu,2024-08-18-b,oui,ina,RD_16239352.001,rapprochable aussi de 2024-08-18
+rapprochement ambigu,2024-08-18,non,ina,RD_16239327.001,rapprochable aussi de 2024-08-18-b
+rapprochement ambigu,2024-08-18,non,ina,RD_16239352.001,rapprochable aussi de 2024-08-18-b
+collision,2024-08-18-b,non,,,une autre émission le même jour : 2024-08-18
+rapprochement ambigu,2024-08-18-b,non,wayback_podcast,ITEMA_23830246,rapprochable aussi de 2024-08-18
+rapprochement ambigu,2024-08-18-b,non,radiofrance,le-roman-de-jim-des-freres-larrieu-6664324,rapprochable aussi de 2024-08-18
+rapprochement ambigu,2024-08-18-b,non,wayback_podcast,ITEMA_23832933,rapprochable aussi de 2024-08-18
 rapprochement ambigu,2024-09-08,oui,wayback_podcast,ITEMA_23853361,rapprochable aussi de 2024-09-09
 rapprochement ambigu,2024-09-08,oui,wayback_podcast,ITEMA_23854827,rapprochable aussi de 2024-09-09
 attestation fragile,2024-09-09,non,,,attestée seulement par des extraits
@@ -647,10 +643,6 @@ rapprochement ambigu,2025-12-28,oui,wayback_podcast,ITEMA_24353699,rapprochable 
 rapprochement ambigu,2025-12-28,oui,ina,RD_17632383.001,rapprochable aussi de 2025-12-21
 rapprochement ambigu,2025-12-28,oui,wayback_podcast,ITEMA_24354718,rapprochable aussi de 2025-12-21
 rapprochement ambigu,2025-12-28,oui,ina,RD_17632478.001,rapprochable aussi de 2025-12-21
-rapprochement ambigu,2026-01-11,non,wayback_podcast,ITEMA_24369995,rapprochable aussi de 2026-01-14
-absente de lmelp,2026-01-14,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
-attestation fragile,2026-01-14,oui,,,attestée seulement par des extraits
-republication,2026-01-14,oui,radiofrance,le-mage-du-kremlin-de-giuliano-da-empoli-1192090,"daté du 2026-01-14, enregistrement du 2022-03-14"
 rapprochement ambigu,2026-02-01,non,wayback_podcast,ITEMA_24393335,rapprochable aussi de 2026-02-01-b
 rapprochement ambigu,2026-02-01,non,ina,RD_17734979.001,rapprochable aussi de 2026-02-01-b
 rapprochement ambigu,2026-02-01,non,ina,RD_17735007.001,rapprochable aussi de 2026-02-01-b

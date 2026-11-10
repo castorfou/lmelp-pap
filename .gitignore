@@ -146,6 +146,8 @@ data/processed/*
 !data/processed/attestations.csv
 !data/processed/enregistrements.csv
 !data/processed/doutes.csv
+# Arbitrages : décisions humaines, rédigées à la main
+!data/processed/arbitrages.csv
 
 # ML models
 *.model

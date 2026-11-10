@@ -17,6 +17,8 @@ COLONNES_EMISSIONS = [
     "chaine",
     "heure",
     "duree",
+    "arbitrage",
+    "justification_arbitrage",
 ]
 COLONNES_ATTESTATIONS = [
     "emission_id",
@@ -57,6 +59,10 @@ def ecrire_liste(liste: list[Emission], doutes: list[Doute], dossier: Path) -> N
                 "chaine": e.chaine,
                 "heure": e.heure,
                 "duree": e.duree,
+                "arbitrage": e.arbitrage.sorte if e.arbitrage else None,
+                "justification_arbitrage": (
+                    e.arbitrage.justification if e.arbitrage else None
+                ),
             }
             for e in emissions
         ),

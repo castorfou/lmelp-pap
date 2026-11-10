@@ -16,6 +16,7 @@ La commande collecte chaque source dans un cache local, rapproche les attestatio
 | `--refresh` | Re-collecte les sources choisies, même si leur cache est complet. |
 | `--cache DOSSIER` | Dossier du cache (par défaut `data/raw/cache`). |
 | `--sortie DOSSIER` | Dossier des fichiers produits (par défaut `data/processed`). |
+| `--arbitrages FICHIER` | Fichier des arbitrages (par défaut `arbitrages.csv` dans le dossier de sortie). Sans ce fichier, aucun arbitrage n'est appliqué. |
 
 Exemple : rafraîchir seulement radiofrance.fr, puis reconstruire la liste.
 
@@ -38,7 +39,8 @@ Une page HTML présente la liste des émissions :
 - une frise des émissions par année, où un clic sur une année filtre la liste ;
 - une recherche sans tenir compte des accents ;
 - des filtres par thème, par source, « avec enregistrement » et par type de doute, et un bouton « Effacer les filtres » ;
-- le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements et doutes.
+- le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements et doutes ;
+- une marque « ✎ arbitré » à côté d'un thème fixé par un arbitrage, avec la justification au survol.
 
 ```bash
 uv run --active lmelp-pap page
@@ -82,7 +84,7 @@ Une fiche radiofrance.fr décrit soit l'émission entière, soit un **extrait** 
 
 ## Fichiers produits
 
-Les quatre fichiers sont versionnés dans git et liés par l'identifiant d'émission, sa date de première diffusion (`1958-12-04`), suffixée en cas de collision (`1957-10-24-b`).
+Les quatre fichiers produits par la commande sont versionnés dans git et liés par l'identifiant d'émission, sa date de première diffusion (`1958-12-04`), suffixée en cas de collision (`1957-10-24-b`).
 
 ### `emissions.csv`
 
@@ -96,6 +98,8 @@ Une ligne par émission de la liste.
 | `titre`, `description` | Titre et description, selon la source prioritaire. |
 | `animateur` | Animateur précisé par une source, sinon déduit de la date. Vide pour les années de transition (1970, 1989, 2023). |
 | `chaine`, `heure`, `duree` | Selon l'INA en priorité. |
+| `arbitrage` | `thème` si les thèmes viennent d'un arbitrage, vide sinon. |
+| `justification_arbitrage` | La justification de cet arbitrage, s'il en a une. |
 
 ### `attestations.csv`
 
@@ -127,11 +131,45 @@ Types de doute :
 - `thèmes divergents` : les attestations de l'émission entière ne donnent pas les mêmes thèmes, ou un extrait porte un thème qu'aucune d'elles ne donne. Des extraits aux thèmes différents (une fiche par livre, une par film) décrivent une émission mixte, sans divergence ;
 - `collision` : une autre émission a la même date de première diffusion ; le doute porte sur l'émission suffixée (`-b`, `-c`) ;
 - `republication` : un enregistrement d'une attestation porte, dans le nom de son fichier, une date à plus de trois jours de la sienne : une émission remise en ligne plus tard, ou une fiche rattachée à l'enregistrement d'une autre émission ;
-- `attestation fragile` : l'émission n'est attestée que par des extraits, que par la Wayback Machine, ou que par les deux.
+- `attestation fragile` : l'émission n'est attestée que par des extraits, que par la Wayback Machine, ou que par les deux ;
+- `contradiction lmelp` : un arbitrage contredit lmelp, en déclarant inexistante une émission vérifiée ou en lui donnant un autre thème que `livres` seul. L'arbitrage s'applique, mais la contradiction reste signalée ;
+- `arbitrage orphelin` : un arbitrage porte sur une attestation qu'aucune source ne donne plus ; il n'a aucun effet. Le doute n'a pas d'`emission_id` : `source` et `source_id` désignent l'attestation introuvable.
 
-Un champ simplement absent (durée, animateur) n'est pas un doute. Une émission attestée par lmelp n'a ni doute de thème (`thème inconnu`, `thèmes divergents`) ni doute d'existence (`republication`, `attestation fragile`).
+Un champ simplement absent (durée, animateur) n'est pas un doute. Une émission attestée par lmelp n'a ni doute de thème (`thème inconnu`, `thèmes divergents`) ni doute d'existence (`republication`, `attestation fragile`). Une émission dont le thème est arbitré n'a plus de doute de thème ; une émission arbitrée inexistante n'a plus aucun doute.
 
 `lmelp-pap emissions` affiche le nombre de doutes par type à la fin de la construction.
+
+## Arbitrages
+
+Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une émission, ou le fait qu'elle n'existe pas. Les arbitrages sont enregistrés dans `data/processed/arbitrages.csv`, versionné, rédigé à la main, et appliqués à chaque construction de la liste : une décision survit ainsi aux régénérations.
+
+| Colonne | Contenu |
+|---|---|
+| `source`, `source_id` | L'attestation à laquelle l'arbitrage s'attache, telle qu'elle figure dans `attestations.csv`. |
+| `sorte` | `thème` ou `existence`. |
+| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`). Pour un arbitrage d'existence, `n'existe pas`. |
+| `justification` | Facultative : « titre explicite », « écouté l'enregistrement », « connaissance de l'émission » ou texte libre. |
+| `date` | Date de la décision, au format ISO (`2026-11-10` ou `2026-11-10T14:30`). |
+
+Exemple :
+
+```csv
+source,source_id,sorte,valeur,justification,date
+ina,RD_4294389.001,thème,théâtre,titre explicite,2026-11-10
+radiofrance,le-mage-du-kremlin-de-giuliano-da-empoli-1192090,existence,n'existe pas,écouté l'enregistrement,2026-11-10
+```
+
+**Attestation plutôt qu'émission.** Un arbitrage s'attache à une attestation et non à l'identifiant d'une émission, qui peut changer (nouvelle date retenue, suffixe `-b`). Il s'applique à l'émission qui contient cette attestation, quelle que soit sa date. Choisir l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr.
+
+**Effets.** Les arbitrages s'appliquent après le rapprochement et avant le filtre de la liste :
+
+- un arbitrage de **thème** remplace exactement les thèmes de l'émission, sans les cumuler avec ceux des sources, et lève ses doutes de thème. Une émission arbitrée `théâtre` sort de la liste ; une émission arbitrée `livres;théâtre` y reste. La colonne `arbitrage` d'`emissions.csv` le signale ;
+- un arbitrage d'**existence** retire l'émission de l'ensemble des émissions : elle n'est ni dans la liste ni dans `doutes.csv` ;
+- un arbitrage dont l'attestation est introuvable n'a aucun effet et produit un doute `arbitrage orphelin` ;
+- si plusieurs arbitrages portent sur la même émission, le plus récent l'emporte ; à date égale, le dernier du fichier ;
+- un arbitrage qui contredit lmelp s'applique, et produit un doute `contradiction lmelp`.
+
+Un arbitrage n'atteste aucune émission : il tranche entre ce que disent les sources. La commande `lmelp-pap emissions` indique le nombre d'arbitrages lus.
 
 ## Règles de construction
 

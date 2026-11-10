@@ -164,3 +164,70 @@ def test_sans_acces_a_la_base_lmelp_la_collecte_est_sautee(
     assert code == 0
     assert "lmelp : collecte sautée" in capsys.readouterr().err
     assert not (cache / "lmelp" / "collecte_terminee").exists()
+
+
+def _doutes(chemin: Path) -> list[dict[str, str]]:
+    with chemin.open(encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def test_la_commande_applique_les_arbitrages_a_cote_de_la_liste(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache, sortie = tmp_path / "cache", tmp_path / "sortie"
+    _cache_rempli(cache)
+    sortie.mkdir()
+    (sortie / "arbitrages.csv").write_text(
+        "source,source_id,sorte,valeur,justification,date\n"
+        # 1967-01-01, attesté par le seul MP3 Wayback, au thème inconnu
+        "wayback_podcast,ITEMA_23820437,thème,théâtre,écouté l'enregistrement,"
+        "2026-11-10\n"
+        "ina,PH_INTROUVABLE,existence,n'existe pas,,2026-11-10\n",
+        encoding="utf-8",
+    )
+
+    main(["emissions", "--cache", str(cache), "--sortie", str(sortie)])
+
+    assert "1967-01-01" not in _ids(sortie / "emissions.csv")
+    doutes = _doutes(sortie / "doutes.csv")
+    # le thème est levé, l'existence reste fragile
+    assert [d["type"] for d in doutes if d["emission_id"] == "1967-01-01"] == [
+        "attestation fragile"
+    ]
+    assert [
+        (d["source"], d["source_id"])
+        for d in doutes
+        if d["type"] == "arbitrage orphelin"
+    ] == [("ina", "PH_INTROUVABLE")]
+    assert "arbitrage orphelin 1" in capsys.readouterr().err
+
+
+def test_un_theme_arbitre_est_marque_dans_emissions_csv(tmp_path: Path) -> None:
+    cache, sortie = tmp_path / "cache", tmp_path / "sortie"
+    _cache_rempli(cache)
+    arbitrages = tmp_path / "arbitrages.csv"
+    arbitrages.write_text(
+        "source,source_id,sorte,valeur,justification,date\n"
+        "wayback_podcast,ITEMA_23820437,thème,livres;théâtre,,2026-11-10\n",
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "emissions",
+            "--cache",
+            str(cache),
+            "--sortie",
+            str(sortie),
+            "--arbitrages",
+            str(arbitrages),
+        ]
+    )
+
+    with (sortie / "emissions.csv").open(encoding="utf-8", newline="") as f:
+        (ligne,) = [e for e in csv.DictReader(f) if e["id"] == "1967-01-01"]
+    assert (ligne["themes"], ligne["arbitrage"], ligne["justification_arbitrage"]) == (
+        "livres;théâtre",
+        "thème",
+        "",
+    )
