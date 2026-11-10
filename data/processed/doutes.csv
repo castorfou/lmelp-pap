@@ -1,10 +1,8 @@
 type,emission_id,dans_la_liste,source,source_id,detail
 thèmes divergents,1957-05-16,non,,,"radiofrance:cinéma+théâtre (extrait), ina:théâtre"
-thèmes divergents,1958-11-06,oui,,,"radiofrance:cinéma+livres (extrait), ina:cinéma"
 rapprochement ambigu,1958-12-04,oui,wayback_podcast,ITEMA_24232446,rapprochable aussi de 1958-12-06
 attestation fragile,1958-12-06,non,,,attestée seulement par des extraits
-désaccord de date,1959-03-23,oui,,,"ina:1959-03-23, ina:1959-03-26"
-thèmes divergents,1959-03-23,oui,,,"ina:livres+théâtre, ina:livres"
+désaccord de date,1959-03-23,non,,,"ina:1959-03-23, ina:1959-03-26"
 republication,1959-06-18,non,radiofrance,les-400-coups-de-francois-truffaut-2814275,"daté du 1959-06-18, enregistrement du 2024-10-24"
 republication,1959-06-25,non,radiofrance,francois-truffaut-invite-du-masque-pour-les-400-coups-1481200,"daté du 1959-06-25, enregistrement du 2024-10-24"
 thème inconnu,1960-03-17,oui,,,aucune source ne donne de thème
@@ -14,9 +12,7 @@ republication,1961-11-16,oui,radiofrance,georges-conchon-l-etat-sauvage-1624736,
 thème inconnu,1962-04-05,oui,,,aucune source ne donne de thème
 thème inconnu,1962-11-22,oui,,,aucune source ne donne de thème
 thèmes divergents,1964-11-29,non,,,"radiofrance:cinéma+théâtre (extrait), ina:théâtre"
-thèmes divergents,1967-01-01,oui,,,"radiofrance:cinéma+livres, ina:cinéma"
 thème inconnu,1967-10-01,oui,,,aucune source ne donne de thème
-thèmes divergents,1968-11-10,oui,,,"radiofrance:cinéma+livres (extrait), radiofrance:cinéma (extrait), ina:livres, ina:cinéma"
 collision,1969-10-26-b,non,,,une autre émission le même jour : 1969-10-26
 rapprochement ambigu,1969-10-26-b,non,wayback_podcast,ITEMA_23820430,rapprochable aussi de 1969-10-26
 attestation fragile,1969-11-23,non,,,attestée seulement par des extraits
@@ -400,7 +396,6 @@ thème inconnu,2001-08-05,oui,,,aucune source ne donne de thème
 thème inconnu,2001-08-12,oui,,,aucune source ne donne de thème
 thème inconnu,2001-08-19,oui,,,aucune source ne donne de thème
 thème inconnu,2001-08-26,oui,,,aucune source ne donne de thème
-thèmes divergents,2001-09-02,oui,,,"radiofrance:cinéma+livres (extrait), ina:cinéma"
 thème inconnu,2001-09-23,oui,,,aucune source ne donne de thème
 thème inconnu,2001-10-14,oui,,,aucune source ne donne de thème
 thème inconnu,2001-10-21,oui,,,aucune source ne donne de thème
@@ -440,7 +435,6 @@ thème inconnu,2002-12-22,oui,,,aucune source ne donne de thème
 collision,2003-07-13-b,non,,,une autre émission le même jour : 2003-07-13
 thème inconnu,2003-07-27,oui,,,aucune source ne donne de thème
 thème inconnu,2003-08-03,oui,,,aucune source ne donne de thème
-thèmes divergents,2004-06-06,oui,,,"radiofrance:cinéma, radiofrance:cinéma+livres (extrait), anciennes_listes:cinéma"
 collision,2005-01-23-b,non,,,une autre émission le même jour : 2005-01-23
 rapprochement ambigu,2005-01-23-b,non,wayback_podcast,ITEMA_23951193,rapprochable aussi de 2005-01-23
 rapprochement ambigu,2005-01-23-b,non,ina,RD_2181177.001,rapprochable aussi de 2005-01-23
@@ -474,8 +468,6 @@ collision,2016-05-15-b,non,,,une autre émission le même jour : 2016-05-15
 thème inconnu,2016-07-10,oui,,,aucune source ne donne de thème
 thème inconnu,2016-07-17,oui,,,aucune source ne donne de thème
 désaccord de date,2016-09-25,non,,,"ina:2016-09-23, radiofrance:2016-09-25, ina:2016-09-25, ina:2016-09-26"
-absente de lmelp,2018-12-09,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
-thème inconnu,2018-12-09,oui,,,aucune source ne donne de thème
 désaccord de date,2019-09-08,oui,,,"wayback_podcast:2019-09-07, radiofrance:2019-09-08, wayback_podcast:2019-09-08, ina:2019-09-08, ina:2019-09-09"
 désaccord de date,2020-06-27,non,,,"radiofrance:2020-06-27, wayback_podcast:2020-06-27, ina:2020-06-27, ina:2020-06-29"
 désaccord de date,2020-07-04,non,,,"radiofrance:2020-07-04, wayback_podcast:2020-07-04, ina:2020-07-04, ina:2020-07-05, ina:2020-07-06"
@@ -487,8 +479,6 @@ désaccord de date,2020-08-08,non,,,"radiofrance:2020-08-08, ina:2020-08-08, ina
 désaccord de date,2020-08-15,oui,,,"radiofrance:2020-08-15, wayback_podcast:2020-08-15, ina:2020-08-15, ina:2020-08-16, ina:2020-08-17"
 désaccord de date,2020-08-22,non,,,"radiofrance:2020-08-22, ina:2020-08-22, ina:2020-08-23, ina:2020-08-24"
 désaccord de date,2022-01-02,non,,,"radiofrance:2022-01-02, ina:2022-01-02, ina:2022-01-03, wayback_podcast:2022-01-05"
-absente de lmelp,2022-04-11,oui,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires
-thème inconnu,2022-04-11,oui,,,aucune source ne donne de thème
 désaccord de date,2022-12-11,oui,,,"radiofrance:2022-12-11, wayback_podcast:2022-12-11, ina:2022-12-11, ina:2022-12-12, ina:2022-12-14"
 collision,2023-10-29-b,non,,,une autre émission le même jour : 2023-10-29
 rapprochement ambigu,2023-10-29-b,non,wayback_podcast,ITEMA_23534541,rapprochable aussi de 2023-10-29

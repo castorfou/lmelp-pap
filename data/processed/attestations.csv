@@ -31,9 +31,6 @@ emission_id,source,source_id,date,themes,titre,url
 1958-06-19,ina,PH_PHD88020879,1958-06-19,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020879/litterature
 1958-07-03,ina,PH_PHD88020881,1958-07-03,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020881/litterature
 1958-10-23,ina,PH_PHD88020882,1958-10-23,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020882/litterature
-1958-11-06,ina,PH_PHD88020884,1958-11-06,cinéma,Cinéma,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020884/cinema
-1958-11-06,radiofrance,romain-gary-pour-les-racines-du-ciel-9501751,1958-11-06,cinéma;livres,"Romain Gary sur ""Les Racines du ciel"" : ""L'auteur doit être le metteur en scène et le scénariste""",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/romain-gary-pour-les-racines-du-ciel-9501751
-1958-11-06,wayback_podcast,ITEMA_24232445,1958-11-06,,,
 1958-11-13,ina,PH_PHD88020885,1958-11-13,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020885/litterature
 1958-12-04,ina,PH_PHD88020888,1958-12-04,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020888/litterature
 1958-12-04,radiofrance,louis-aragon-4684213,1958-12-04,livres,"Louis Aragon : ""Je déteste cette façon d'expliquer le passé par le présent""",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/louis-aragon-4684213
@@ -43,8 +40,6 @@ emission_id,source,source_id,date,themes,titre,url
 1959-01-08,ina,PH_PHD88020893,1959-01-08,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020893/litterature
 1959-02-05,ina,PH_PHD88020931,1959-02-05,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020931/litterature
 1959-03-05,ina,PH_PHD88020935,1959-03-05,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020935/litterature
-1959-03-23,ina,PH_PHD88020938,1959-03-23,livres;théâtre,Théâtre : édition spéciale sur les problèmes et réformes du théâtre en France,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020938/theatre-edition-speciale-sur-les-problemes-et-reformes-du-theatre-en-france
-1959-03-23,ina,PH_PHD88020939,1959-03-26,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020939/litterature
 1959-04-09,ina,PH_PHD88020941,1959-04-09,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88020941/litterature
 1959-04-09,radiofrance,elsa-triolet-pour-roses-a-credit-6468050,1959-04-09,livres,"Elsa Triolet pour ""Roses à crédit"" : ""Les objets ne nous servent plus. C'est nous qui les servons""",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/elsa-triolet-pour-roses-a-credit-6468050
 1959-04-09,wayback_podcast,ITEMA_24232448,1959-04-09,,,
@@ -143,9 +138,6 @@ emission_id,source,source_id,date,themes,titre,url
 1966-11-20,ina,PH_PHD99243580,1966-11-20,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99243580/litterature
 1966-11-20,radiofrance,edmonde-charles-roux-oublier-palerme-1115861,1966-11-20,livres,"Edmonde Charles-Roux pour ""Oublier Palerme"", 1966",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/edmonde-charles-roux-oublier-palerme-1115861
 1966-11-20,wayback_podcast,ITEMA_23787922,1966-11-20,,,
-1967-01-01,ina,PH_PHD99205665,1967-01-01,cinéma,Cinéma,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99205665/cinema
-1967-01-01,radiofrance,francois-truffaut-invite-du-masque-pour-parler-d-alfred-hitchcock-1030980,1967-01-01,cinéma;livres,"""Le cinéma selon Hitchcock"" par Truffaut",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/francois-truffaut-invite-du-masque-pour-parler-d-alfred-hitchcock-1030980
-1967-01-01,wayback_podcast,ITEMA_23820437,1967-01-01,,,
 1967-02-05,ina,PH_PHD99205670,1967-02-05,livres,Littérature : SARTRE en question,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99205670/litterature-sartre-en-question
 1967-06-11,ina,PH_PHD99205708,1967-06-11,livres,Littérature : SARTRE et le structuralisme,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99205708/litterature-sartre-et-le-structuralisme
 1967-06-25,ina,PH_PHD99205710,1967-06-25,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99205710/litterature
@@ -158,11 +150,6 @@ emission_id,source,source_id,date,themes,titre,url
 1968-04-07,ina,PH_PHD99207069,1968-04-07,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99207069/litterature
 1968-05-19,ina,PH_PHD99207075,1968-05-19,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99207075/litterature
 1968-11-03,ina,PH_PHD99207081,1968-11-03,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99207081/litterature
-1968-11-10,ina,PH_PHD99207082,1968-11-10,cinéma,Cinéma,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99207082/cinema
-1968-11-10,ina,PH_PHF13026962,1968-11-10,livres,Journée Apollinaire pour le 50e anniversaire de la mort du poète,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHF13026962/journee-apollinaire-pour-le-50e-anniversaire-de-la-mort-du-poete
-1968-11-10,radiofrance,la-chamade-d-alain-cavalier-1968-1947553,1968-11-10,cinéma;livres,"""La Chamade"" d'Alain Cavalier, 1968",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/la-chamade-d-alain-cavalier-1968-1947553
-1968-11-10,radiofrance,rosemary-s-baby-de-roman-polanski-8303032,1968-11-10,cinéma,"""Rosemary's Baby"" de Roman Polanski met d'accord Charensol et Bory",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/rosemary-s-baby-de-roman-polanski-8303032
-1968-11-10,wayback_podcast,ITEMA_23968213,1968-11-10,,,
 1968-11-17,ina,PH_PHD99207083,1968-11-17,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99207083/litterature
 1969-02-09,ina,PH_PHD99209855,1969-02-09,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99209855/litterature
 1969-03-23,ina,PH_PHD99209861,1969-03-23,livres,Littérature : Louis-Ferdinand CELINE,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99209861/litterature-louis-ferdinand-celine
@@ -783,9 +770,6 @@ emission_id,source,source_id,date,themes,titre,url
 2001-08-12,ina,RD_1304969.001,2001-08-12,,Le masque et la plume du 12 août 2001,https://catalogue.ina.fr/doc/TV-RADIO/RD_1304969.001/le-masque-et-la-plume-du-12-aout-2001
 2001-08-19,ina,RD_1308897.001,2001-08-19,,Le masque et la plume du 19 août 2001,https://catalogue.ina.fr/doc/TV-RADIO/RD_1308897.001/le-masque-et-la-plume-du-19-aout-2001
 2001-08-26,ina,RD_1311708.001,2001-08-26,,Le masque et la plume du 26 août 2001,https://catalogue.ina.fr/doc/TV-RADIO/RD_1311708.001/le-masque-et-la-plume-du-26-aout-2001
-2001-09-02,ina,RD_1313707.001,2001-09-02,cinéma,Cinéma,https://catalogue.ina.fr/doc/TV-RADIO/RD_1313707.001/cinema
-2001-09-02,radiofrance,la-pianiste-de-michael-haneke-3381667,2001-09-02,cinéma;livres,"""La Pianiste"" de Michael Haneke : les critiques partagés entre incompréhension, ennui ou admiration",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/la-pianiste-de-michael-haneke-3381667
-2001-09-02,wayback_podcast,ITEMA_24380345,2001-09-02,,,
 2001-09-09,ina,RD_1315350.001,2001-09-09,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/RD_1315350.001/litterature
 2001-09-09,radiofrance,cosmetique-de-l-ennemi-d-amelie-nothomb-8058000,2001-09-09,livres,"""Cosmétique de l'ennemi"", 2001",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/cosmetique-de-l-ennemi-d-amelie-nothomb-8058000
 2001-09-09,wayback_podcast,ITEMA_24041571,2001-09-09,,,
@@ -913,10 +897,6 @@ emission_id,source,source_id,date,themes,titre,url
 2004-05-16,anciennes_listes,em-23567,2004-05-16,livres,Livres,
 2004-05-16,ina,RD_1989070.001,2004-05-16,,Le masque et la plume : émission du 16 mai 2004,https://catalogue.ina.fr/doc/TV-RADIO/RD_1989070.001/le-masque-et-la-plume-emission-du-16-mai-2004
 2004-05-16,radiofrance,livres-5336842,2004-05-16,livres,Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/livres-5336842
-2004-06-06,anciennes_listes,em-23969,2004-06-06,cinéma,Cinéma,
-2004-06-06,ina,RD_2004148.001,2004-06-06,,Le masque et la plume : émission du 06 juin 2004,https://catalogue.ina.fr/doc/TV-RADIO/RD_2004148.001/le-masque-et-la-plume-emission-du-06-juin-2004
-2004-06-06,radiofrance,cinema-3575436,2004-06-06,cinéma,Cinéma,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/cinema-3575436
-2004-06-06,radiofrance,ma-mere-de-christophe-honore-9115848,2004-06-06,cinéma;livres,"""Ma mère"" de Christophe Honoré : une ""catastrophe"" pour la majorité des critiques du Masque",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/ma-mere-de-christophe-honore-9115848
 2004-06-27,anciennes_listes,em-25005,2004-06-27,livres,Livres,
 2004-06-27,ina,RD_2017308.001,2004-06-27,livres,Le masque et la plume : émission du 27 juin 2004,https://catalogue.ina.fr/doc/TV-RADIO/RD_2017308.001/le-masque-et-la-plume-emission-du-27-juin-2004
 2004-06-27,radiofrance,livres-1270473,2004-06-27,livres,Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/livres-1270473
@@ -1670,10 +1650,6 @@ emission_id,source,source_id,date,themes,titre,url
 2018-11-25,radiofrance,haruki-murakami-jane-birkin-benoit-duteurtre-nicolas-mathieu-quels-sont-les-auteurs-a-ne-pas-manquer-9029210,2018-11-25,livres,"Haruki Murakami, Jane Birkin, Benoît Duteurtre, Nicolas Mathieu… Quels sont les auteurs à ne pas manquer ?",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/haruki-murakami-jane-birkin-benoit-duteurtre-nicolas-mathieu-quels-sont-les-auteurs-a-ne-pas-manquer-9029210
 2018-11-25,radiofrance,nicolas-mathieu-leurs-enfants-apres-eux-3528246,2018-11-25,livres,"""Leurs enfants après eux"" de Nicolas Mathieu, 2018",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/nicolas-mathieu-leurs-enfants-apres-eux-3528246
 2018-11-25,wayback_podcast,ITEMA_21902501,2018-11-25,,,
-2018-12-09,ina,RD_8202468.001,2018-12-09,,Le masque et la plume : émission du 09 décembre 2018,https://catalogue.ina.fr/doc/TV-RADIO/RD_8202468.001/le-masque-et-la-plume-emission-du-09-decembre-2018
-2018-12-09,ina,RD_8202482.001,2018-12-10,,Le masque et la plume : émission du 10 décembre 2018,https://catalogue.ina.fr/doc/TV-RADIO/RD_8202482.001/le-masque-et-la-plume-emission-du-10-decembre-2018
-2018-12-09,radiofrance,la-locandiera-l-ecole-des-femmes-la-machine-de-turing-berlin-kabarett-quelles-pieces-faut-il-voir-8783696,2018-12-09,,"“La Locandiera”, “L’Ecole des femmes”, “La Machine de Turing”, “Berlin Kabarett”… Quelles pièces faut-il voir?",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/la-locandiera-l-ecole-des-femmes-la-machine-de-turing-berlin-kabarett-quelles-pieces-faut-il-voir-8783696
-2018-12-09,wayback_podcast,ITEMA_21915955,2018-12-09,,,
 2018-12-23,ina,RD_8276703.001,2018-12-23,livres,Le masque et la plume : émission du 23 décembre 2018,https://catalogue.ina.fr/doc/TV-RADIO/RD_8276703.001/le-masque-et-la-plume-emission-du-23-decembre-2018
 2018-12-23,ina,RD_8276717.001,2018-12-24,,Le masque et la plume : émission du 24 décembre 2018,https://catalogue.ina.fr/doc/TV-RADIO/RD_8276717.001/le-masque-et-la-plume-emission-du-24-decembre-2018
 2018-12-23,lmelp,les-nouveaux-livres-de-patti-smith-sophie-des-deserts-linn-ullmann-pascal-bruckner-alain-mabanckou-6339777,2018-12-23,livres,"Les nouveaux livres de Patti Smith, Sophie des Déserts, Linn Ullmann, Pascal Bruckner, Alain Mabanckou...",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-nouveaux-livres-de-patti-smith-sophie-des-deserts-linn-ullmann-pascal-bruckner-alain-mabanckou-6339777
@@ -1993,7 +1969,6 @@ emission_id,source,source_id,date,themes,titre,url
 2022-03-27,ina,RD_13790331.001,2022-03-28,,Le masque et la plume : émission du 28 mars 2022,https://catalogue.ina.fr/doc/TV-RADIO/RD_13790331.001/le-masque-et-la-plume-emission-du-28-mars-2022
 2022-03-27,lmelp,le-masque-et-la-plume-du-dimanche-27-mars-2022-1629887,2022-03-27,livres,"Les nouveaux livres de Jean-Marc Parisis, Tonino Benacquista, Jeanine Cummins, Yann Moix, Nancy Huston",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-du-dimanche-27-mars-2022-1629887
 2022-03-27,radiofrance,le-masque-et-la-plume-du-dimanche-27-mars-2022-1629887,2022-03-27,,"Les nouveaux livres de Jean-Marc Parisis, Tonino Benacquista, Jeanine Cummins, Yann Moix, Nancy Huston",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-du-dimanche-27-mars-2022-1629887
-2022-04-11,ina,RD_13797941.001,2022-04-11,,Le masque et la plume : émission du 11 avril 2022,https://catalogue.ina.fr/doc/TV-RADIO/RD_13797941.001/le-masque-et-la-plume-emission-du-11-avril-2022
 2022-04-24,ina,RD_13811469.001,2022-04-24,,Le masque et la plume : émission du 24 avril 2022,https://catalogue.ina.fr/doc/TV-RADIO/RD_13811469.001/le-masque-et-la-plume-emission-du-24-avril-2022
 2022-04-24,ina,RD_13811500.001,2022-04-25,,Le masque et la plume : émission du 25 avril 2022,https://catalogue.ina.fr/doc/TV-RADIO/RD_13811500.001/le-masque-et-la-plume-emission-du-25-avril-2022
 2022-04-24,lmelp,les-nouveaux-ouvrages-de-francois-truffaut-joel-dicker-jean-philippe-toussaint-paule-constant-4010930,2022-04-24,livres,"Les nouveaux ouvrages de Joël Dicker, Jean-Philippe Toussaint, Paule Constant, François Truffaut…",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-nouveaux-ouvrages-de-francois-truffaut-joel-dicker-jean-philippe-toussaint-paule-constant-4010930
