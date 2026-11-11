@@ -1086,3 +1086,39 @@ def test_un_renvoi_pose_apres_un_arbitrage_de_theme_le_retire() -> None:
         ("attestation fragile", True),
         ("thème inconnu", True),
     ]
+
+
+# --- Thème hommage ----------------------------------------------------------------
+
+
+def _derniere_de_garcin() -> list[Attestation]:
+    """2023-12-31 : « La dernière de Jérôme Garcin », absente de lmelp, entre
+    deux émissions vérifiées."""
+    return [
+        _fiche("verifiee-1", date(2023, 12, 17), {"livres"}),
+        _lmelp("verifiee-1", date(2023, 12, 17)),
+        _fiche("la-derniere-de-jerome-garcin-2", date(2023, 12, 31), set()),
+        _fiche("verifiee-3", date(2024, 1, 14), {"livres"}),
+        _lmelp("verifiee-3", date(2024, 1, 14)),
+    ]
+
+
+def test_un_arbitrage_hommage_sort_l_emission_et_garde_son_absence_de_lmelp() -> None:
+    hommage = _theme("radiofrance", "la-derniere-de-jerome-garcin-2", {"hommage"})
+
+    liste, doutes = construire_liste(_derniere_de_garcin(), [hommage])
+
+    assert [e.id for e in liste] == ["2023-12-17", "2024-01-14"]
+    assert [
+        (d.type, d.dans_la_liste) for d in doutes if d.emission_id == "2023-12-31"
+    ] == [("absente de lmelp", False)]
+
+
+def test_un_arbitrage_hommage_sort_une_emission_meme_au_theme_livres() -> None:
+    # 2025-12-28 : « Le Masque et la Plume fête ses 70 ans »
+    fiche = _fiche("70-ans-1", date(2025, 12, 28), {"cinéma", "livres", "théâtre"})
+    hommage = _theme("radiofrance", "70-ans-1", {"hommage"})
+
+    liste, _doutes = construire_liste([fiche], [hommage])
+
+    assert liste == []

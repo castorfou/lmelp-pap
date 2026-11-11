@@ -317,8 +317,10 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                     _contradiction(emission, emission.arbitrage, dans_la_liste)
                 )
             continue
+        # Une émission hommage sort de la liste, mais son absence de lmelp,
+        # qu'elle explique, reste tracée.
         if (
-            dans_la_liste
+            (dans_la_liste or HOMMAGE in emission.themes)
             and derniere_verifiee
             and LMELP_COMPLET_DEPUIS <= emission.date <= derniere_verifiee
         ):
@@ -410,6 +412,9 @@ SOURCES_VERIFIEES = frozenset({"lmelp"})
 # lmelp est complet depuis cette date : une émission de la liste qui n'y figure
 # pas, jusqu'à sa dernière émission, est un doute.
 LMELP_COMPLET_DEPUIS = date(2017, 1, 1)
+# Le thème d'une émission sans critique nouvelle, consacrée au Masque ou à l'un
+# de ses critiques : il ne se cumule avec aucun autre et sort l'émission de la liste.
+HOMMAGE = "hommage"
 
 # Pour chaque champ, les sources par ordre de priorité décroissante (issue #2).
 PRIORITES: dict[str, tuple[str, ...]] = {

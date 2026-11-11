@@ -102,6 +102,20 @@ def test_un_arbitrage_de_theme_est_ecrit_et_sort_l_emission_de_la_liste(
     assert "1967-01-01" not in {e["id"] for e in _lignes(sortie / "emissions.csv")}
 
 
+def test_un_arbitrage_hommage_sort_l_emission_de_la_liste(
+    url: str, sortie: Path
+) -> None:
+    donnees = _post(
+        f"{url}/api/arbitrages",
+        {"emission_id": "1967-01-01", "sorte": "thème", "themes": ["hommage"]},
+    )
+
+    assert "1967-01-01" not in _ids(donnees)
+    [arbitrage] = _lignes(sortie / "arbitrages.csv")
+    assert (arbitrage["sorte"], arbitrage["valeur"]) == ("thème", "hommage")
+    assert "1967-01-01" not in {e["id"] for e in _lignes(sortie / "emissions.csv")}
+
+
 def test_annuler_l_arbitrage_remet_l_emission_dans_la_liste(
     url: str, sortie: Path
 ) -> None:
@@ -181,6 +195,11 @@ def test_n_existe_pas_retire_l_emission_et_ses_doutes(url: str, sortie: Path) ->
         {"emission_id": "1900-01-01", "sorte": "existence"},
         {"emission_id": "1967-01-01", "sorte": "thème", "themes": []},
         {"emission_id": "1967-01-01", "sorte": "thème", "themes": ["peinture"]},
+        {
+            "emission_id": "1967-01-01",
+            "sorte": "thème",
+            "themes": ["hommage", "livres"],
+        },
         {"emission_id": "1967-01-01", "sorte": "autre"},
     ],
 )

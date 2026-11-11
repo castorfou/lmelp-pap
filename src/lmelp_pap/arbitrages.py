@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from lmelp_pap.liste import Arbitrage
+from lmelp_pap.liste import HOMMAGE, Arbitrage
 
 
 INEXISTANTE = "n'existe pas"
@@ -25,8 +25,21 @@ THEMES = (
     "télévision",
     "musique",
     "variétés",
+    HOMMAGE,
 )
 COLONNES = ["source", "source_id", "sorte", "valeur", "justification", "date"]
+
+
+def erreur_de_themes(themes: frozenset[str]) -> str | None:
+    """Pourquoi ces thèmes ne font pas un arbitrage de thème, ou None.
+
+    Il en faut au moins un, parmi ``THEMES`` ; ``hommage`` est seul.
+    """
+    if not themes or not themes <= set(THEMES):
+        return f"thèmes invalides : {sorted(themes)} (attendu : {THEMES})"
+    if HOMMAGE in themes and len(themes) > 1:
+        return f"le thème {HOMMAGE} ne se cumule avec aucun autre : {sorted(themes)}"
+    return None
 
 
 def lire_arbitrages(chemin: Path) -> list[Arbitrage]:
@@ -42,6 +55,8 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
     sorte, valeur = ligne["sorte"].strip(), ligne["valeur"].strip()
     themes = frozenset(t.strip() for t in valeur.split(";") if t.strip())
     if sorte == "thème" and themes:
+        if erreur := erreur_de_themes(themes):
+            raise ValueError(f"arbitrages.csv, ligne {numero} : {erreur}")
         sorte_lue: Literal["thème", "existence", "écoute"] = "thème"
     elif sorte == "existence" and valeur == INEXISTANTE:
         sorte_lue, themes = "existence", frozenset()

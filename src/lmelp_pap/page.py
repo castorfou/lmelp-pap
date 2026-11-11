@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from lmelp_pap.arbitrages import THEMES
+from lmelp_pap.liste import HOMMAGE
 
 
 def construire_page(dossier: Path, arbitrage: bool = False) -> str:
@@ -22,9 +23,9 @@ def construire_page(dossier: Path, arbitrage: bool = False) -> str:
     """
     gabarit = _ressource("page.html").replace(
         "__ARBITRAGE__",
-        _ressource("arbitrage.html").replace(
-            "__THEMES__", json.dumps(THEMES, ensure_ascii=False)
-        )
+        _ressource("arbitrage.html")
+        .replace("__THEMES__", json.dumps(THEMES, ensure_ascii=False))
+        .replace("__HOMMAGE__", json.dumps(HOMMAGE, ensure_ascii=False))
         if arbitrage
         else "",
     )
