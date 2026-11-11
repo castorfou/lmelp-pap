@@ -39,7 +39,7 @@ Une émission entière remise en ligne après sa diffusion, par exemple dans un 
 _Avoid_ : réédition, rediffusion
 
 **Thème** :
-Le ou les domaines critiqués dans une émission : livres, cinéma, théâtre, opéra, télévision, musique, variétés. Une émission mixte a plusieurs thèmes ; le thème d'une émission attestée seulement par un enregistrement peut être inconnu.
+Le ou les domaines critiqués dans une émission : livres, cinéma, théâtre, opéra, télévision, musique, variétés. Une émission sans critique nouvelle, consacrée au Masque ou à l'un de ses critiques (souvenirs, passage de témoin, anniversaire), a le thème hommage, qui ne se cumule avec aucun autre : elle sort de la liste, même si elle évoque des livres. Une émission mixte a plusieurs thèmes ; le thème d'une émission attestée seulement par un enregistrement peut être inconnu.
 _Avoid_ : type, catégorie, genre
 
 **Enregistrement** :
@@ -49,6 +49,10 @@ _Avoid_ : audio, podcast, MP3
 **Animateur** :
 La personne qui présente l'émission à une date donnée (Michel Polac et François-Régis Bastide, puis Pierre Bouteiller, Jérôme Garcin…). Il se déduit de la date, sauf si une source précise un remplaçant.
 _Avoid_ : présentateur, producteur
+
+**Jour de diffusion** :
+Le jour de la semaine où l'émission passe habituellement à une période donnée : le jeudi de 1958 à 1963, le dimanche avant et après. Les années de changement (1957, 1964-1965) n'en ont pas. Une émission datée d'un autre jour est une exception à vérifier : un événement particulier, ou une date erronée.
+_Avoid_ : jour de programmation, créneau
 
 ### Sources et liste
 
@@ -73,8 +77,12 @@ Un point d'une émission que les sources ne permettent pas d'affirmer avec certi
 _Avoid_ : signalement, anomalie, alerte
 
 **Arbitrage** :
-Une décision humaine qui lève un doute : le thème d'une émission, ou le fait qu'elle n'existe pas. Il s'attache à une attestation de l'émission et s'applique à chaque construction de la liste. Ce n'est pas une source : il n'atteste aucune émission, il tranche entre ce que disent les sources. Il se décide dans lmelp-pap, émission par émission, alors qu'une source vérifiée apporte des vérifications faites ailleurs.
+Une décision humaine qui lève un doute : le thème d'une émission, sa date de première diffusion, l'émission à laquelle se rattache une attestation, ou le fait qu'elle n'existe pas. Il s'attache à une attestation de l'émission et s'applique à chaque construction de la liste. Ce n'est pas une source : il n'atteste aucune émission, il tranche entre ce que disent les sources. Il se décide dans lmelp-pap, émission par émission, alors qu'une source vérifiée apporte des vérifications faites ailleurs.
 _Avoid_ : correction manuelle, saisie, override
+
+**Renvoi à l'écoute** :
+Une décision humaine qui reconnaît qu'un doute ne peut pas être levé avec les informations disponibles, seulement en écoutant l'émission, que son enregistrement soit en ligne ou non. Il ne lève pas le doute, il le marque « à écouter ». L'écoute aboutit ensuite à un arbitrage. Comme l'arbitrage, il s'attache à une attestation et se décide dans lmelp-pap.
+_Avoid_ : report, mise de côté, doute insoluble
 
 **Liste des émissions** :
 L'ensemble des émissions attestées dont le thème inclut les livres ou est inconnu, toutes sources rapprochées, de 1955 à aujourd'hui. Le périmètre patrimonial (1955-2016) en est un sous-ensemble.
