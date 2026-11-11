@@ -39,11 +39,18 @@ Une page HTML présente la liste des émissions :
 - une frise des émissions par année, où un clic sur une année filtre la liste ;
 - une recherche sans tenir compte des accents ;
 - des filtres par thème, par source, « avec enregistrement » et par type de doute, et un bouton « Effacer les filtres » ;
+- dans les sources de chaque émission, le badge vert `lmelp ✓` de la source vérifiée, les autres sources en gris ;
 - le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements avec leur durée quand elle est connue (`extrait · 3:56 · 14007-18.10.1975-…m4a`) et doutes ;
 - une marque « ✎ arbitré » à côté d'un thème fixé par un arbitrage, avec la justification au survol.
 
 ```bash
 uv run --active lmelp-pap page
+```
+
+La frise compte les émissions qui passent tous les filtres sauf l'année : avec « Thème : inconnu », chaque barre ne compte que les émissions de thème inconnu de son année, l'échelle verticale se recalcule sur la plus haute barre et l'infobulle donne les mêmes nombres. Elle montre toujours toutes les années, puisqu'elle sert à en choisir une : choisir une année ne change pas les barres des autres. Sans filtre, son en-tête invite à cliquer une année ; avec des filtres, il les affiche, chacun avec une croix qui le retire, suivis d'un lien « Tout effacer » qui fait comme « Effacer les filtres » :
+
+```
+Année 2010 ×   Thème : inconnu ×   Avec enregistrement ×   « Duras » ×        Tout effacer
 ```
 
 La commande lit les CSV de `data/processed/` et écrit `docs/emissions/index.html`. Ce fichier autonome s'ouvre directement dans un navigateur, sans serveur. Les données et le code y sont embarqués ; seules les polices de caractères viennent d'Internet. Le fichier est régénéré à partir des CSV et n'est pas versionné.

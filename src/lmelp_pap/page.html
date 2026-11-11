@@ -24,6 +24,7 @@
   --alerte: #b4361f;
   --alerte-soft: #fbe6e1;
   --periode: #eaeef3;
+  --verifiee: #1d7a46;
   --f-display: "Literata", Georgia, "Times New Roman", serif;
   --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -32,13 +33,13 @@
   :root:not([data-theme="light"]) {
     --bg: #10151c; --surface: #171e27; --fg: #e4e9f0; --muted: #94a0b0; --rule: #273140;
     --accent: #8ea6ff; --accent-soft: #1f2a4a; --livres: #8ea6ff; --autre: #d9b664; --autre-soft: #2f2716;
-    --inconnu: #8792a2; --alerte: #f08b74; --alerte-soft: #3a1f19; --periode: #1a222d; color-scheme: dark;
+    --inconnu: #8792a2; --alerte: #f08b74; --alerte-soft: #3a1f19; --periode: #1a222d; --verifiee: #5fcf8c; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #10151c; --surface: #171e27; --fg: #e4e9f0; --muted: #94a0b0; --rule: #273140;
   --accent: #8ea6ff; --accent-soft: #1f2a4a; --livres: #8ea6ff; --autre: #d9b664; --autre-soft: #2f2716;
-  --inconnu: #8792a2; --alerte: #f08b74; --alerte-soft: #3a1f19; --periode: #1a222d; color-scheme: dark;
+  --inconnu: #8792a2; --alerte: #f08b74; --alerte-soft: #3a1f19; --periode: #1a222d; --verifiee: #5fcf8c; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body {
@@ -60,7 +61,12 @@ h1 { font-family: var(--f-display); font-weight: 650; font-size: clamp(28px, 4.4
 
 .frise { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 14px 10px; display: grid; gap: 6px; }
 .frise-tete { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
-.frise-tete button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.frise-filtres { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; flex: 1 1 auto; }
+.frise-filtres[hidden] { display: none; }
+.frise-filtres button { font: inherit; cursor: pointer; }
+.frise-filtres .filtre { color: var(--accent); background: var(--accent-soft); border: 0; border-radius: 99px; padding: 1px 9px; }
+.frise-filtres .filtre span { margin-left: 2px; font-weight: 600; }
+.frise-filtres .tout-effacer { color: var(--accent); background: none; border: 0; padding: 0; text-decoration: underline; margin-left: auto; }
 .frise-defil { overflow-x: auto; }
 .frise svg { display: block; width: 100%; min-width: 640px; height: 120px; }
 .frise .barre { cursor: pointer; }
@@ -110,6 +116,8 @@ h1 { font-family: var(--f-display); font-weight: 650; font-size: clamp(28px, 4.4
 .duree { font-family: var(--f-data); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sources { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .src { font-family: var(--f-data); font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--rule); border-radius: 3px; color: var(--muted); }
+.src.verifiee, footer .verifiee { color: var(--verifiee); border-color: var(--verifiee); font-weight: 500; }
+footer .verifiee { font-family: var(--f-data); }
 .drap { font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--alerte-soft); color: var(--alerte); font-weight: 600; }
 .son { font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
@@ -163,7 +171,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
   <section class="frise" aria-label="Émissions par année">
     <div class="frise-tete">
       <span id="frise-titre">Émissions par année · cliquez une année pour filtrer</span>
-      <button type="button" id="frise-tout" hidden>Toutes les années</button>
+      <div class="frise-filtres" id="frise-filtres" aria-label="Filtres actifs" hidden></div>
     </div>
     <div class="frise-defil"><svg id="frise" role="img" aria-label="Nombre d'émissions par année"></svg></div>
     <div class="bulle" id="frise-bulle" hidden></div>
@@ -212,7 +220,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
     <div class="plus" id="plus" hidden><button type="button" id="plus-btn"></button></div>
   </section>
 
-  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter, podcasts archivés par la Wayback Machine, et lmelp, source vérifiée (« lmelp ✓ ») : ses émissions, vérifiées à la main, sont littéraires et leur thème fait foi. Un doute est un point que les sources ne permettent pas d’affirmer avec certitude : l’existence de l’émission, sa date, son rapprochement ou son thème. Le filtre « Doute » en donne les types. Un thème marqué « ✎ arbitré » vient d’un arbitrage, une décision humaine qui lève un doute ; sa justification s’affiche au survol.</footer>
+  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter, podcasts archivés par la Wayback Machine, et lmelp, source vérifiée (« <span class="verifiee">lmelp ✓</span> ») : ses émissions, vérifiées à la main, sont littéraires et leur thème fait foi. Un doute est un point que les sources ne permettent pas d’affirmer avec certitude : l’existence de l’émission, sa date, son rapprochement ou son thème. Le filtre « Doute » en donne les types. Un thème marqué « ✎ arbitré » vient d’un arbitrage, une décision humaine qui lève un doute ; sa justification s’affiche au survol.</footer>
   <button type="button" class="haut" id="haut" aria-label="Revenir en haut de la page" title="Revenir en haut" hidden>↑</button>
 </div>
 
@@ -277,10 +285,8 @@ function chiffres() {
 // Infobulle maison : immédiate, collée au curseur et indépendante du focus
 // de la fenêtre, contrairement à l'infobulle native (<title>) des navigateurs.
 function remplirBulle(g) {
-  const bulle = $("frise-bulle"), a = +g.dataset.annee;
-  const l = emissions.filter(e => e.annee === a && e.themes.includes("livres")).length;
-  const total = emissions.filter(e => e.annee === a).length;
-  bulle.innerHTML = `<b>${a}</b>${l} livres · ${total - l} thème inconnu`;
+  const bulle = $("frise-bulle"), a = +g.dataset.annee, v = comptesFrise[a];
+  bulle.innerHTML = `<b>${a}</b>${v.l} livres · ${v.i} thème inconnu`;
   bulle.hidden = false;
   return bulle;
 }
@@ -301,13 +307,25 @@ function montrerBulleClavier(g) {
 function cacherBulle() { $("frise-bulle").hidden = true; }
 addEventListener("scroll", cacherBulle, { passive: true });
 
+// Les émissions de chaque année qui passent tous les filtres sauf l'année : la frise
+// montre toujours toutes les années, puisqu'elle sert à en choisir une.
+const DEBUT = 1955;
+function parAn() {
+  const fin = Math.max(DEBUT, ...emissions.map(e => e.annee)), r = {};
+  for (let a = DEBUT; a <= fin; a++) r[a] = { l: 0, i: 0 };
+  const f = criteres();
+  for (const e of emissions) if (passe(e, f, false)) r[e.annee][e.themes.includes("livres") ? "l" : "i"]++;
+  return r;
+}
+let comptesFrise = {};  // les comptes de la frise affichée, que l'infobulle relit
+const nEmissions = n => `${n} émission${n > 1 ? "s" : ""}`;
+
 function frise() {
-  const svg = $("frise");
-  const debut = 1955, fin = Math.max(...emissions.map(e => e.annee));
-  const parAn = {};
-  for (let a = debut; a <= fin; a++) parAn[a] = { l: 0, i: 0 };
-  for (const e of emissions) parAn[e.annee][e.themes.includes("livres") ? "l" : "i"]++;
-  const max = Math.max(...Object.values(parAn).map(v => v.l + v.i));
+  const svg = $("frise"), comptes = comptesFrise = parAn();
+  const debut = DEBUT, fin = Math.max(...Object.keys(comptes));
+  // Au moins 1, pour qu'une frise vide garde une échelle.
+  const max = Math.max(1, ...Object.values(comptes).map(v => v.l + v.i));
+  const focus = document.activeElement?.closest?.(".frise .barre")?.dataset.annee;
   // Marge à droite réservée à l'échelle, pour qu'aucune barre ne la recouvre.
   const W = 1000, H = 120, bas = 100, haut = 10, echelle = 28;
   const n = fin - debut + 1, pas = (W - echelle) / n;
@@ -318,42 +336,87 @@ function frise() {
     s += `<text x="${W - 2}" y="${bas - y(g) + 3}" text-anchor="end">${g}</text>`;
   }
   for (let a = debut; a <= fin; a++) {
-    const x = (a - debut) * pas, v = parAn[a], hl = y(v.l), hi = y(v.i);
-    s += `<g class="barre" data-annee="${a}" tabindex="0" role="button" aria-label="${a} : ${v.l + v.i} émissions">` +
+    const x = (a - debut) * pas, v = comptes[a], hl = y(v.l), hi = y(v.i);
+    s += `<g class="barre${a === etat.annee ? " choisie" : ""}" data-annee="${a}" tabindex="0" role="button" aria-label="${a} : ${nEmissions(v.l + v.i)}">` +
       `<rect class="zone" x="${x}" y="${haut - 6}" width="${pas}" height="${bas - haut + 6}"></rect>` +
       `<rect class="l" x="${x + 1}" y="${bas - hl}" width="${pas - 2}" height="${hl}"></rect>` +
       `<rect class="i" x="${x + 1}" y="${bas - hl - hi}" width="${pas - 2}" height="${hi}"></rect></g>`;
     if (a % 5 === 0) s += `<text x="${x + pas / 2}" y="${H - 6}" text-anchor="middle">${a}</text>`;
   }
+  // La frise est redessinée à chaque filtre : la barre qui avait le focus clavier le garde.
   svg.innerHTML = s;
-  svg.querySelectorAll(".barre").forEach(g => {
-    const choisir = () => { const a = +g.dataset.annee; etat.annee = etat.annee === a ? null : a; etat.affichees = LOT; rendre(); };
-    g.addEventListener("click", choisir);
-    g.addEventListener("mousemove", ev => suivreSouris(g, ev));
-    g.addEventListener("focus", () => montrerBulleClavier(g));
-    g.addEventListener("mouseleave", cacherBulle);
-    g.addEventListener("blur", cacherBulle);
-    g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); choisir(); } });
-  });
+  if (focus) svg.querySelector(`.barre[data-annee="${focus}"]`).focus({ preventScroll: true });
+}
+const barre = ev => ev.target.closest?.(".barre");
+function choisirAnnee(g) { const a = +g.dataset.annee; etat.annee = etat.annee === a ? null : a; etat.affichees = LOT; rendre(); }
+$("frise").addEventListener("click", ev => { const g = barre(ev); if (g) choisirAnnee(g); });
+$("frise").addEventListener("mousemove", ev => { const g = barre(ev); if (g) suivreSouris(g, ev); else cacherBulle(); });
+$("frise").addEventListener("mouseleave", cacherBulle);
+$("frise").addEventListener("focusin", ev => { const g = barre(ev); if (g) montrerBulleClavier(g); });
+$("frise").addEventListener("focusout", cacherBulle);
+$("frise").addEventListener("keydown", ev => {
+  const g = barre(ev);
+  if (g && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); choisirAnnee(g); }
+});
+
+// Les filtres choisis dans les contrôles de la page, hors année.
+function criteres() {
+  return {
+    q: sansAccents($("q").value.trim()), theme: $("theme").value, source: $("source").value,
+    avecEnreg: $("avec-enregistrement").checked, doute: $("doute").value,
+  };
+}
+// Vrai si l'émission passe les filtres ``f`` et, avec ``annee``, l'année choisie.
+function passe(e, f, annee = true) {
+  const { q, theme, source, avecEnreg, doute } = f;
+  if (annee && etat.annee && e.annee !== etat.annee) return false;
+  if (theme === "livres" && !(e.themes.length === 1 && e.themes[0] === "livres")) return false;
+  if (theme === "mixte" && !(e.themes.includes("livres") && e.themes.length > 1)) return false;
+  if (theme === "inconnu" && e.themes.length) return false;
+  if (source === "seule" && e.sources.length !== 1) return false;
+  if (source && source !== "seule" && !e.sources.includes(source)) return false;
+  if (avecEnreg && !e.enreg.length) return false;
+  if (doute === "tout" && !e.doutes.length) return false;
+  if (doute && doute !== "tout" && !e.doutes.some(([t]) => t === doute)) return false;
+  if (q && !q.split(/\s+/).every(m => e.texte.includes(m))) return false;
+  return true;
 }
 
+// Les filtres actifs, dans l'ordre de l'en-tête de la frise, chacun avec de quoi le retirer.
+function filtresActifs() {
+  const f = criteres(), texte = id => $(id).selectedOptions[0].textContent, r = [];
+  const vider = id => () => { $(id).value = ""; };
+  if (etat.annee) r.push([`Année ${etat.annee}`, () => { etat.annee = null; }]);
+  if (f.theme) r.push([`Thème : ${texte("theme").toLowerCase()}`, vider("theme")]);
+  if (f.source) r.push([f.source === "seule" ? texte("source") : `Source : ${texte("source")}`, vider("source")]);
+  if (f.avecEnreg) r.push(["Avec enregistrement", () => { $("avec-enregistrement").checked = false; }]);
+  if (f.doute) r.push([f.doute === "tout" ? texte("doute") : `Doute : ${texte("doute")}`, vider("doute")]);
+  if (f.q) r.push([`« ${$("q").value.trim()} »`, () => { $("q").value = ""; }]);
+  return r;
+}
+let actifs = [];
+function enteteFrise() {
+  actifs = filtresActifs();
+  $("frise-titre").hidden = actifs.length > 0;
+  $("frise-filtres").hidden = !actifs.length;
+  $("frise-filtres").innerHTML = actifs.map(([libelle], i) =>
+    `<button type="button" class="filtre" data-i="${i}" aria-label="${esc("Retirer le filtre " + libelle)}">${esc(libelle)} <span aria-hidden="true">×</span></button>`
+  ).join("") + (actifs.length ? `<button type="button" class="tout-effacer">Tout effacer</button>` : "");
+}
+$("frise-filtres").addEventListener("click", ev => {
+  if (ev.target.closest(".tout-effacer")) { effacerFiltres(); $("q").focus(); return; }
+  const b = ev.target.closest(".filtre"); if (!b) return;
+  actifs[+b.dataset.i][1]();
+  etat.affichees = LOT; rendre();
+  // Le bouton retiré disparaît : le focus passe au filtre suivant, sinon au précédent.
+  const restants = $("frise-filtres").querySelectorAll("button");
+  // Sans filtre restant, il passe à la recherche.
+  if (restants.length) restants[Math.min(+b.dataset.i, restants.length - 1)].focus();
+  else $("q").focus();
+});
+
 function filtrer() {
-  const q = sansAccents($("q").value.trim());
-  const theme = $("theme").value, source = $("source").value;
-  const avecEnreg = $("avec-enregistrement").checked, doute = $("doute").value;
-  const r = emissions.filter(e => {
-    if (etat.annee && e.annee !== etat.annee) return false;
-    if (theme === "livres" && !(e.themes.length === 1 && e.themes[0] === "livres")) return false;
-    if (theme === "mixte" && !(e.themes.includes("livres") && e.themes.length > 1)) return false;
-    if (theme === "inconnu" && e.themes.length) return false;
-    if (source === "seule" && e.sources.length !== 1) return false;
-    if (source && source !== "seule" && !e.sources.includes(source)) return false;
-    if (avecEnreg && !e.enreg.length) return false;
-    if (doute === "tout" && !e.doutes.length) return false;
-    if (doute && doute !== "tout" && !e.doutes.some(([t]) => t === doute)) return false;
-    if (q && !q.split(/\s+/).every(m => e.texte.includes(m))) return false;
-    return true;
-  });
+  const f = criteres(), r = emissions.filter(e => passe(e, f));
   return etat.croissant ? r : r.slice().reverse();
 }
 
@@ -387,7 +450,7 @@ function ligne(e) {
     `<div class="titre">${esc(e.titre || "Sans titre")}${e.animateur ? `<span class="anim">${esc(e.animateur)}</span>` : ""}</div>` +
     `<div class="themes">${puces(e)}</div>` +
     `<div class="duree">${esc(e.duree ? e.duree.replace(/^00:/, "") : "")}</div>` +
-    `<div class="sources">${e.sources.map(s => `<span class="src">${NOMS[s] || esc(s)}</span>`).join("")}` +
+    `<div class="sources">${e.sources.map(s => `<span class="src${s === "lmelp" ? " verifiee" : ""}">${NOMS[s] || esc(s)}</span>`).join("")}` +
     `${e.enreg.length ? `<span class="son">enregistrement</span>` : ""}${e.doutes.length ? `<span class="drap">doute</span>` : ""}</div></div>`;
   if (ouverte) h += detail(e);
   return h;
@@ -421,9 +484,7 @@ function rendre() {
   $("plus").hidden = r.length <= visibles.length;
   $("plus-btn").textContent = `Afficher ${Math.min(LOT, r.length - visibles.length)} de plus`;
   $("tri").textContent = etat.croissant ? "Date ↑" : "Date ↓";
-  $("frise-tout").hidden = !etat.annee;
-  $("frise-titre").textContent = etat.annee ? `Année ${etat.annee} sélectionnée` : "Émissions par année · cliquez une année pour filtrer";
-  document.querySelectorAll(".frise .barre").forEach(g => g.classList.toggle("choisie", +g.dataset.annee === etat.annee));
+  frise(); enteteFrise();
   const reset = $("reset");
   if (reset) reset.addEventListener("click", effacerFiltres);
 }
@@ -448,14 +509,13 @@ for (const id of ["q", "theme", "source", "avec-enregistrement", "doute"]) {
 $("effacer").addEventListener("click", effacerFiltres);
 $("tri").addEventListener("click", () => { etat.croissant = !etat.croissant; rendre(); });
 $("plus-btn").addEventListener("click", () => { etat.affichees += LOT; rendre(); });
-$("frise-tout").addEventListener("click", () => { etat.annee = null; etat.affichees = LOT; rendre(); });
 
 // Bouton « haut de page » : visible dès qu'on a un peu descendu, même sur une liste courte.
 const afficherHaut = () => { $("haut").hidden = window.scrollY < 300; };
 window.addEventListener("scroll", afficherHaut, { passive: true });
 $("haut").addEventListener("click", () => { window.scrollTo({ top: 0 }); $("q").focus({ preventScroll: true }); });
 
-chiffres(); frise(); rendre(); afficherHaut();
+chiffres(); rendre(); afficherHaut();
 </script>
 __ARBITRAGE__
 </body>
