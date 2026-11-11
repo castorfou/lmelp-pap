@@ -66,6 +66,8 @@ class Emission:
     enregistrements: list[Enregistrement] = field(default_factory=list)
     # l'arbitrage appliqué : de thème, ou renvoi à l'écoute
     arbitrage: "Arbitrage | None" = None
+    # l'arbitrage de date, qui se cumule avec le précédent
+    arbitrage_date: "Arbitrage | None" = None
 
     @property
     def a_ecouter(self) -> bool:
@@ -81,14 +83,19 @@ class Arbitrage:
     arbitrage, mais ne lève aucun doute : il marque ceux de l'émission
     « à écouter ».
 
+    Un arbitrage de date (sorte ``date``) fixe la date de première diffusion de
+    l'émission. Il porte sur un autre point que les autres sortes : il se cumule
+    avec elles au lieu de les remplacer.
+
     Sa clé est l'attestation (source et identifiant dans la source), pas
     l'identifiant de l'émission, qui peut changer d'une construction à l'autre.
     """
 
     source: str
     source_id: str
-    sorte: Literal["thème", "existence", "écoute"]
+    sorte: Literal["thème", "existence", "écoute", "date"]
     themes: frozenset[str] = frozenset()  # pour un arbitrage de thème
+    date_retenue: date | None = None  # pour un arbitrage de date
     justification: str = ""
     date: datetime = datetime.min  # date de la décision
 
@@ -159,9 +166,21 @@ def _orphelins(
             source_id=a.source_id,
             detail=f"attestation introuvable ; {_decision(a)}",
         )
-        for cle, (_rang, a) in sorted(_derniers(arbitrages).items())
+        for famille in _familles(arbitrages)
+        for cle, (_rang, a) in sorted(_derniers(famille).items())
         if cle not in connues
     ]
+
+
+def _familles(
+    arbitrages: Sequence[Arbitrage],
+) -> tuple[list[Arbitrage], list[Arbitrage]]:
+    """Les arbitrages de date, et les autres : chaque famille porte sur un point
+    différent de l'émission, et le plus récent ne l'emporte qu'au sein d'elle."""
+    return (
+        [a for a in arbitrages if a.sorte == "date"],
+        [a for a in arbitrages if a.sorte != "date"],
+    )
 
 
 def _contradiction(
@@ -183,7 +202,7 @@ def _contredit_lmelp(emission: Emission, arbitrage: Arbitrage) -> bool:
     """L'arbitrage dit autre chose que lmelp : émission livres, qui existe."""
     return (
         _verifiee(emission)
-        and arbitrage.sorte != "écoute"
+        and arbitrage.sorte in ("thème", "existence")
         and (arbitrage.sorte == "existence" or arbitrage.themes != {"livres"})
     )
 
@@ -194,6 +213,8 @@ def _decision(arbitrage: Arbitrage) -> str:
         return "arbitrée inexistante"
     if arbitrage.sorte == "écoute":
         return "renvoyée à l'écoute"
+    if arbitrage.sorte == "date":
+        return f"date arbitrée {arbitrage.date_retenue}"
     return f"arbitrée {'+'.join(sorted(arbitrage.themes))}"
 
 
@@ -212,17 +233,31 @@ def _derniers(
 def _arbitrer(
     emissions: list[Emission], arbitrages: Sequence[Arbitrage]
 ) -> tuple[list[Emission], list[tuple[Emission, Arbitrage]]]:
-    """Applique à chaque émission le dernier arbitrage de ses attestations.
+    """Applique à chaque émission le dernier arbitrage de ses attestations, et
+    le dernier arbitrage de date.
 
     Un arbitrage de thème remplace exactement ses thèmes ; un arbitrage
     d'existence la retire de l'ensemble des émissions ; un renvoi à l'écoute
-    lui laisse les thèmes de ses sources. Rend les émissions
-    gardées, et les émissions vérifiées retirées avec leur arbitrage.
+    lui laisse les thèmes de ses sources ; un arbitrage de date lui donne la
+    date retenue. Rend les émissions gardées, et les émissions vérifiées
+    retirées avec leur arbitrage.
     """
-    par_attestation = _derniers(arbitrages)
+    dates, decisions = _familles(arbitrages)
+    par_attestation = _derniers(decisions)
+    date_par_attestation = _derniers(dates)
     gardees: list[Emission] = []
     retirees: list[tuple[Emission, Arbitrage]] = []
     for emission in emissions:
+        dates_arbitrees = [
+            date_par_attestation[a.cle]
+            for a in emission.attestations
+            if a.cle in date_par_attestation
+        ]
+        if dates_arbitrees:
+            _rang, arbitrage_date = max(dates_arbitrees, key=lambda r: r[0])
+            if arbitrage_date.date_retenue is not None:
+                emission.date = arbitrage_date.date_retenue
+            emission.arbitrage_date = arbitrage_date
         siens = [
             par_attestation[a.cle]
             for a in emission.attestations
@@ -244,8 +279,9 @@ def _arbitrer(
 
 
 def _doutes(emissions: list[Emission]) -> list[Doute]:
-    """Les doutes des émissions, dans la liste ou non : rapprochement, date,
-    collision, thème, republication, fragilité, absence de lmelp."""
+    """Les doutes des émissions, dans la liste ou non : rapprochement, date
+    (désaccord, jour inhabituel), collision, thème, republication, fragilité,
+    absence de lmelp."""
     doutes: list[Doute] = []
     # la première diffusion de la dernière émission vérifiée, pas sa publication
     derniere_verifiee = max(
@@ -297,8 +333,13 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                     f"rapprochable aussi de {', '.join(rivales)}",
                     a,
                 )
+        # Un arbitrage de date lève les doutes de date.
         dates = sorted(set(_dates_de_diffusion(emission.attestations)))
-        if (dates[-1] - dates[0]).days > 1:
+        if (
+            emission.arbitrage_date is None
+            and (dates[-1] - dates[0]).days > 1
+            and not _seule_au_jour_habituel(emission.date, dates)
+        ):
             ajouter(
                 "désaccord de date",
                 ", ".join(
@@ -306,6 +347,17 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                     for a in emission.attestations
                     if a.nature_date == "première diffusion"
                 ),
+            )
+        habituel = jour_habituel(emission.date)
+        if (
+            emission.arbitrage_date is None
+            and habituel is not None
+            and emission.date.weekday() != habituel
+        ):
+            ajouter(
+                "jour inhabituel",
+                f"un {JOURS[emission.date.weekday()]}, "
+                f"quand l'émission passe le {JOURS[habituel]}",
             )
         if emission.id != emission.date.isoformat():
             ajouter("collision", f"une autre émission le même jour : {emission.date}")
@@ -436,6 +488,44 @@ MANDATS: tuple[tuple[int, int, str], ...] = (
     (1990, 2022, "Jérôme Garcin"),
     (2024, 9999, "Rebecca Manzoni"),
 )
+
+
+# Le jour de la semaine où l'émission passe habituellement (lundi = 0), par
+# période. Les années de changement (1957, 1964-1965) n'en ont pas.
+JOURS_DE_DIFFUSION: tuple[tuple[int, int, int], ...] = (
+    (1955, 1956, 6),  # dimanche
+    (1958, 1963, 3),  # jeudi
+    (1966, 9999, 6),  # dimanche
+)
+JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+
+
+def jour_habituel(jour: date) -> int | None:
+    """Le jour de diffusion de la période (lundi = 0), ou None en transition."""
+    for debut, fin, jour_semaine in JOURS_DE_DIFFUSION:
+        if debut <= jour.year <= fin:
+            return jour_semaine
+    return None
+
+
+def au_jour_habituel(jour: date) -> bool:
+    """La date tombe le jour de diffusion habituel de sa période."""
+    return jour.weekday() == jour_habituel(jour)
+
+
+def dates_candidates(emission: Emission) -> dict[date, list[str]]:
+    """Les dates de première diffusion que donnent les sources de l'émission,
+    dans l'ordre, chacune avec ses sources : les choix d'un arbitrage de date."""
+    sources: defaultdict[date, set[str]] = defaultdict(set)
+    for a in _datantes(emission.attestations):
+        sources[a.date].add(a.source)
+    return {jour: sorted(sources[jour]) for jour in sorted(sources)}
+
+
+def _seule_au_jour_habituel(retenue: date, dates: list[date]) -> bool:
+    """La date retenue est la seule des sources à tomber le jour habituel : le
+    désaccord de date vient d'attestations voisines (rediffusions, publications)."""
+    return [d for d in dates if au_jour_habituel(d)] == [retenue]
 
 
 def animateur_du(jour: date) -> str | None:
@@ -659,10 +749,15 @@ def _meme_fiche(verifiee: Attestation, b: Attestation) -> bool:
     return b.source not in SOURCES_VERIFIEES and b.url == verifiee.url
 
 
+def _datantes(groupe: list[Attestation]) -> list[Attestation]:
+    """Les attestations qui datent la première diffusion, à défaut toutes."""
+    diffusion = [a for a in groupe if a.nature_date == "première diffusion"]
+    return diffusion or groupe
+
+
 def _dates_de_diffusion(groupe: list[Attestation]) -> list[date]:
     """Les dates de première diffusion du groupe, à défaut ses autres dates."""
-    diffusion = [a.date for a in groupe if a.nature_date == "première diffusion"]
-    return diffusion or [a.date for a in groupe]
+    return [a.date for a in _datantes(groupe)]
 
 
 def _ecart(a: Attestation, groupe: list[Attestation]) -> int:

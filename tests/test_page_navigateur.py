@@ -410,3 +410,82 @@ def test_en_mode_arbitrage_hommage_ne_se_cumule_avec_aucun_autre_theme(
 
     livres.check()
     assert not hommage.is_checked()
+
+
+def _avec_desaccord_de_date(emissions: list[dict[str, Any]]) -> None:
+    """2015-01-18 (dimanche) : l'INA la donne aussi le samedi 17."""
+    for e in emissions:
+        e["dates_candidates"], e["arbitrage_date"] = [], None
+        if e["id"] == "2015-01-18":
+            e["doutes"] = [
+                {
+                    "type": "désaccord de date",
+                    "detail": "ina:2015-01-17, ina:2015-01-18",
+                    "a_ecouter": False,
+                }
+            ]
+            e["dates_candidates"] = [
+                {
+                    "date": "2015-01-17",
+                    "jour": "samedi",
+                    "sources": ["ina"],
+                    "habituel": False,
+                    "actuelle": False,
+                },
+                {
+                    "date": "2015-01-18",
+                    "jour": "dimanche",
+                    "sources": ["ina", "radiofrance"],
+                    "habituel": True,
+                    "actuelle": True,
+                },
+            ]
+
+
+def test_en_mode_arbitrage_une_date_candidate_se_retient(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    emissions = donnees_page(dossier)
+    _avec_desaccord_de_date(emissions)
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api={"emissions": emissions, "arbitrages": []},
+        decision={"emissions": emissions, "arbitrages": []},
+    )
+    page.locator("#arb-nombre", has_text="0").wait_for()
+    page.locator('.ligne[data-id="2015-01-18"]').click()
+
+    choix = page.locator(".arb-dates label")
+    assert [" ".join(t.split()) for t in choix.all_inner_texts()] == [
+        "2015-01-17 samedi INA",
+        "2015-01-18 dimanche INA, radiofrance ← date actuelle · jour habituel",
+    ]
+    assert page.get_by_role("radio", name="2015-01-18 dimanche").is_checked()
+    page.get_by_role("radio", name="2015-01-17 samedi").check()
+    with page.expect_request("**/api/arbitrages") as requete:
+        page.get_by_role("button", name="Retenir cette date").click()
+
+    assert requete.value.post_data_json == {
+        "emission_id": "2015-01-18",
+        "sorte": "date",
+        "date": "2015-01-17",
+        "justification": "",
+    }
+    page.locator("#arb-statut", has_text="date retenue 2015-01-17").wait_for()
+
+
+def test_sans_doute_de_date_il_n_y_a_pas_de_choix_de_date(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    emissions = donnees_page(dossier)
+    _avec_desaccord_de_date(emissions)
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api={"emissions": emissions, "arbitrages": []},
+    )
+    page.locator("#arb-nombre", has_text="0").wait_for()
+    page.locator('.ligne[data-id="2015-01-04"]').click()
+
+    assert page.get_by_role("button", name="Retenir cette date").count() == 0

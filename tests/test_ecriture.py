@@ -106,13 +106,13 @@ def test_les_doutes_sont_ecrits_a_cote_dans_la_liste_ou_non(tmp_path: Path) -> N
             Attestation(
                 source="ina",
                 source_id="PH_PHD2",
-                date=date(1994, 5, 26),
+                date=date(1964, 5, 26),
                 themes=frozenset({"cinéma"}),
             ),
             Attestation(
                 source="radiofrance",
                 source_id="pulp-fiction",
-                date=date(1994, 5, 29),
+                date=date(1964, 5, 29),
                 themes=frozenset({"cinéma"}),
             ),
         ]
@@ -131,12 +131,21 @@ def test_les_doutes_sont_ecrits_a_cote_dans_la_liste_ou_non(tmp_path: Path) -> N
             "a_ecouter": "non",
         },
         {
+            "type": "jour inhabituel",
+            "emission_id": "1956-01-19",
+            "dans_la_liste": "oui",
+            "source": "",
+            "source_id": "",
+            "detail": "un jeudi, quand l'émission passe le dimanche",
+            "a_ecouter": "non",
+        },
+        {
             "type": "désaccord de date",
-            "emission_id": "1994-05-29",
+            "emission_id": "1964-05-29",
             "dans_la_liste": "non",
             "source": "",
             "source_id": "",
-            "detail": "ina:1994-05-26, radiofrance:1994-05-29",
+            "detail": "ina:1964-05-26, radiofrance:1964-05-29",
             "a_ecouter": "non",
         },
     ]
@@ -225,6 +234,7 @@ def test_les_doutes_d_une_emission_renvoyee_a_l_ecoute_sont_a_ecouter(
 
     assert [(d["type"], d["a_ecouter"]) for d in _lire(tmp_path / "doutes.csv")] == [
         ("attestation fragile", "oui"),
+        ("jour inhabituel", "oui"),
         ("thème inconnu", "oui"),
     ]
     assert [(e["id"], e["arbitrage"]) for e in _lire(tmp_path / "emissions.csv")] == [

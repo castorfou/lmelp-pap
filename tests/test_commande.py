@@ -78,10 +78,10 @@ def test_la_commande_affiche_le_nombre_de_doutes_par_type(
 ) -> None:
     cache, sortie = tmp_path / "cache", tmp_path / "sortie"
     _cache_rempli(cache)
-    # une seconde notice de l'émission du 22 janvier 1956, datée deux jours après
+    # une notice du mardi 6 mars 1956, quand l'émission passe le dimanche
     with (cache / "ina" / "notices.csv").open("a", encoding="utf-8") as f:
         f.write(
-            "1956-01-24,Littérature,Le masque et la plume,Paris Inter,,00:50:00,"
+            "1956-03-06,Littérature,Le masque et la plume,Paris Inter,,00:50:00,"
             "Magazine,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD1/litterature,oui\n"
         )
 
@@ -92,7 +92,7 @@ def test_la_commande_affiche_le_nombre_de_doutes_par_type(
         for ligne in capsys.readouterr().err.splitlines()
         if ligne.startswith("Doutes : ")
     ]
-    assert "désaccord de date 1" in ligne.split(" : ", 1)[1].split(", ")
+    assert "jour inhabituel 1" in ligne.split(" : ", 1)[1].split(", ")
 
 
 def test_la_commande_page_ecrit_la_page_a_partir_des_csv(tmp_path: Path) -> None:

@@ -9,17 +9,19 @@ API :
 - ``GET /`` : la page en mode arbitrage ;
 - ``GET /api/donnees`` : les données courantes ;
 - ``POST /api/arbitrages`` : enregistre un arbitrage sur une émission
-  (``emission_id``, ``sorte`` : ``thème``, ``existence`` ou ``écoute`` pour un
-  renvoi à l'écoute, ``themes``, ``justification``) ;
+  (``emission_id``, ``sorte`` : ``thème``, ``existence``, ``date`` ou ``écoute``
+  pour un renvoi à l'écoute, ``themes``, ``date``, ``justification``) ;
 - ``POST /api/annulations`` : annule les arbitrages d'une émission
   (``emission_id``) ou d'une attestation (``source`` et ``source_id``).
 
 Chaque requête d'écriture renvoie les données à jour, comme ``GET /api/donnees``.
+Une émission y porte en plus, pour l'arbitrage de date, ses ``dates_candidates``
+(vides sans doute de date ni date arbitrée) et son ``arbitrage_date``.
 """
 
 import json
 import threading
-from datetime import datetime
+from datetime import date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,18 +31,29 @@ from lmelp_pap.arbitrages import (
     ajouter_arbitrage,
     erreur_de_themes,
     lire_arbitrages,
+    lire_date,
     retirer_arbitrages,
     valeur,
 )
 from lmelp_pap.collecte import lire_cache
 from lmelp_pap.ecriture import ecrire_liste
-from lmelp_pap.liste import Arbitrage, Attestation, Emission, construire_liste
+from lmelp_pap.liste import (
+    JOURS,
+    Arbitrage,
+    Attestation,
+    Emission,
+    au_jour_habituel,
+    construire_liste,
+    dates_candidates,
+)
 from lmelp_pap.page import construire_page, donnees_page
 
 
 # L'attestation la plus stable d'une émission porte l'arbitrage : la notice INA,
 # sinon la fiche radiofrance.fr, sinon les autres sources dans cet ordre.
 STABILITE = ("ina", "radiofrance", "lmelp", "anciennes_listes", "wayback_podcast")
+# Les doutes qu'un arbitrage de date lève.
+DOUTES_DE_DATE = ("désaccord de date", "jour inhabituel")
 
 
 class DemandeInvalideError(ValueError):
@@ -57,7 +70,8 @@ class Atelier:
         self.attestations = lire_cache(cache)
         self._par_cle = {a.cle: a for a in self.attestations}
         self._emissions: dict[str, Emission] = {}
-        self._avec_doute: set[str] = set()  # émissions de la liste qui ont un doute
+        # les types de doute de chaque émission de la liste qui en a
+        self._doutes: dict[str, set[str]] = {}
         self._verrou = threading.Lock()
         with self._verrou:
             self._reconstruire()
@@ -80,13 +94,17 @@ class Atelier:
             attestation = attestation_stable(emission)
             sorte = demande.get("sorte")
             themes = frozenset(demande.get("themes") or ())
+            retenue = None
             if sorte == "thème":
                 if erreur := erreur_de_themes(themes):
                     raise DemandeInvalideError(erreur)
             elif sorte == "existence":
                 themes = frozenset()
+            elif sorte == "date":
+                retenue = self._date_candidate(emission, demande.get("date"))
+                themes = frozenset()
             elif sorte == "écoute":
-                if emission.id not in self._avec_doute:
+                if emission.id not in self._doutes:
                     raise DemandeInvalideError(
                         f"{emission.id} n'a aucun doute à renvoyer à l'écoute"
                     )
@@ -98,6 +116,7 @@ class Atelier:
                 source_id=attestation.source_id,
                 sorte=sorte,
                 themes=themes,
+                date_retenue=retenue,
                 justification=str(demande.get("justification") or "").strip(),
                 date=datetime.now().replace(microsecond=0),
             )
@@ -122,6 +141,26 @@ class Atelier:
             self._reconstruire()
             return self._donnees()
 
+    def _date_candidate(self, emission: Emission, texte: object) -> date:
+        """La date à retenir, parmi celles des sources d'une émission qui a un
+        doute de date."""
+        if not self._date_arbitrable(emission):
+            raise DemandeInvalideError(f"{emission.id} n'a aucun doute de date")
+        retenue = lire_date(texte) if isinstance(texte, str) else None
+        if retenue is None or retenue not in dates_candidates(emission):
+            raise DemandeInvalideError(
+                f"date invalide : {texte!r} (attendu : une date des sources, "
+                f"{', '.join(str(d) for d in dates_candidates(emission))})"
+            )
+        return retenue
+
+    def _date_arbitrable(self, emission: Emission) -> bool:
+        """L'émission de la liste a un doute qu'un arbitrage de date lève, ou
+        une date déjà arbitrée, qui se change sans annuler ses autres arbitrages."""
+        return emission.arbitrage_date is not None or bool(
+            self._doutes.get(emission.id, set()) & set(DOUTES_DE_DATE)
+        )
+
     def _emission(self, emission_id: object) -> Emission:
         """L'émission de la liste qui porte cet identifiant."""
         if not isinstance(emission_id, str) or emission_id not in self._emissions:
@@ -135,15 +174,46 @@ class Atelier:
         )
         ecrire_liste(liste, doutes, self.sortie)
         self._emissions = {e.id: e for e in liste}
-        self._avec_doute = {d.emission_id for d in doutes if d.dans_la_liste}
+        self._doutes = {}
+        for d in doutes:
+            if d.dans_la_liste:
+                self._doutes.setdefault(d.emission_id, set()).add(d.type)
 
     def _donnees(self) -> dict[str, Any]:
         """Les données de la page et les arbitrages, du plus récent au plus ancien."""
         return {
-            "emissions": donnees_page(self.sortie),
+            "emissions": [self._avec_dates(e) for e in donnees_page(self.sortie)],
             "arbitrages": [
                 self._arbitrage(a) for a in reversed(lire_arbitrages(self.fichier))
             ],
+        }
+
+    def _avec_dates(self, donnees: dict[str, Any]) -> dict[str, Any]:
+        """Une émission de la page, avec ce qu'il faut pour arbitrer sa date."""
+        emission = self._emissions[donnees["id"]]
+        arbitrage = emission.arbitrage_date
+        return {
+            **donnees,
+            "dates_candidates": [
+                {
+                    "date": jour.isoformat(),
+                    "jour": JOURS[jour.weekday()],
+                    "sources": sources,
+                    "habituel": au_jour_habituel(jour),
+                    "actuelle": jour == emission.date,
+                }
+                for jour, sources in dates_candidates(emission).items()
+            ]
+            if self._date_arbitrable(emission)
+            else [],
+            "arbitrage_date": (
+                {
+                    "date": arbitrage.date_retenue.isoformat(),
+                    "justification": arbitrage.justification,
+                }
+                if arbitrage and arbitrage.date_retenue
+                else None
+            ),
         }
 
     def _arbitrage(self, arbitrage: Arbitrage) -> dict[str, Any]:
