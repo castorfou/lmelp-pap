@@ -9,7 +9,8 @@ API :
 - ``GET /`` : la page en mode arbitrage ;
 - ``GET /api/donnees`` : les données courantes ;
 - ``POST /api/arbitrages`` : enregistre un arbitrage sur une émission
-  (``emission_id``, ``sorte``, ``themes``, ``justification``) ;
+  (``emission_id``, ``sorte`` : ``thème``, ``existence`` ou ``écoute`` pour un
+  renvoi à l'écoute, ``themes``, ``justification``) ;
 - ``POST /api/annulations`` : annule les arbitrages d'une émission
   (``emission_id``) ou d'une attestation (``source`` et ``source_id``).
 
@@ -71,7 +72,8 @@ class Atelier:
             return construire_page(self.sortie, arbitrage=True)
 
     def arbitrer(self, demande: dict[str, Any]) -> dict[str, Any]:
-        """Enregistre un arbitrage sur une émission de la liste."""
+        """Enregistre un arbitrage, ou un renvoi à l'écoute, sur une émission
+        de la liste."""
         with self._verrou:
             emission = self._emission(demande.get("emission_id"))
             attestation = attestation_stable(emission)
@@ -82,7 +84,7 @@ class Atelier:
                     raise DemandeInvalideError(
                         f"thèmes invalides : {sorted(themes)} (attendu : {THEMES})"
                     )
-            elif sorte == "existence":
+            elif sorte in ("existence", "écoute"):
                 themes = frozenset()
             else:
                 raise DemandeInvalideError(f"sorte invalide : {sorte!r}")

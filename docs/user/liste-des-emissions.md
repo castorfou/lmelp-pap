@@ -38,7 +38,8 @@ sudo -E env "PATH=$PATH" /tmp/venv/bin/playwright install-deps chromium
 Une page HTML présente la liste des émissions :
 - une frise des émissions par année, où un clic sur une année filtre la liste ;
 - une recherche sans tenir compte des accents ;
-- des filtres par thème, par source, « avec enregistrement » et par type de doute, et un bouton « Effacer les filtres » ;
+- des filtres par thème, par source, « avec enregistrement » et par doute, et un bouton « Effacer les filtres ». Le filtre « Doute » propose « Au moins un doute », « À trancher » (les émissions qui ont au moins un doute, sans renvoi à l'écoute), « À écouter » (les émissions renvoyées à l'écoute), puis chaque type de doute ;
+- un badge « doute » sur la ligne d'une émission qui a des doutes, « à écouter » si elle est renvoyée à l'écoute ;
 - dans les sources de chaque émission, le badge vert `lmelp ✓` de la source vérifiée, les autres sources en gris ;
 - le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements avec leur durée quand elle est connue (`extrait · 3:56 · 14007-18.10.1975-…m4a`) et doutes ;
 - une marque « ✎ arbitré » à côté d'un thème fixé par un arbitrage, avec la justification au survol.
@@ -105,8 +106,8 @@ Une ligne par émission de la liste.
 | `titre`, `description` | Titre et description, selon la source prioritaire. |
 | `animateur` | Animateur précisé par une source, sinon déduit de la date. Vide pour les années de transition (1970, 1989, 2023). |
 | `chaine`, `heure`, `duree` | Selon l'INA en priorité. |
-| `arbitrage` | `thème` si les thèmes viennent d'un arbitrage, vide sinon. |
-| `justification_arbitrage` | La justification de cet arbitrage, s'il en a une. |
+| `arbitrage` | `thème` si les thèmes viennent d'un arbitrage, `écoute` si l'émission est renvoyée à l'écoute, vide sinon. |
+| `justification_arbitrage` | La justification de cet arbitrage ou de ce renvoi, s'il en a une. |
 
 ### `attestations.csv`
 
@@ -129,6 +130,7 @@ Une ligne par **doute** : un point d'une émission que les sources ne permettent
 | `dans_la_liste` | `oui` si l'émission est dans `emissions.csv`, `non` sinon. |
 | `source`, `source_id` | L'attestation en cause, quand le doute porte sur une seule attestation. |
 | `detail` | Précisions : émissions rivales, dates données par chaque source. |
+| `a_ecouter` | `oui` si l'émission, dans la liste, est renvoyée à l'écoute ; `non` sinon. |
 
 Types de doute :
 
@@ -148,6 +150,12 @@ Un champ simplement absent (durée, animateur) n'est pas un doute. Une émission
 
 `lmelp-pap emissions` affiche le nombre de doutes par type à la fin de la construction.
 
+### Renvoi à l'écoute
+
+Certains doutes ne se lèvent pas sur pièces, seulement en écoutant l'émission : un extrait de quatre minutes, une émission au titre générique. Un **renvoi à l'écoute** est une décision humaine qui le reconnaît. Il ne lève aucun doute : il marque tous ceux de l'émission `a_ecouter = oui` dans `doutes.csv`, et la page les range sous « À écouter » plutôt que « À trancher ». La file des doutes à trancher se vide ainsi de ce qui ne peut pas l'être.
+
+Le renvoi s'enregistre et s'applique comme un arbitrage (voir ci-dessous) : il s'attache à une attestation, figure dans `arbitrages.csv` avec la sorte `écoute`, et survit aux reconstructions de la liste. Il vise l'émission entière et ne concerne que les doutes des émissions de la liste. Un arbitrage posé ensuite sur l'émission le remplace, le plus récent l'emportant : l'écoute aboutit à un arbitrage ordinaire, par exemple un thème justifié par « écouté l'enregistrement ». Ses doutes restants ne sont alors plus « à écouter ».
+
 ## Arbitrages
 
 Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une émission, ou le fait qu'elle n'existe pas. Les arbitrages sont enregistrés dans `data/processed/arbitrages.csv`, versionné, écrit par l'outil `lmelp-pap arbitrer` ou rédigé à la main, et appliqués à chaque construction de la liste : une décision survit ainsi aux régénérations.
@@ -155,8 +163,8 @@ Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une 
 | Colonne | Contenu |
 |---|---|
 | `source`, `source_id` | L'attestation à laquelle l'arbitrage s'attache, telle qu'elle figure dans `attestations.csv`. |
-| `sorte` | `thème` ou `existence`. |
-| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`). Pour un arbitrage d'existence, `n'existe pas`. |
+| `sorte` | `thème`, `existence`, ou `écoute` pour un renvoi à l'écoute. |
+| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`). Pour un arbitrage d'existence, `n'existe pas`. Pour un renvoi à l'écoute, `à écouter`. |
 | `justification` | Facultative : « titre explicite », « écouté l'enregistrement », « connaissance de l'émission » ou texte libre. |
 | `date` | Date de la décision, au format ISO (`2026-11-10` ou `2026-11-10T14:30`). |
 
@@ -166,6 +174,7 @@ Exemple :
 source,source_id,sorte,valeur,justification,date
 ina,RD_4294389.001,thème,théâtre,titre explicite,2026-11-10
 radiofrance,le-mage-du-kremlin-de-giuliano-da-empoli-1192090,existence,n'existe pas,écouté l'enregistrement,2026-11-10
+radiofrance,la-vie-devant-soi-d-emile-ajar,écoute,à écouter,,2026-11-11
 ```
 
 **Attestation plutôt qu'émission.** Un arbitrage s'attache à une attestation et non à l'identifiant d'une émission, qui peut changer (nouvelle date retenue, suffixe `-b`). Il s'applique à l'émission qui contient cette attestation, quelle que soit sa date. Choisir l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr.
@@ -174,6 +183,7 @@ radiofrance,le-mage-du-kremlin-de-giuliano-da-empoli-1192090,existence,n'existe 
 
 - un arbitrage de **thème** remplace exactement les thèmes de l'émission, sans les cumuler avec ceux des sources, et lève ses doutes de thème. Une émission arbitrée `théâtre` sort de la liste ; une émission arbitrée `livres;théâtre` y reste. La colonne `arbitrage` d'`emissions.csv` le signale ;
 - un arbitrage d'**existence** retire l'émission de l'ensemble des émissions : elle n'est ni dans la liste ni dans `doutes.csv` ;
+- un renvoi à l'**écoute** laisse à l'émission les thèmes de ses sources et ses doutes, marqués `a_ecouter = oui` ;
 - un arbitrage dont l'attestation est introuvable n'a aucun effet et produit un doute `arbitrage orphelin` ;
 - si plusieurs arbitrages portent sur la même émission, le plus récent l'emporte ; à date égale, le dernier du fichier ;
 - un arbitrage qui contredit lmelp s'applique, et produit un doute `contradiction lmelp`.
@@ -192,8 +202,9 @@ La page garde la frise et les filtres de la page publiée (année, thème, sourc
 
 - une case par thème (livres, cinéma, théâtre, opéra, télévision, musique, variétés), cochée pour les thèmes actuels, et le bouton **Arbitrer le thème** ;
 - le bouton **N'existe pas** ;
+- le bouton **À écouter**, qui renvoie l'émission à l'écoute ;
 - les justifications en un clic, « titre explicite », « écouté l'enregistrement » et « connaissance de l'émission », et un champ libre facultatif ;
-- le bouton **Annuler l'arbitrage**, pour une émission dont le thème est arbitré.
+- le bouton **Annuler l'arbitrage**, pour une émission dont le thème est arbitré ou qui est renvoyée à l'écoute.
 
 L'outil attache l'arbitrage à l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr, sinon une autre attestation. À chaque décision, il écrit `arbitrages.csv`, reconstruit la liste, réécrit ses CSV, et la page se met à jour aussitôt : l'émission change d'aspect, ou sort de la liste (arbitrée sans le thème livres, ou inexistante). Un message sous le bandeau « Mode arbitrage » confirme la décision.
 
@@ -218,7 +229,7 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | Requête | Effet |
 |---|---|
 | `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). |
-| `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes. |
+| `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, ou `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute. |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
 
 Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.

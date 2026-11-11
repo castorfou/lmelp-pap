@@ -64,12 +64,22 @@ class Emission:
     animateur: str | None = None
     attestations: list[Attestation] = field(default_factory=list)
     enregistrements: list[Enregistrement] = field(default_factory=list)
-    arbitrage: "Arbitrage | None" = None  # l'arbitrage de thème appliqué
+    # l'arbitrage appliqué : de thème, ou renvoi à l'écoute
+    arbitrage: "Arbitrage | None" = None
+
+    @property
+    def a_ecouter(self) -> bool:
+        """L'émission est renvoyée à l'écoute : ses doutes sont « à écouter »."""
+        return self.arbitrage is not None and self.arbitrage.sorte == "écoute"
 
 
 @dataclass(frozen=True)
 class Arbitrage:
     """Une décision humaine qui lève un doute, attachée à une attestation.
+
+    Un renvoi à l'écoute (sorte ``écoute``) s'enregistre et s'applique comme un
+    arbitrage, mais ne lève aucun doute : il marque ceux de l'émission
+    « à écouter ».
 
     Sa clé est l'attestation (source et identifiant dans la source), pas
     l'identifiant de l'émission, qui peut changer d'une construction à l'autre.
@@ -77,7 +87,7 @@ class Arbitrage:
 
     source: str
     source_id: str
-    sorte: Literal["thème", "existence"]
+    sorte: Literal["thème", "existence", "écoute"]
     themes: frozenset[str] = frozenset()  # pour un arbitrage de thème
     justification: str = ""
     date: datetime = datetime.min  # date de la décision
@@ -98,6 +108,7 @@ class Doute:
     source: str
     source_id: str
     detail: str
+    a_ecouter: bool = False  # l'émission, dans la liste, est renvoyée à l'écoute
 
 
 def construire_liste(
@@ -170,8 +181,10 @@ def _contradiction(
 
 def _contredit_lmelp(emission: Emission, arbitrage: Arbitrage) -> bool:
     """L'arbitrage dit autre chose que lmelp : émission livres, qui existe."""
-    return _verifiee(emission) and (
-        arbitrage.sorte == "existence" or arbitrage.themes != {"livres"}
+    return (
+        _verifiee(emission)
+        and arbitrage.sorte != "écoute"
+        and (arbitrage.sorte == "existence" or arbitrage.themes != {"livres"})
     )
 
 
@@ -179,6 +192,8 @@ def _decision(arbitrage: Arbitrage) -> str:
     """La décision d'un arbitrage, en clair, pour le détail d'un doute."""
     if arbitrage.sorte == "existence":
         return "arbitrée inexistante"
+    if arbitrage.sorte == "écoute":
+        return "renvoyée à l'écoute"
     return f"arbitrée {'+'.join(sorted(arbitrage.themes))}"
 
 
@@ -200,7 +215,8 @@ def _arbitrer(
     """Applique à chaque émission le dernier arbitrage de ses attestations.
 
     Un arbitrage de thème remplace exactement ses thèmes ; un arbitrage
-    d'existence la retire de l'ensemble des émissions. Rend les émissions
+    d'existence la retire de l'ensemble des émissions ; un renvoi à l'écoute
+    lui laisse les thèmes de ses sources. Rend les émissions
     gardées, et les émissions vérifiées retirées avec leur arbitrage.
     """
     par_attestation = _derniers(arbitrages)
@@ -220,7 +236,8 @@ def _arbitrer(
             if _contredit_lmelp(emission, arbitrage):
                 retirees.append((emission, arbitrage))
             continue
-        emission.themes = arbitrage.themes
+        if arbitrage.sorte == "thème":
+            emission.themes = arbitrage.themes
         emission.arbitrage = arbitrage
         gardees.append(emission)
     return gardees, retirees
@@ -257,6 +274,7 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                     source=attestation.source if attestation else "",
                     source_id=attestation.source_id if attestation else "",
                     detail=detail,
+                    a_ecouter=dans_la_liste and emission.a_ecouter,
                 )
             )
 
@@ -310,7 +328,7 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                 " pour les émissions littéraires",
             )
         # Un arbitrage de thème lève les doutes de thème.
-        if emission.arbitrage is None:
+        if emission.arbitrage is None or emission.a_ecouter:
             if not emission.themes:
                 ajouter("thème inconnu", "aucune source ne donne de thème")
             divergence = _themes_divergents(emission.attestations)

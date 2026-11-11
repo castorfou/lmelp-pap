@@ -205,6 +205,8 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
       <select id="doute">
         <option value="">Tous</option>
         <option value="tout">Au moins un doute</option>
+        <option value="a-trancher">À trancher</option>
+        <option value="a-ecouter">À écouter</option>
       </select>
     </label>
     <button type="button" class="effacer" id="effacer">Effacer les filtres</button>
@@ -220,7 +222,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
     <div class="plus" id="plus" hidden><button type="button" id="plus-btn"></button></div>
   </section>
 
-  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter, podcasts archivés par la Wayback Machine, et lmelp, source vérifiée (« <span class="verifiee">lmelp ✓</span> ») : ses émissions, vérifiées à la main, sont littéraires et leur thème fait foi. Un doute est un point que les sources ne permettent pas d’affirmer avec certitude : l’existence de l’émission, sa date, son rapprochement ou son thème. Le filtre « Doute » en donne les types. Un thème marqué « ✎ arbitré » vient d’un arbitrage, une décision humaine qui lève un doute ; sa justification s’affiche au survol.</footer>
+  <footer>Données : <code>data/processed/emissions.csv</code> et fichiers liés du dépôt lmelp-pap, générés par <code>lmelp-pap emissions</code>. Sources : radiofrance.fr, catalogue INA, anciennes listes France Inter, podcasts archivés par la Wayback Machine, et lmelp, source vérifiée (« <span class="verifiee">lmelp ✓</span> ») : ses émissions, vérifiées à la main, sont littéraires et leur thème fait foi. Un doute est un point que les sources ne permettent pas d’affirmer avec certitude : l’existence de l’émission, sa date, son rapprochement ou son thème. Le filtre « Doute » en donne les types ; « à écouter » montre les émissions renvoyées à l’écoute, dont les doutes ne se lèveront qu’en écoutant l’émission, et « à trancher » celles dont les doutes peuvent se lever sur pièces. Un thème marqué « ✎ arbitré » vient d’un arbitrage, une décision humaine qui lève un doute ; sa justification s’affiche au survol.</footer>
   <button type="button" class="haut" id="haut" aria-label="Revenir en haut de la page" title="Revenir en haut" hidden>↑</button>
 </div>
 
@@ -240,6 +242,8 @@ const preparer = donnees => donnees.map(e => ({
   att: e.attestations.map(a => [a.source, a.date, a.titre, a.url]),
   enreg: e.enregistrements.map(r => [r.url, r.type, r.duree]),
   doutes: e.doutes.map(d => [d.type, d.detail]),
+  // renvoyée à l'écoute : ses doutes ne se lèveront qu'en l'écoutant
+  aEcouter: !!e.arbitrage && e.arbitrage.sorte === "écoute",
   sources: [...new Set(e.attestations.map(a => a.source))],
   texte: sansAccents([e.titre, e.description, e.animateur, ...e.attestations.map(a => a.titre)].join(" ")),
 })).sort((a, b) => (a.id < b.id ? -1 : 1));
@@ -366,6 +370,8 @@ function criteres() {
     avecEnreg: $("avec-enregistrement").checked, doute: $("doute").value,
   };
 }
+// Les entrées fixes du filtre « Doute », avant les types de doute.
+const FILTRES_DOUTE = ["tout", "a-trancher", "a-ecouter"];
 // Vrai si l'émission passe les filtres ``f`` et, avec ``annee``, l'année choisie.
 function passe(e, f, annee = true) {
   const { q, theme, source, avecEnreg, doute } = f;
@@ -377,7 +383,9 @@ function passe(e, f, annee = true) {
   if (source && source !== "seule" && !e.sources.includes(source)) return false;
   if (avecEnreg && !e.enreg.length) return false;
   if (doute === "tout" && !e.doutes.length) return false;
-  if (doute && doute !== "tout" && !e.doutes.some(([t]) => t === doute)) return false;
+  if (doute === "a-trancher" && (!e.doutes.length || e.aEcouter)) return false;
+  if (doute === "a-ecouter" && !e.aEcouter) return false;
+  if (doute && !FILTRES_DOUTE.includes(doute) && !e.doutes.some(([t]) => t === doute)) return false;
   if (q && !q.split(/\s+/).every(m => e.texte.includes(m))) return false;
   return true;
 }
@@ -451,7 +459,7 @@ function ligne(e) {
     `<div class="themes">${puces(e)}</div>` +
     `<div class="duree">${esc(e.duree ? e.duree.replace(/^00:/, "") : "")}</div>` +
     `<div class="sources">${e.sources.map(s => `<span class="src${s === "lmelp" ? " verifiee" : ""}">${NOMS[s] || esc(s)}</span>`).join("")}` +
-    `${e.enreg.length ? `<span class="son">enregistrement</span>` : ""}${e.doutes.length ? `<span class="drap">doute</span>` : ""}</div></div>`;
+    `${e.enreg.length ? `<span class="son">enregistrement</span>` : ""}${e.aEcouter ? `<span class="drap">à écouter</span>` : e.doutes.length ? `<span class="drap">doute</span>` : ""}</div></div>`;
   if (ouverte) h += detail(e);
   return h;
 }
@@ -461,6 +469,7 @@ function detail(e) {
   h += `<div class="meta">${dateLisible(e.date)}${e.chaine ? " · " + esc(e.chaine) : ""}${e.duree ? " · " + esc(e.duree) : ""}</div>`;
   if (e.description) h += `<p>${esc(e.description)}</p>`;
   if (e.arbitrage && e.arbitrage.sorte === "thème") h += `<p class="meta">Thème arbitré${e.arbitrage.justification ? " · " + esc(e.arbitrage.justification) : ""}</p>`;
+  if (e.aEcouter) h += `<p class="meta">Renvoyée à l'écoute : ses doutes ne se lèveront qu'en écoutant l'émission${e.arbitrage.justification ? " · " + esc(e.arbitrage.justification) : ""}</p>`;
   h += `<div><h3>Attestations</h3><ul>` + e.att.map(([s, d, t, u]) =>
     `<li><span class="meta">${NOMS[s] || esc(s)} · ${esc(d)}</span> ${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t || u)}</a>` : esc(t || "enregistrement archivé")}</li>`
   ).join("") + `</ul></div>`;

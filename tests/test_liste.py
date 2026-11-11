@@ -999,3 +999,74 @@ def test_une_archive_redevenue_integrale_garde_sa_duree() -> None:
         ("intégral", "00:21:05"),
         ("intégral", "00:21:05"),
     ]
+
+
+# --- Renvoi à l'écoute ----------------------------------------------------------
+
+
+def _la_vie_devant_soi() -> Attestation:
+    """1975-10-18 : un extrait de 4 minutes, « La Vie devant soi »."""
+    return Attestation(
+        source="radiofrance",
+        source_id="la-vie-devant-soi-d-emile-ajar",
+        date=date(1975, 10, 18),
+        titre="La Vie devant soi d'Émile Ajar",
+        enregistrements=(Enregistrement(f"{URL_AJAR}-27.m4a", "extrait"),),
+        extrait=True,
+    )
+
+
+def _renvoi(source: str, source_id: str, jour: date = date(2026, 11, 10)) -> Arbitrage:
+    return Arbitrage(
+        source=source,
+        source_id=source_id,
+        sorte="écoute",
+        date=datetime.combine(jour, datetime.min.time()),
+    )
+
+
+def test_un_renvoi_a_l_ecoute_marque_les_doutes_sans_les_lever() -> None:
+    ajar = _la_vie_devant_soi()
+
+    liste, doutes = construire_liste([ajar], [_renvoi(ajar.source, ajar.source_id)])
+
+    assert [e.id for e in liste] == ["1975-10-18"]
+    assert sorted((d.type, d.a_ecouter) for d in doutes) == [
+        ("attestation fragile", True),
+        ("thème inconnu", True),
+    ]
+
+
+def test_sans_renvoi_les_doutes_ne_sont_pas_a_ecouter() -> None:
+    _liste, doutes = construire_liste([_la_vie_devant_soi()])
+
+    assert doutes and not any(d.a_ecouter for d in doutes)
+
+
+def test_un_arbitrage_de_theme_pose_apres_le_renvoi_le_remplace() -> None:
+    ajar = _la_vie_devant_soi()
+    renvoi = _renvoi(ajar.source, ajar.source_id, date(2026, 11, 1))
+    theme = _theme(ajar.source, ajar.source_id, {"livres"})
+
+    liste, doutes = construire_liste([ajar], [theme, renvoi])
+
+    assert liste[0].arbitrage == theme
+    assert [(d.type, d.a_ecouter) for d in doutes] == [("attestation fragile", False)]
+
+
+def test_un_renvoi_ne_concerne_que_les_doutes_des_emissions_de_la_liste() -> None:
+    # deux émissions le même jour, cinéma et théâtre : hors de la liste
+    fiche = _fiche("pulp-fiction-1", date(1994, 5, 29), {"cinéma"})
+    ina = Attestation(
+        source="ina",
+        source_id="PH_PHD2",
+        date=date(1994, 5, 29),
+        themes=frozenset({"théâtre"}),
+    )
+
+    liste, doutes = construire_liste([fiche, ina], [_renvoi("ina", "PH_PHD2")])
+
+    assert liste == []
+    assert [(d.type, d.dans_la_liste, d.a_ecouter) for d in doutes] == [
+        ("collision", False, False)
+    ]

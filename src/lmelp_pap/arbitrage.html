@@ -27,7 +27,7 @@ const RAISONS = ["titre explicite", "écouté l'enregistrement", "connaissance d
 
 document.querySelector("header").insertAdjacentHTML("afterend",
   `<section class="arbitrage" id="arbitrage" aria-label="Mode arbitrage">` +
-  `<div><span class="titre-mode">Mode arbitrage</span> · ouvrir une émission pour arbitrer son thème ou son existence. ` +
+  `<div><span class="titre-mode">Mode arbitrage</span> · ouvrir une émission pour arbitrer son thème ou son existence, ou la renvoyer à l'écoute. ` +
   `Chaque décision est écrite dans <code>arbitrages.csv</code> et la liste est reconstruite aussitôt.</div>` +
   `<div class="statut" id="arb-statut" role="status" aria-live="polite"></div>` +
   `<details><summary>Arbitrages enregistrés (<span id="arb-nombre">…</span>)</summary><ul id="arb-journal"></ul></details>` +
@@ -46,6 +46,7 @@ function controlesArbitrage(e) {
     `<div class="arb-actions">` +
     `<button type="button" class="arb-principal" data-action="theme">Arbitrer le thème</button>` +
     `<button type="button" class="arb-danger" data-action="existence">N'existe pas</button>` +
+    `<button type="button" data-action="ecoute">À écouter</button>` +
     (e.arbitrage ? `<button type="button" data-action="annuler">Annuler l'arbitrage</button>` : "") +
     `</div></div>`;
 }
@@ -115,6 +116,9 @@ $("lignes").addEventListener("click", ev => {
   } else if (bouton.dataset.action === "existence") {
     envoyer("/api/arbitrages", { emission_id: id, sorte: "existence", justification }, () =>
       `${id} : arbitrée inexistante, l'émission sort de la liste.`);
+  } else if (bouton.dataset.action === "ecoute") {
+    envoyer("/api/arbitrages", { emission_id: id, sorte: "écoute", justification }, () =>
+      `${id} : renvoyée à l'écoute, ses doutes sont « à écouter ».`);
   } else {
     envoyer("/api/annulations", { emission_id: id }, () => `${id} : arbitrage annulé.`);
   }
