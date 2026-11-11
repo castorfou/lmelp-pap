@@ -41,7 +41,7 @@ def donnees_page(dossier: Path) -> list[dict[str, Any]]:
     enregistrements = _par_emission(
         dossier / "enregistrements.csv", ("url", "type", "duree")
     )
-    doutes = _par_emission(dossier / "doutes.csv", ("type", "detail"))
+    doutes = _par_emission(dossier / "doutes.csv", ("type", "detail", "a_ecouter"))
     return [
         {
             "id": e["id"],
@@ -54,7 +54,14 @@ def donnees_page(dossier: Path) -> list[dict[str, Any]]:
             "duree": e["duree"],
             "attestations": attestations[e["id"]],
             "enregistrements": enregistrements[e["id"]],
-            "doutes": doutes[e["id"]],
+            "doutes": [
+                {
+                    "type": d["type"],
+                    "detail": d["detail"],
+                    "a_ecouter": d["a_ecouter"] == "oui",
+                }
+                for d in doutes[e["id"]]
+            ],
             "arbitrage": (
                 {"sorte": e["arbitrage"], "justification": e["justification_arbitrage"]}
                 if e["arbitrage"]

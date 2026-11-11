@@ -71,10 +71,45 @@ def dossier(tmp_path: Path) -> Path:
     )
     _ecrire(
         tmp_path / "doutes.csv",
-        ["type", "emission_id", "dans_la_liste", "source", "source_id", "detail"],
+        COLONNES_DOUTES,
         [],
     )
     return tmp_path
+
+
+COLONNES_DOUTES = [
+    "type",
+    "emission_id",
+    "dans_la_liste",
+    "source",
+    "source_id",
+    "detail",
+    "a_ecouter",
+]
+
+
+def _renvoyer_a_l_ecoute(dossier: Path) -> None:
+    """2015-01-11 renvoyée à l'écoute ; 2015-01-18 a un doute à trancher."""
+    with (dossier / "emissions.csv").open(encoding="utf-8", newline="") as f:
+        lignes = list(csv.DictReader(f))
+    for ligne in lignes:
+        if ligne["id"] == "2015-01-11":
+            ligne["arbitrage"] = "écoute"
+    _ecrire(dossier / "emissions.csv", list(lignes[0]), lignes)
+    _ecrire(
+        dossier / "doutes.csv",
+        COLONNES_DOUTES,
+        [
+            {
+                "type": "thème inconnu",
+                "emission_id": i,
+                "dans_la_liste": "oui",
+                "detail": "aucune source ne donne de thème",
+                "a_ecouter": a_ecouter,
+            }
+            for i, a_ecouter in (("2015-01-11", "oui"), ("2015-01-18", "non"))
+        ],
+    )
 
 
 @pytest.fixture(scope="module")
@@ -266,3 +301,89 @@ def test_en_mode_arbitrage_la_frise_reste_filtree_apres_une_decision(
     assert _echelle(page)[-1] == "1"
     assert _filtres_actifs(page) == ["Thème : inconnu ×"]
     assert page.locator("#resultat").inner_text() == "2 émissions"
+
+
+def _ids_affiches(page: sync_api.Page) -> list[str]:
+    return [
+        str(i)
+        for i in page.locator(".ligne").evaluate_all("ls => ls.map(l => l.dataset.id)")
+    ]
+
+
+def test_les_filtres_a_trancher_et_a_ecouter_separent_les_emissions_renvoyees(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    _renvoyer_a_l_ecoute(dossier)
+    page = _ouvrir(navigateur, construire_page(dossier))
+
+    page.select_option("#doute", label="À trancher")
+    assert _ids_affiches(page) == ["2015-01-18"]
+    assert _filtres_actifs(page) == ["Doute : À trancher ×"]
+
+    page.select_option("#doute", label="À écouter")
+    assert _ids_affiches(page) == ["2015-01-11"]
+
+    page.select_option("#doute", label="Au moins un doute")
+    assert _ids_affiches(page) == ["2015-01-11", "2015-01-18"]
+
+
+def test_le_badge_d_une_emission_renvoyee_est_a_ecouter(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    _renvoyer_a_l_ecoute(dossier)
+    page = _ouvrir(navigateur, construire_page(dossier))
+
+    badge = page.locator(".ligne .drap")
+    assert badge.evaluate_all("bs => bs.map(b => b.closest('.ligne').dataset.id)") == [
+        "2015-01-11",
+        "2015-01-18",
+    ]
+    assert badge.all_inner_texts() == ["à écouter", "doute"]
+
+
+def test_la_page_publiee_n_a_pas_de_bouton_a_ecouter(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    _renvoyer_a_l_ecoute(dossier)
+    page = _ouvrir(navigateur, construire_page(dossier))
+
+    page.locator('.ligne[data-id="2015-01-18"]').click()
+
+    assert page.get_by_role("button", name="À écouter", exact=True).count() == 0
+
+
+def test_en_mode_arbitrage_a_ecouter_renvoie_l_emission(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    emissions = donnees_page(dossier)
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api={"emissions": emissions, "arbitrages": []},
+        decision={"emissions": emissions, "arbitrages": []},
+    )
+    page.locator("#arb-nombre", has_text="0").wait_for()
+    page.locator('.ligne[data-id="2015-01-18"]').click()
+
+    with page.expect_request("**/api/arbitrages") as requete:
+        page.get_by_role("button", name="À écouter", exact=True).click()
+
+    assert requete.value.post_data_json == {
+        "emission_id": "2015-01-18",
+        "sorte": "écoute",
+        "justification": "",
+    }
+    page.locator("#arb-statut", has_text="renvoyée à l'écoute").wait_for()
+
+
+def test_une_emission_renvoyee_sans_doute_n_est_pas_a_ecouter(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    # le badge et le filtre suivent la colonne a_ecouter de doutes.csv
+    _renvoyer_a_l_ecoute(dossier)
+    _ecrire(dossier / "doutes.csv", COLONNES_DOUTES, [])
+    page = _ouvrir(navigateur, construire_page(dossier))
+
+    assert page.locator(".ligne .drap").count() == 0
+    page.select_option("#doute", label="À écouter")
+    assert _ids_affiches(page) == []

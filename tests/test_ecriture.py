@@ -1,11 +1,12 @@
 """Écriture de la liste des émissions en CSV liés (ADR 0001)."""
 
 import csv
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import (
+    Arbitrage,
     Attestation,
     Doute,
     Emission,
@@ -127,6 +128,7 @@ def test_les_doutes_sont_ecrits_a_cote_dans_la_liste_ou_non(tmp_path: Path) -> N
             "source": "",
             "source_id": "",
             "detail": "ina:1956-01-19, wayback_podcast:1956-01-22",
+            "a_ecouter": "non",
         },
         {
             "type": "désaccord de date",
@@ -135,6 +137,7 @@ def test_les_doutes_sont_ecrits_a_cote_dans_la_liste_ou_non(tmp_path: Path) -> N
             "source": "",
             "source_id": "",
             "detail": "ina:1994-05-26, radiofrance:1994-05-29",
+            "a_ecouter": "non",
         },
     ]
     assert not (tmp_path / "rapport_rapprochement.csv").exists()
@@ -200,3 +203,30 @@ def test_un_enregistrement_porte_sa_duree_quand_une_source_la_connait(
         (r["url"], r["duree"]) for r in _lire(tmp_path / "enregistrements.csv")
     ] == [(m4a, "00:03:56")]
     assert _lire(tmp_path / "emissions.csv")[0]["duree"] == ""
+
+
+def test_les_doutes_d_une_emission_renvoyee_a_l_ecoute_sont_a_ecouter(
+    tmp_path: Path,
+) -> None:
+    extrait = Attestation(
+        source="radiofrance",
+        source_id="la-vie-devant-soi-d-emile-ajar",
+        date=date(1975, 10, 18),
+        extrait=True,
+    )
+    renvoi = Arbitrage(
+        source=extrait.source,
+        source_id=extrait.source_id,
+        sorte="écoute",
+        date=datetime(2026, 11, 11),
+    )
+
+    ecrire_liste(*construire_liste([extrait], [renvoi]), tmp_path)
+
+    assert [(d["type"], d["a_ecouter"]) for d in _lire(tmp_path / "doutes.csv")] == [
+        ("attestation fragile", "oui"),
+        ("thème inconnu", "oui"),
+    ]
+    assert [(e["id"], e["arbitrage"]) for e in _lire(tmp_path / "emissions.csv")] == [
+        ("1975-10-18", "écoute")
+    ]

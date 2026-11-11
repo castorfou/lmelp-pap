@@ -37,6 +37,7 @@ COLONNES_DOUTES = [
     "source",
     "source_id",
     "detail",
+    "a_ecouter",
 ]
 
 
@@ -119,6 +120,7 @@ def ecrire_liste(liste: list[Emission], doutes: list[Doute], dossier: Path) -> N
                 "source": d.source,
                 "source_id": d.source_id,
                 "detail": d.detail,
+                "a_ecouter": "oui" if d.a_ecouter else "non",
             }
             for d in sorted(doutes, key=lambda d: (d.emission_id, d.type))
         ),

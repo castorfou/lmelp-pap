@@ -231,3 +231,27 @@ def test_un_theme_arbitre_est_marque_dans_emissions_csv(tmp_path: Path) -> None:
         "thème",
         "",
     )
+
+
+def test_un_renvoi_a_l_ecoute_survit_a_la_reconstruction_de_la_liste(
+    tmp_path: Path,
+) -> None:
+    cache, sortie = tmp_path / "cache", tmp_path / "sortie"
+    _cache_rempli(cache)
+    sortie.mkdir()
+    (sortie / "arbitrages.csv").write_text(
+        "source,source_id,sorte,valeur,justification,date\n"
+        # 1967-01-01, attesté par le seul MP3 Wayback, au thème inconnu
+        "wayback_podcast,ITEMA_23820437,écoute,à écouter,,2026-11-11\n",
+        encoding="utf-8",
+    )
+
+    for _ in range(2):
+        main(["emissions", "--cache", str(cache), "--sortie", str(sortie)])
+
+    assert sorted(
+        (d["type"], d["a_ecouter"])
+        for d in _doutes(sortie / "doutes.csv")
+        if d["emission_id"] == "1967-01-01"
+    ) == [("attestation fragile", "oui"), ("thème inconnu", "oui")]
+    assert "1967-01-01" in _ids(sortie / "emissions.csv")

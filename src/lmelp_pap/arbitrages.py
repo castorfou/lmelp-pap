@@ -1,9 +1,10 @@
 """Lecture du fichier ``arbitrages.csv``, versionné à côté de la liste.
 
 Colonnes : ``source``, ``source_id`` (l'attestation arbitrée), ``sorte``
-(``thème`` ou ``existence``), ``valeur`` (les thèmes séparés par ``;``, ou
-``n'existe pas``), ``justification`` (facultative) et ``date`` de la décision
-(ISO 8601, jour ou jour et heure).
+(``thème``, ``existence``, ou ``écoute`` pour un renvoi à l'écoute),
+``valeur`` (les thèmes séparés par ``;``, ``n'existe pas`` ou ``à écouter``),
+``justification`` (facultative) et ``date`` de la décision (ISO 8601, jour ou
+jour et heure).
 """
 
 import csv
@@ -15,6 +16,7 @@ from lmelp_pap.liste import Arbitrage
 
 
 INEXISTANTE = "n'existe pas"
+A_ECOUTER = "à écouter"
 THEMES = (
     "livres",
     "cinéma",
@@ -40,14 +42,17 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
     sorte, valeur = ligne["sorte"].strip(), ligne["valeur"].strip()
     themes = frozenset(t.strip() for t in valeur.split(";") if t.strip())
     if sorte == "thème" and themes:
-        sorte_lue: Literal["thème", "existence"] = "thème"
+        sorte_lue: Literal["thème", "existence", "écoute"] = "thème"
     elif sorte == "existence" and valeur == INEXISTANTE:
         sorte_lue, themes = "existence", frozenset()
+    elif sorte == "écoute" and valeur == A_ECOUTER:
+        sorte_lue, themes = "écoute", frozenset()
     else:
         raise ValueError(
             f"arbitrages.csv, ligne {numero} : sorte « {sorte} » et valeur "
             f"« {valeur} » invalides (attendu : thème et des thèmes séparés par "
-            f"« ; », ou existence et « {INEXISTANTE} »)"
+            f"« ; », existence et « {INEXISTANTE} », ou écoute et "
+            f"« {A_ECOUTER} »)"
         )
     return Arbitrage(
         source=ligne["source"].strip(),
@@ -104,9 +109,12 @@ def retirer_arbitrages(chemin: Path, cles: set[tuple[str, str]]) -> int:
 
 
 def valeur(arbitrage: Arbitrage) -> str:
-    """La colonne ``valeur`` : les thèmes séparés par ``;``, ou ``n'existe pas``."""
+    """La colonne ``valeur`` : les thèmes séparés par ``;``, ``n'existe pas`` ou
+    ``à écouter``."""
     if arbitrage.sorte == "existence":
         return INEXISTANTE
+    if arbitrage.sorte == "écoute":
+        return A_ECOUTER
     return ";".join(sorted(arbitrage.themes))
 
 

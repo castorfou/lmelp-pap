@@ -220,3 +220,51 @@ def test_les_lignes_ecrites_a_la_main_restent_intactes(url: str, sortie: Path) -
         {"source": "wayback_podcast", "source_id": "ITEMA_20496304"},
     )
     assert (sortie / "arbitrages.csv").read_text(encoding="utf-8") == a_la_main
+
+
+def test_a_ecouter_renvoie_l_emission_puis_un_arbitrage_de_theme_le_remplace(
+    url: str, sortie: Path
+) -> None:
+    donnees = _post(
+        f"{url}/api/arbitrages",
+        {"emission_id": "1967-01-01", "sorte": "écoute"},
+    )
+
+    [emission] = [e for e in donnees["emissions"] if e["id"] == "1967-01-01"]
+    assert emission["arbitrage"]["sorte"] == "écoute"
+    assert {d["a_ecouter"] for d in emission["doutes"]} == {True}
+    [renvoi] = _lignes(sortie / "arbitrages.csv")
+    assert (renvoi["source_id"], renvoi["sorte"], renvoi["valeur"]) == (
+        "ITEMA_23820437",
+        "écoute",
+        "à écouter",
+    )
+
+    donnees = _post(
+        f"{url}/api/arbitrages",
+        {
+            "emission_id": "1967-01-01",
+            "sorte": "thème",
+            "themes": ["livres"],
+            "justification": "écouté l'enregistrement",
+        },
+    )
+
+    [emission] = [e for e in donnees["emissions"] if e["id"] == "1967-01-01"]
+    assert emission["arbitrage"]["sorte"] == "thème"
+    assert [(d["type"], d["a_ecouter"]) for d in emission["doutes"]] == [
+        ("attestation fragile", False)
+    ]
+
+
+def test_a_ecouter_est_refuse_pour_une_emission_sans_doute(
+    url: str, sortie: Path
+) -> None:
+    donnees = _get(f"{url}/api/donnees")
+    sans_doute = next(e["id"] for e in donnees["emissions"] if not e["doutes"])
+
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post(f"{url}/api/arbitrages", {"emission_id": sans_doute, "sorte": "écoute"})
+
+    assert erreur.value.code == 400
+    assert not (sortie / "arbitrages.csv").exists()

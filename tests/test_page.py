@@ -55,7 +55,11 @@ def test_chaque_emission_porte_ses_attestations_enregistrements_et_doutes() -> N
         }
     ]
     assert aragon["doutes"] == [
-        {"type": "rapprochement ambigu", "detail": "rapprochable aussi de 1958-12-06"}
+        {
+            "type": "rapprochement ambigu",
+            "detail": "rapprochable aussi de 1958-12-06",
+            "a_ecouter": False,
+        }
     ]
     assert aragon["description"].endswith("</script> incluse")
 
