@@ -57,6 +57,7 @@ class Atelier:
         self.attestations = lire_cache(cache)
         self._par_cle = {a.cle: a for a in self.attestations}
         self._emissions: dict[str, Emission] = {}
+        self._avec_doute: set[str] = set()  # émissions de la liste qui ont un doute
         self._verrou = threading.Lock()
         with self._verrou:
             self._reconstruire()
@@ -84,7 +85,13 @@ class Atelier:
                     raise DemandeInvalideError(
                         f"thèmes invalides : {sorted(themes)} (attendu : {THEMES})"
                     )
-            elif sorte in ("existence", "écoute"):
+            elif sorte == "existence":
+                themes = frozenset()
+            elif sorte == "écoute":
+                if emission.id not in self._avec_doute:
+                    raise DemandeInvalideError(
+                        f"{emission.id} n'a aucun doute à renvoyer à l'écoute"
+                    )
                 themes = frozenset()
             else:
                 raise DemandeInvalideError(f"sorte invalide : {sorte!r}")
@@ -130,6 +137,7 @@ class Atelier:
         )
         ecrire_liste(liste, doutes, self.sortie)
         self._emissions = {e.id: e for e in liste}
+        self._avec_doute = {d.emission_id for d in doutes if d.dans_la_liste}
 
     def _donnees(self) -> dict[str, Any]:
         """Les données de la page et les arbitrages, du plus récent au plus ancien."""

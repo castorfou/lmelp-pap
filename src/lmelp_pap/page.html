@@ -242,8 +242,8 @@ const preparer = donnees => donnees.map(e => ({
   att: e.attestations.map(a => [a.source, a.date, a.titre, a.url]),
   enreg: e.enregistrements.map(r => [r.url, r.type, r.duree]),
   doutes: e.doutes.map(d => [d.type, d.detail]),
-  // renvoyée à l'écoute : ses doutes ne se lèveront qu'en l'écoutant
-  aEcouter: !!e.arbitrage && e.arbitrage.sorte === "écoute",
+  // renvoyée à l'écoute : ses doutes (colonne a_ecouter) ne se lèveront qu'en l'écoutant
+  aEcouter: e.doutes.some(d => d.a_ecouter),
   sources: [...new Set(e.attestations.map(a => a.source))],
   texte: sansAccents([e.titre, e.description, e.animateur, ...e.attestations.map(a => a.titre)].join(" ")),
 })).sort((a, b) => (a.id < b.id ? -1 : 1));
@@ -469,7 +469,7 @@ function detail(e) {
   h += `<div class="meta">${dateLisible(e.date)}${e.chaine ? " · " + esc(e.chaine) : ""}${e.duree ? " · " + esc(e.duree) : ""}</div>`;
   if (e.description) h += `<p>${esc(e.description)}</p>`;
   if (e.arbitrage && e.arbitrage.sorte === "thème") h += `<p class="meta">Thème arbitré${e.arbitrage.justification ? " · " + esc(e.arbitrage.justification) : ""}</p>`;
-  if (e.aEcouter) h += `<p class="meta">Renvoyée à l'écoute : ses doutes ne se lèveront qu'en écoutant l'émission${e.arbitrage.justification ? " · " + esc(e.arbitrage.justification) : ""}</p>`;
+  if (e.aEcouter) h += `<p class="meta">Renvoyée à l'écoute : ses doutes ne se lèveront qu'en écoutant l'émission${e.arbitrage && e.arbitrage.justification ? " · " + esc(e.arbitrage.justification) : ""}</p>`;
   h += `<div><h3>Attestations</h3><ul>` + e.att.map(([s, d, t, u]) =>
     `<li><span class="meta">${NOMS[s] || esc(s)} · ${esc(d)}</span> ${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t || u)}</a>` : esc(t || "enregistrement archivé")}</li>`
   ).join("") + `</ul></div>`;

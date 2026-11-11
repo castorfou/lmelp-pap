@@ -1070,3 +1070,19 @@ def test_un_renvoi_ne_concerne_que_les_doutes_des_emissions_de_la_liste() -> Non
     assert [(d.type, d.dans_la_liste, d.a_ecouter) for d in doutes] == [
         ("collision", False, False)
     ]
+
+
+def test_un_renvoi_pose_apres_un_arbitrage_de_theme_le_retire() -> None:
+    # renvoyer à l'écoute, c'est revenir sur la décision : les thèmes des
+    # sources et leurs doutes reviennent, « à écouter »
+    ajar = _la_vie_devant_soi()
+    theme = _theme(ajar.source, ajar.source_id, {"livres"}, date(2026, 11, 1))
+    renvoi = _renvoi(ajar.source, ajar.source_id)
+
+    liste, doutes = construire_liste([ajar], [theme, renvoi])
+
+    assert (liste[0].themes, liste[0].arbitrage) == (frozenset(), renvoi)
+    assert sorted((d.type, d.a_ecouter) for d in doutes) == [
+        ("attestation fragile", True),
+        ("thème inconnu", True),
+    ]

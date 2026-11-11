@@ -328,7 +328,7 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                 " pour les émissions littéraires",
             )
         # Un arbitrage de thème lève les doutes de thème.
-        if emission.arbitrage is None or emission.a_ecouter:
+        if emission.arbitrage is None or emission.arbitrage.sorte != "thème":
             if not emission.themes:
                 ajouter("thème inconnu", "aucune source ne donne de thème")
             divergence = _themes_divergents(emission.attestations)

@@ -255,3 +255,16 @@ def test_a_ecouter_renvoie_l_emission_puis_un_arbitrage_de_theme_le_remplace(
     assert [(d["type"], d["a_ecouter"]) for d in emission["doutes"]] == [
         ("attestation fragile", False)
     ]
+
+
+def test_a_ecouter_est_refuse_pour_une_emission_sans_doute(
+    url: str, sortie: Path
+) -> None:
+    donnees = _get(f"{url}/api/donnees")
+    sans_doute = next(e["id"] for e in donnees["emissions"] if not e["doutes"])
+
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post(f"{url}/api/arbitrages", {"emission_id": sans_doute, "sorte": "écoute"})
+
+    assert erreur.value.code == 400
+    assert not (sortie / "arbitrages.csv").exists()

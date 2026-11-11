@@ -374,3 +374,16 @@ def test_en_mode_arbitrage_a_ecouter_renvoie_l_emission(
         "justification": "",
     }
     page.locator("#arb-statut", has_text="renvoyée à l'écoute").wait_for()
+
+
+def test_une_emission_renvoyee_sans_doute_n_est_pas_a_ecouter(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    # le badge et le filtre suivent la colonne a_ecouter de doutes.csv
+    _renvoyer_a_l_ecoute(dossier)
+    _ecrire(dossier / "doutes.csv", COLONNES_DOUTES, [])
+    page = _ouvrir(navigateur, construire_page(dossier))
+
+    assert page.locator(".ligne .drap").count() == 0
+    page.select_option("#doute", label="À écouter")
+    assert _ids_affiches(page) == []
