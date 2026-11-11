@@ -223,10 +223,10 @@ La page garde la frise et les filtres de la page publiée (année, thème, sourc
 - une case par thème (livres, cinéma, théâtre, opéra, télévision, musique, variétés, hommage), cochée pour les thèmes actuels, et le bouton **Arbitrer le thème**. Cocher `hommage` décoche les autres thèmes, et cocher un autre thème décoche `hommage` ;
 - le bouton **N'existe pas** ;
 - le bouton **À écouter**, qui renvoie l'émission à l'écoute ;
-- pour une émission qui a un doute de date (`désaccord de date` ou `jour inhabituel`), chaque date candidate, c'est-à-dire chaque date de première diffusion que donnent ses sources, avec son jour et ses sources. La date actuelle est cochée et le jour habituel signalé. Le bouton **Retenir cette date** enregistre un arbitrage de date :
+- pour une émission qui a un doute de date (`désaccord de date` ou `jour inhabituel`), ou dont la date est déjà arbitrée, chaque date candidate, c'est-à-dire chaque date de première diffusion que donnent ses sources, avec son jour et ses sources. La date actuelle est cochée et le jour habituel signalé. Le bouton **Retenir cette date** enregistre un arbitrage de date ; sur une date déjà arbitrée, il la remplace sans toucher à l'arbitrage de thème ni au renvoi à l'écoute :
 
   ```
-  Date · désaccord de date
+  Date de première diffusion
     ● 2020-08-01 samedi    INA, radiofrance   ← date actuelle
     ○ 2020-08-02 dimanche  INA                ← jour habituel
     ○ 2020-08-03 lundi     INA
@@ -258,7 +258,7 @@ Le serveur expose une petite API JSON, utilisée par la page :
 
 | Requête | Effet |
 |---|---|
-| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`) et `arbitrage_date` (`date` et `justification`, ou `null`). |
+| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`) et `arbitrage_date` (`date` et `justification`, ou `null`). |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, `"sorte": "date"` avec `"date": "2020-08-02"`, ou `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute. |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
 

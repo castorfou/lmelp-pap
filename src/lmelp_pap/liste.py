@@ -517,10 +517,7 @@ def dates_candidates(emission: Emission) -> dict[date, list[str]]:
     """Les dates de première diffusion que donnent les sources de l'émission,
     dans l'ordre, chacune avec ses sources : les choix d'un arbitrage de date."""
     sources: defaultdict[date, set[str]] = defaultdict(set)
-    diffusion = [
-        a for a in emission.attestations if a.nature_date == "première diffusion"
-    ]
-    for a in diffusion or emission.attestations:
+    for a in _datantes(emission.attestations):
         sources[a.date].add(a.source)
     return {jour: sorted(sources[jour]) for jour in sorted(sources)}
 
@@ -752,10 +749,15 @@ def _meme_fiche(verifiee: Attestation, b: Attestation) -> bool:
     return b.source not in SOURCES_VERIFIEES and b.url == verifiee.url
 
 
+def _datantes(groupe: list[Attestation]) -> list[Attestation]:
+    """Les attestations qui datent la première diffusion, à défaut toutes."""
+    diffusion = [a for a in groupe if a.nature_date == "première diffusion"]
+    return diffusion or groupe
+
+
 def _dates_de_diffusion(groupe: list[Attestation]) -> list[date]:
     """Les dates de première diffusion du groupe, à défaut ses autres dates."""
-    diffusion = [a.date for a in groupe if a.nature_date == "première diffusion"]
-    return diffusion or [a.date for a in groupe]
+    return [a.date for a in _datantes(groupe)]
 
 
 def _ecart(a: Attestation, groupe: list[Attestation]) -> int:

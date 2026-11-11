@@ -409,3 +409,31 @@ def test_un_arbitrage_de_date_invalide_est_refuse_sans_rien_ecrire(
 
     assert erreur.value.code == 400
     assert not (sortie / "arbitrages.csv").exists()
+
+
+def test_une_date_arbitree_se_change_sans_annuler_l_arbitrage_de_theme(
+    url: str, sortie: Path
+) -> None:
+    _post(
+        f"{url}/api/arbitrages",
+        {"emission_id": "2020-08-01", "sorte": "date", "date": "2020-08-02"},
+    )
+    _post(
+        f"{url}/api/arbitrages",
+        {"emission_id": "2020-08-02", "sorte": "thème", "themes": ["livres"]},
+    )
+    candidates = _emission(_get(f"{url}/api/donnees"), "2020-08-02")["dates_candidates"]
+    assert [(c["date"], c["actuelle"]) for c in candidates] == [
+        ("2020-08-01", False),
+        ("2020-08-02", True),
+        ("2020-08-03", False),
+    ]
+
+    donnees = _post(
+        f"{url}/api/arbitrages",
+        {"emission_id": "2020-08-02", "sorte": "date", "date": "2020-08-01"},
+    )
+
+    emission = _emission(donnees, "2020-08-01")
+    assert emission["arbitrage_date"]["date"] == "2020-08-01"
+    assert emission["arbitrage"]["sorte"] == "thème"

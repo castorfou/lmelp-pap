@@ -44,15 +44,14 @@ document.querySelector("header").insertAdjacentHTML("afterend",
 function choixDate(e) {
   const candidates = e.dates_candidates || [];
   if (!candidates.length) return "";
-  const doutes = e.doutes.map(([t]) => t).filter(t => t === "désaccord de date" || t === "jour inhabituel");
   const choix = candidates.map(c => {
     const indices = [c.actuelle && "date actuelle", c.habituel && "jour habituel"].filter(Boolean);
-    return `<label><input type="radio" name="date-${esc(e.id)}" value="${esc(c.date)}"${c.actuelle ? " checked" : ""}>` +
+    return `<label><input type="radio" name="date-${esc(e.id)}" value="${esc(c.date)}"${c.actuelle ? " checked data-actuelle" : ""}>` +
       ` <b>${esc(c.date)}</b> <span class="${c.habituel ? "habituel" : ""}">${esc(c.jour)}</span>` +
       ` <span class="meta">${c.sources.map(s => NOMS[s] || esc(s)).join(", ")}</span>` +
       (indices.length ? ` <span class="indice">← ${indices.join(" · ")}</span>` : "") + `</label>`;
   }).join("");
-  return `<fieldset class="arb-dates"><legend>Date · ${esc([...new Set(doutes)].join(", "))}</legend>${choix}` +
+  return `<fieldset class="arb-dates"><legend>Date de première diffusion</legend>${choix}` +
     `<button type="button" class="arb-principal" data-action="date">Retenir cette date</button></fieldset>`;
 }
 
@@ -146,7 +145,7 @@ $("lignes").addEventListener("click", ev => {
     if (!choisie) { statut("Choisir une date.", true); return; }
     const date = choisie.value;
     envoyer("/api/arbitrages", { emission_id: id, sorte: "date", date, justification }, () =>
-      `${id} : date retenue ${date}` + (date === id ? ", l'exception est confirmée." : `, l'émission devient ${date}.`));
+      `${id} : date retenue ${date}` + (choisie.hasAttribute("data-actuelle") ? ", l'exception est confirmée." : `, l'émission devient ${date}.`));
   } else if (bouton.dataset.action === "ecoute") {
     envoyer("/api/arbitrages", { emission_id: id, sorte: "écoute", justification }, () =>
       `${id} : renvoyée à l'écoute, ses doutes sont « à écouter ».`);

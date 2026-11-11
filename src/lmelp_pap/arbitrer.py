@@ -16,7 +16,7 @@ API :
 
 Chaque requête d'écriture renvoie les données à jour, comme ``GET /api/donnees``.
 Une émission y porte en plus, pour l'arbitrage de date, ses ``dates_candidates``
-(vides sans doute de date) et son ``arbitrage_date``.
+(vides sans doute de date ni date arbitrée) et son ``arbitrage_date``.
 """
 
 import json
@@ -144,7 +144,7 @@ class Atelier:
     def _date_candidate(self, emission: Emission, texte: object) -> date:
         """La date à retenir, parmi celles des sources d'une émission qui a un
         doute de date."""
-        if not self._doutes.get(emission.id, set()) & set(DOUTES_DE_DATE):
+        if not self._date_arbitrable(emission):
             raise DemandeInvalideError(f"{emission.id} n'a aucun doute de date")
         retenue = lire_date(texte) if isinstance(texte, str) else None
         if retenue is None or retenue not in dates_candidates(emission):
@@ -153,6 +153,13 @@ class Atelier:
                 f"{', '.join(str(d) for d in dates_candidates(emission))})"
             )
         return retenue
+
+    def _date_arbitrable(self, emission: Emission) -> bool:
+        """L'émission de la liste a un doute qu'un arbitrage de date lève, ou
+        une date déjà arbitrée, qui se change sans annuler ses autres arbitrages."""
+        return emission.arbitrage_date is not None or bool(
+            self._doutes.get(emission.id, set()) & set(DOUTES_DE_DATE)
+        )
 
     def _emission(self, emission_id: object) -> Emission:
         """L'émission de la liste qui porte cet identifiant."""
@@ -185,7 +192,6 @@ class Atelier:
         """Une émission de la page, avec ce qu'il faut pour arbitrer sa date."""
         emission = self._emissions[donnees["id"]]
         arbitrage = emission.arbitrage_date
-        doute_de_date = self._doutes.get(emission.id, set()) & set(DOUTES_DE_DATE)
         return {
             **donnees,
             "dates_candidates": [
@@ -198,7 +204,7 @@ class Atelier:
                 }
                 for jour, sources in dates_candidates(emission).items()
             ]
-            if doute_de_date
+            if self._date_arbitrable(emission)
             else [],
             "arbitrage_date": (
                 {
