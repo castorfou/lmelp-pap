@@ -127,8 +127,10 @@ def test_un_desaccord_de_date_de_plus_d_un_jour_est_un_doute() -> None:
 
     liste, doutes = construire_liste([ina, podcast])
 
+    # le 19 est un jeudi : la date retenue n'est pas au jour habituel (dimanche)
     assert [(d.type, d.emission_id, d.dans_la_liste) for d in doutes] == [
-        ("désaccord de date", liste[0].id, True)
+        ("désaccord de date", liste[0].id, True),
+        ("jour inhabituel", liste[0].id, True),
     ]
 
 
@@ -142,16 +144,17 @@ def test_un_jour_d_ecart_n_est_pas_un_doute() -> None:
 
 
 def test_un_doute_sur_une_emission_hors_de_la_liste_le_dit() -> None:
+    # 1964, année de transition : pas de jour habituel pour lever le désaccord
     ina = Attestation(
         source="ina",
         source_id="PHD1",
-        date=date(1994, 5, 26),
+        date=date(1964, 5, 26),
         themes=frozenset({"cinéma"}),
     )
     radiofrance = Attestation(
         source="radiofrance",
         source_id="pulp-fiction",
-        date=date(1994, 5, 29),
+        date=date(1964, 5, 29),
         themes=frozenset({"cinéma"}),
     )
 
@@ -159,7 +162,7 @@ def test_un_doute_sur_une_emission_hors_de_la_liste_le_dit() -> None:
 
     assert liste == []
     assert [(d.type, d.emission_id, d.dans_la_liste) for d in doutes] == [
-        ("désaccord de date", "1994-05-29", False)
+        ("désaccord de date", "1964-05-29", False)
     ]
 
 
@@ -775,7 +778,8 @@ def test_lmelp_leve_les_doutes_de_theme_et_d_existence() -> None:
 
     _liste, doutes = construire_liste([fiche, lmelp])
 
-    assert _types(doutes, "2026-01-14") == []
+    # un doute de date (la fiche est d'un mercredi), pas de thème ni d'existence
+    assert _types(doutes, "2026-01-14") == ["jour inhabituel"]
 
 
 def test_une_duree_ou_un_animateur_absent_n_est_pas_un_doute() -> None:
@@ -1033,6 +1037,7 @@ def test_un_renvoi_a_l_ecoute_marque_les_doutes_sans_les_lever() -> None:
     assert [e.id for e in liste] == ["1975-10-18"]
     assert sorted((d.type, d.a_ecouter) for d in doutes) == [
         ("attestation fragile", True),
+        ("jour inhabituel", True),
         ("thème inconnu", True),
     ]
 
@@ -1051,7 +1056,10 @@ def test_un_arbitrage_de_theme_pose_apres_le_renvoi_le_remplace() -> None:
     liste, doutes = construire_liste([ajar], [theme, renvoi])
 
     assert liste[0].arbitrage == theme
-    assert [(d.type, d.a_ecouter) for d in doutes] == [("attestation fragile", False)]
+    assert sorted((d.type, d.a_ecouter) for d in doutes) == [
+        ("attestation fragile", False),
+        ("jour inhabituel", False),
+    ]
 
 
 def test_un_renvoi_ne_concerne_que_les_doutes_des_emissions_de_la_liste() -> None:
@@ -1084,6 +1092,7 @@ def test_un_renvoi_pose_apres_un_arbitrage_de_theme_le_retire() -> None:
     assert (liste[0].themes, liste[0].arbitrage) == (frozenset(), renvoi)
     assert sorted((d.type, d.a_ecouter) for d in doutes) == [
         ("attestation fragile", True),
+        ("jour inhabituel", True),
         ("thème inconnu", True),
     ]
 
@@ -1122,3 +1131,111 @@ def test_un_arbitrage_hommage_sort_une_emission_meme_au_theme_livres() -> None:
     liste, _doutes = construire_liste([fiche], [hommage])
 
     assert liste == []
+
+
+# --- Jour de diffusion et arbitrage de date -----------------------------------
+
+
+def _attestations_du(*jours: tuple[str, str, date]) -> list[Attestation]:
+    """Des attestations sans thème, (source, identifiant, date)."""
+    return [Attestation(source=s, source_id=i, date=j) for s, i, j in jours]
+
+
+def _rentree_2019() -> list[Attestation]:
+    """2019-09-08, un dimanche : une notice INA à J+1, un fichier publié la veille."""
+    return _attestations_du(
+        ("wayback_podcast", "ITEMA_1", date(2019, 9, 7)),
+        ("radiofrance", "rentree-2019", date(2019, 9, 8)),
+        ("ina", "RD_1", date(2019, 9, 8)),
+        ("ina", "RD_2", date(2019, 9, 9)),
+    )
+
+
+def test_le_jour_habituel_seul_parmi_les_dates_leve_le_desaccord() -> None:
+    liste, doutes = construire_liste(_rentree_2019())
+
+    assert [e.id for e in liste] == ["2019-09-08"]
+    assert "désaccord de date" not in _types(doutes, "2019-09-08")
+
+
+def _ete_2020() -> list[Attestation]:
+    """2020-08-01, un samedi : l'INA donne aussi le dimanche et le lundi."""
+    return _attestations_du(
+        ("radiofrance", "ete-2020", date(2020, 8, 1)),
+        ("ina", "RD_1", date(2020, 8, 1)),
+        ("ina", "RD_2", date(2020, 8, 2)),
+        ("ina", "RD_3", date(2020, 8, 3)),
+    )
+
+
+def test_une_date_retenue_hors_du_jour_habituel_garde_le_desaccord() -> None:
+    liste, doutes = construire_liste(_ete_2020())
+
+    assert [e.id for e in liste] == ["2020-08-01"]
+    assert "désaccord de date" in _types(doutes, "2020-08-01")
+
+
+def test_une_emission_hors_du_jour_habituel_a_un_doute_jour_inhabituel() -> None:
+    # 1961-02-21, un mardi, quand l'émission passe le jeudi
+    mardi = _attestations_du(("ina", "RD_1", date(1961, 2, 21)))
+
+    _liste, doutes = construire_liste(mardi)
+
+    assert [(d.type, d.detail) for d in doutes if d.type == "jour inhabituel"] == [
+        ("jour inhabituel", "un mardi, quand l'émission passe le jeudi")
+    ]
+
+
+def test_une_annee_de_transition_n_a_pas_de_jour_inhabituel() -> None:
+    lundi = _attestations_du(("ina", "RD_1", date(1964, 3, 2)))
+
+    _liste, doutes = construire_liste(lundi)
+
+    assert "jour inhabituel" not in _types(doutes, "1964-03-02")
+
+
+def _doutes_de_date(doutes: list[Doute]) -> list[Doute]:
+    return [d for d in doutes if d.type in ("désaccord de date", "jour inhabituel")]
+
+
+def _date(
+    source: str, source_id: str, retenue: date, jour: date = date(2026, 11, 11)
+) -> Arbitrage:
+    return Arbitrage(
+        source=source,
+        source_id=source_id,
+        sorte="date",
+        date_retenue=retenue,
+        justification="jour habituel",
+        date=datetime.combine(jour, datetime.min.time()),
+    )
+
+
+def test_un_arbitrage_de_date_donne_la_date_retenue_et_leve_le_desaccord() -> None:
+    arbitrage = _date("ina", "RD_1", date(2020, 8, 2))
+
+    liste, doutes = construire_liste(_ete_2020(), [arbitrage])
+
+    assert [(e.id, e.date) for e in liste] == [("2020-08-02", date(2020, 8, 2))]
+    assert liste[0].arbitrage_date == arbitrage
+    assert _doutes_de_date(doutes) == []
+
+
+def test_confirmer_la_date_actuelle_leve_jour_inhabituel_sans_changer_l_id() -> None:
+    mardi = _attestations_du(("ina", "RD_1", date(1961, 2, 21)))
+
+    liste, doutes = construire_liste(mardi, [_date("ina", "RD_1", date(1961, 2, 21))])
+
+    assert [e.id for e in liste] == ["1961-02-21"]
+    assert _doutes_de_date(doutes) == []
+
+
+def test_un_arbitrage_de_date_et_un_arbitrage_de_theme_se_cumulent() -> None:
+    # sur la même attestation : l'un ne remplace pas l'autre
+    date_ = _date("ina", "RD_1", date(2020, 8, 2), date(2026, 11, 1))
+    theme = _theme("ina", "RD_1", {"livres"})
+
+    liste, _doutes = construire_liste(_ete_2020(), [date_, theme])
+
+    assert [(e.id, e.themes) for e in liste] == [("2020-08-02", frozenset({"livres"}))]
+    assert (liste[0].arbitrage, liste[0].arbitrage_date) == (theme, date_)

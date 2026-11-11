@@ -1,14 +1,15 @@
 """Lecture du fichier ``arbitrages.csv``, versionné à côté de la liste.
 
 Colonnes : ``source``, ``source_id`` (l'attestation arbitrée), ``sorte``
-(``thème``, ``existence``, ou ``écoute`` pour un renvoi à l'écoute),
-``valeur`` (les thèmes séparés par ``;``, ``n'existe pas`` ou ``à écouter``),
+(``thème``, ``existence``, ``date``, ou ``écoute`` pour un renvoi à l'écoute),
+``valeur`` (les thèmes séparés par ``;``, ``n'existe pas``, la date retenue au
+format ISO ou ``à écouter``),
 ``justification`` (facultative) et ``date`` de la décision (ISO 8601, jour ou
 jour et heure).
 """
 
 import csv
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -54,29 +55,41 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
     """L'arbitrage d'une ligne du fichier ; ``ValueError`` si elle est invalide."""
     sorte, valeur = ligne["sorte"].strip(), ligne["valeur"].strip()
     themes = frozenset(t.strip() for t in valeur.split(";") if t.strip())
+    retenue = None
     if sorte == "thème" and themes:
         if erreur := erreur_de_themes(themes):
             raise ValueError(f"arbitrages.csv, ligne {numero} : {erreur}")
-        sorte_lue: Literal["thème", "existence", "écoute"] = "thème"
+        sorte_lue: Literal["thème", "existence", "écoute", "date"] = "thème"
     elif sorte == "existence" and valeur == INEXISTANTE:
         sorte_lue, themes = "existence", frozenset()
     elif sorte == "écoute" and valeur == A_ECOUTER:
         sorte_lue, themes = "écoute", frozenset()
+    elif sorte == "date" and (retenue := lire_date(valeur)):
+        sorte_lue, themes = "date", frozenset()
     else:
         raise ValueError(
             f"arbitrages.csv, ligne {numero} : sorte « {sorte} » et valeur "
             f"« {valeur} » invalides (attendu : thème et des thèmes séparés par "
-            f"« ; », existence et « {INEXISTANTE} », ou écoute et "
-            f"« {A_ECOUTER} »)"
+            f"« ; », existence et « {INEXISTANTE} », date et une date "
+            f"AAAA-MM-JJ, ou écoute et « {A_ECOUTER} »)"
         )
     return Arbitrage(
         source=ligne["source"].strip(),
         source_id=ligne["source_id"].strip(),
         sorte=sorte_lue,
         themes=themes,
+        date_retenue=retenue,
         justification=(ligne.get("justification") or "").strip(),
         date=datetime.fromisoformat(ligne["date"].strip()),
     )
+
+
+def lire_date(texte: str) -> date | None:
+    """Une date ``AAAA-MM-JJ``, ou None si le texte n'en est pas une."""
+    try:
+        return date.fromisoformat(texte)
+    except ValueError:
+        return None
 
 
 def ajouter_arbitrage(chemin: Path, arbitrage: Arbitrage) -> None:
@@ -124,12 +137,14 @@ def retirer_arbitrages(chemin: Path, cles: set[tuple[str, str]]) -> int:
 
 
 def valeur(arbitrage: Arbitrage) -> str:
-    """La colonne ``valeur`` : les thèmes séparés par ``;``, ``n'existe pas`` ou
-    ``à écouter``."""
+    """La colonne ``valeur`` : les thèmes séparés par ``;``, ``n'existe pas``, la
+    date retenue ou ``à écouter``."""
     if arbitrage.sorte == "existence":
         return INEXISTANTE
     if arbitrage.sorte == "écoute":
         return A_ECOUTER
+    if arbitrage.sorte == "date":
+        return arbitrage.date_retenue.isoformat() if arbitrage.date_retenue else ""
     return ";".join(sorted(arbitrage.themes))
 
 

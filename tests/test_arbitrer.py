@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from lmelp_pap.arbitrer import creer_serveur
+from lmelp_pap.arbitrer import Atelier, creer_serveur
 from tests.test_commande import _cache_rempli
 
 
@@ -43,6 +43,15 @@ def url(tmp_path: Path, sortie: Path) -> Iterator[str]:
             '"Débat,Magazine",https://catalogue.ina.fr/doc/TV-RADIO/'
             "PH_PHD99999999/livres,oui\n"
         )
+        # L'émission du samedi 1er août 2020 : l'INA la donne aussi le
+        # dimanche et le lundi, d'où un désaccord de date.
+        for jour in ("01", "02", "03"):
+            f.write(
+                f"2020-08-{jour},Le masque et la plume,Le masque et la plume,"
+                "France Inter,20:00:00,00:55:00,Débat,"
+                f"https://catalogue.ina.fr/doc/TV-RADIO/PH_RD202008{jour}/masque,"
+                "oui\n"
+            )
     serveur = creer_serveur(cache, sortie, port=0)
     fil = threading.Thread(target=serveur.serve_forever, daemon=True)
     fil.start()
@@ -284,6 +293,119 @@ def test_a_ecouter_est_refuse_pour_une_emission_sans_doute(
 
     with pytest.raises(urllib.error.HTTPError) as erreur:
         _post(f"{url}/api/arbitrages", {"emission_id": sans_doute, "sorte": "écoute"})
+
+    assert erreur.value.code == 400
+    assert not (sortie / "arbitrages.csv").exists()
+
+
+# --- Arbitrage de date ------------------------------------------------------------
+
+
+def _emission(donnees: dict[str, Any], emission_id: str) -> Any:
+    emissions: list[dict[str, Any]] = donnees["emissions"]
+    [emission] = [e for e in emissions if e["id"] == emission_id]
+    return emission
+
+
+def test_les_dates_candidates_d_un_doute_de_date_ont_leur_jour_et_leurs_sources(
+    url: str,
+) -> None:
+    emission = _emission(_get(f"{url}/api/donnees"), "2020-08-01")
+
+    assert "désaccord de date" in [d["type"] for d in emission["doutes"]]
+    assert emission["dates_candidates"] == [
+        {
+            "date": "2020-08-01",
+            "jour": "samedi",
+            "sources": ["ina"],
+            "habituel": False,
+            "actuelle": True,
+        },
+        {
+            "date": "2020-08-02",
+            "jour": "dimanche",
+            "sources": ["ina"],
+            "habituel": True,
+            "actuelle": False,
+        },
+        {
+            "date": "2020-08-03",
+            "jour": "lundi",
+            "sources": ["ina"],
+            "habituel": False,
+            "actuelle": False,
+        },
+    ]
+
+
+def test_une_emission_sans_doute_de_date_n_a_pas_de_dates_candidates(
+    url: str,
+) -> None:
+    assert _emission(_get(f"{url}/api/donnees"), "2014-09-28")["dates_candidates"] == []
+
+
+def test_un_arbitrage_de_date_retient_la_date_et_survit_a_une_reconstruction(
+    url: str, tmp_path: Path, sortie: Path
+) -> None:
+    donnees = _post(
+        f"{url}/api/arbitrages",
+        {
+            "emission_id": "2020-08-01",
+            "sorte": "date",
+            "date": "2020-08-02",
+            "justification": "jour habituel",
+        },
+    )
+
+    assert "2020-08-01" not in _ids(donnees)
+    emission = _emission(donnees, "2020-08-02")
+    assert emission["doutes"] == []
+    assert emission["arbitrage_date"] == {
+        "date": "2020-08-02",
+        "justification": "jour habituel",
+    }
+    [arbitrage] = _lignes(sortie / "arbitrages.csv")
+    assert (arbitrage["source"], arbitrage["sorte"], arbitrage["valeur"]) == (
+        "ina",
+        "date",
+        "2020-08-02",
+    )
+
+    reconstruite = Atelier(tmp_path / "cache", sortie).donnees()
+
+    assert "2020-08-02" in _ids(reconstruite)
+    assert "2020-08-01" not in _ids(reconstruite)
+
+
+def test_un_arbitrage_de_date_s_annule_depuis_l_emission(
+    url: str, sortie: Path
+) -> None:
+    _post(
+        f"{url}/api/arbitrages",
+        {"emission_id": "2020-08-01", "sorte": "date", "date": "2020-08-02"},
+    )
+
+    donnees = _post(f"{url}/api/annulations", {"emission_id": "2020-08-02"})
+
+    assert _emission(donnees, "2020-08-01")["arbitrage_date"] is None
+
+
+@pytest.mark.parametrize(
+    "corps",
+    [
+        # une date qu'aucune source ne donne
+        {"emission_id": "2020-08-01", "sorte": "date", "date": "2020-08-09"},
+        {"emission_id": "2020-08-01", "sorte": "date", "date": "1er août"},
+        {"emission_id": "2020-08-01", "sorte": "date"},
+        # une émission sans doute de date
+        {"emission_id": "2014-09-28", "sorte": "date", "date": "2014-09-28"},
+    ],
+)
+def test_un_arbitrage_de_date_invalide_est_refuse_sans_rien_ecrire(
+    url: str, sortie: Path, corps: dict[str, Any]
+) -> None:
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post(f"{url}/api/arbitrages", corps)
 
     assert erreur.value.code == 400
     assert not (sortie / "arbitrages.csv").exists()

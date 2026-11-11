@@ -16,6 +16,11 @@
 .arb-raisons input { font: inherit; font-size: 13px; flex: 1 1 220px; min-width: 0; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); color: var(--fg); }
 .arb button, .arbitrage button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer; }
 .arb .arb-raison[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.arb-dates { display: grid; gap: 4px; }
+.arb-dates label { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.arb-dates .habituel { font-weight: 600; }
+.arb-dates .indice { font-size: 12px; color: var(--accent); }
+.arb-dates button { justify-self: start; }
 .arb-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .arb .arb-principal { background: var(--accent); border-color: var(--accent); color: var(--surface); }
 .arb .arb-danger { color: var(--alerte); border-color: var(--alerte); }
@@ -28,11 +33,28 @@ const RAISONS = ["titre explicite", "écouté l'enregistrement", "connaissance d
 
 document.querySelector("header").insertAdjacentHTML("afterend",
   `<section class="arbitrage" id="arbitrage" aria-label="Mode arbitrage">` +
-  `<div><span class="titre-mode">Mode arbitrage</span> · ouvrir une émission pour arbitrer son thème ou son existence, ou la renvoyer à l'écoute. ` +
+  `<div><span class="titre-mode">Mode arbitrage</span> · ouvrir une émission pour arbitrer son thème, son existence ou sa date, ou la renvoyer à l'écoute. ` +
   `Chaque décision est écrite dans <code>arbitrages.csv</code> et la liste est reconstruite aussitôt.</div>` +
   `<div class="statut" id="arb-statut" role="status" aria-live="polite"></div>` +
   `<details><summary>Arbitrages enregistrés (<span id="arb-nombre">…</span>)</summary><ul id="arb-journal"></ul></details>` +
   `</section>`);
+
+// Le choix de la date d'une émission qui a un doute de date : chaque date que
+// donnent les sources, avec son jour et ses sources ; le jour habituel est signalé.
+function choixDate(e) {
+  const candidates = e.dates_candidates || [];
+  if (!candidates.length) return "";
+  const doutes = e.doutes.map(([t]) => t).filter(t => t === "désaccord de date" || t === "jour inhabituel");
+  const choix = candidates.map(c => {
+    const indices = [c.actuelle && "date actuelle", c.habituel && "jour habituel"].filter(Boolean);
+    return `<label><input type="radio" name="date-${esc(e.id)}" value="${esc(c.date)}"${c.actuelle ? " checked" : ""}>` +
+      ` <b>${esc(c.date)}</b> <span class="${c.habituel ? "habituel" : ""}">${esc(c.jour)}</span>` +
+      ` <span class="meta">${c.sources.map(s => NOMS[s] || esc(s)).join(", ")}</span>` +
+      (indices.length ? ` <span class="indice">← ${indices.join(" · ")}</span>` : "") + `</label>`;
+  }).join("");
+  return `<fieldset class="arb-dates"><legend>Date · ${esc([...new Set(doutes)].join(", "))}</legend>${choix}` +
+    `<button type="button" class="arb-principal" data-action="date">Retenir cette date</button></fieldset>`;
+}
 
 // Les contrôles d'arbitrage d'une émission, sous son détail.
 function controlesArbitrage(e) {
@@ -40,15 +62,17 @@ function controlesArbitrage(e) {
     `<label><input type="checkbox" value="${esc(t)}"${e.themes.includes(t) ? " checked" : ""}> ${esc(t)}</label>`).join("");
   const raisons = RAISONS.map(r =>
     `<button type="button" class="arb-raison" data-raison="${esc(r)}" aria-pressed="false">${esc(r)}</button>`).join("");
-  return `<div class="arb" data-id="${esc(e.id)}">` +
-    `<fieldset><legend>Thèmes</legend>${coches}</fieldset>` +
+  const dateArbitree = e.arbitrage_date ?
+    `<p class="meta">Date arbitrée${e.arbitrage_date.justification ? " · " + esc(e.arbitrage_date.justification) : ""}</p>` : "";
+  return `<div class="arb" data-id="${esc(e.id)}">` + dateArbitree + choixDate(e) +
+    `<fieldset class="arb-themes"><legend>Thèmes</legend>${coches}</fieldset>` +
     `<div class="arb-raisons"><span class="libelle">Justification</span>${raisons}` +
     `<input type="text" class="arb-texte" placeholder="ou texte libre (facultatif)" aria-label="Justification libre"></div>` +
     `<div class="arb-actions">` +
     `<button type="button" class="arb-principal" data-action="theme">Arbitrer le thème</button>` +
     `<button type="button" class="arb-danger" data-action="existence">N'existe pas</button>` +
     `<button type="button" data-action="ecoute">À écouter</button>` +
-    (e.arbitrage ? `<button type="button" data-action="annuler">Annuler l'arbitrage</button>` : "") +
+    (e.arbitrage || e.arbitrage_date ? `<button type="button" data-action="annuler">Annuler l'arbitrage</button>` : "") +
     `</div></div>`;
 }
 
@@ -110,13 +134,19 @@ $("lignes").addEventListener("click", ev => {
   const bouton = ev.target.closest("button[data-action]"); if (!bouton) return;
   const justification = champ.value.trim();
   if (bouton.dataset.action === "theme") {
-    const themes = [...bloc.querySelectorAll("input[type=checkbox]:checked")].map(c => c.value);
+    const themes = [...bloc.querySelectorAll(".arb-themes input[type=checkbox]:checked")].map(c => c.value);
     if (!themes.length) { statut("Cocher au moins un thème.", true); return; }
     envoyer("/api/arbitrages", { emission_id: id, sorte: "thème", themes, justification }, d =>
       `${id} : thème arbitré ${themes.join(" + ")}` + (encore(d, id) ? "." : ", l'émission sort de la liste."));
   } else if (bouton.dataset.action === "existence") {
     envoyer("/api/arbitrages", { emission_id: id, sorte: "existence", justification }, () =>
       `${id} : arbitrée inexistante, l'émission sort de la liste.`);
+  } else if (bouton.dataset.action === "date") {
+    const choisie = bloc.querySelector(".arb-dates input[type=radio]:checked");
+    if (!choisie) { statut("Choisir une date.", true); return; }
+    const date = choisie.value;
+    envoyer("/api/arbitrages", { emission_id: id, sorte: "date", date, justification }, () =>
+      `${id} : date retenue ${date}` + (date === id ? ", l'exception est confirmée." : `, l'émission devient ${date}.`));
   } else if (bouton.dataset.action === "ecoute") {
     envoyer("/api/arbitrages", { emission_id: id, sorte: "écoute", justification }, () =>
       `${id} : renvoyée à l'écoute, ses doutes sont « à écouter ».`);
