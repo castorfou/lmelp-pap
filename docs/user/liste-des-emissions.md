@@ -136,7 +136,7 @@ Types de doute :
 
 - `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ;
 - `désaccord de date` : les sources d'une même émission donnent des dates de première diffusion écartées de plus d'un jour ;
-- `absente de lmelp` : une émission de la liste, datée de 2017 à la dernière émission de lmelp, que lmelp ne contient pas. Une émission au thème `hommage` garde ce doute, avec `dans_la_liste = non` : son thème explique l'absence ;
+- `absente de lmelp` : une émission de la liste ou au thème `hommage`, datée de 2017 à la dernière émission de lmelp, que lmelp ne contient pas. Pour une émission hommage, hors de la liste (`dans_la_liste = non`), le doute reste tracé : son thème explique l'absence ;
 - `sans fiche radiofrance` : une attestation lmelp dont la fiche radiofrance.fr est introuvable ; elle est rapprochée par la date ;
 - `thème inconnu` : aucune source ne donne le thème de l'émission ;
 - `thèmes divergents` : les attestations de l'émission entière ne donnent pas les mêmes thèmes, ou un extrait porte un thème qu'aucune d'elles ne donne. Des extraits aux thèmes différents (une fiche par livre, une par film) décrivent une émission mixte, sans divergence ;
@@ -182,7 +182,7 @@ radiofrance,la-vie-devant-soi-d-emile-ajar,écoute,à écouter,,2026-11-11
 **Effets.** Les arbitrages s'appliquent après le rapprochement et avant le filtre de la liste :
 
 - un arbitrage de **thème** remplace exactement les thèmes de l'émission, sans les cumuler avec ceux des sources, et lève ses doutes de thème. Une émission arbitrée `théâtre` sort de la liste ; une émission arbitrée `livres;théâtre` y reste. La colonne `arbitrage` d'`emissions.csv` le signale ;
-- un arbitrage de thème **hommage** marque une émission sans critique nouvelle, consacrée au Masque ou à l'un de ses critiques : souvenirs, passage de témoin, anniversaire (« La dernière de Jérôme Garcin » le 31 décembre 2023, les 70 ans de l'émission le 28 décembre 2025). Le thème `hommage` ne se cumule avec aucun autre : il remplace tous ceux des sources, et l'émission sort de la liste même si elle évoque des livres. Aucune règle ne le déduit du titre : il s'attribue au cas par cas. Une ligne qui combine `hommage` avec un autre thème (`hommage;livres`) est refusée ;
+- un arbitrage de thème **hommage** marque une émission sans critique nouvelle, consacrée au Masque ou à l'un de ses critiques : souvenirs, passage de témoin, anniversaire (« La dernière de Jérôme Garcin » le 31 décembre 2023, les 70 ans de l'émission le 28 décembre 2025). Le thème `hommage` ne se cumule avec aucun autre : il remplace tous ceux des sources, et l'émission sort de la liste même si elle évoque des livres. Aucune règle ne le déduit du titre : il s'attribue au cas par cas. Une ligne qui combine `hommage` avec un autre thème (`hommage;livres`) est refusée, comme une ligne dont un thème n'est pas dans la liste des thèmes ;
 - un arbitrage d'**existence** retire l'émission de l'ensemble des émissions : elle n'est ni dans la liste ni dans `doutes.csv` ;
 - un renvoi à l'**écoute** laisse à l'émission les thèmes de ses sources et ses doutes, marqués `a_ecouter = oui` ;
 - un arbitrage dont l'attestation est introuvable n'a aucun effet et produit un doute `arbitrage orphelin` ;

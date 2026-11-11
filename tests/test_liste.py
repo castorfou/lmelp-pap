@@ -1114,7 +1114,7 @@ def test_un_arbitrage_hommage_sort_l_emission_et_garde_son_absence_de_lmelp() ->
     ] == [("absente de lmelp", False)]
 
 
-def test_un_arbitrage_hommage_remplace_les_themes_des_sources() -> None:
+def test_un_arbitrage_hommage_sort_une_emission_meme_au_theme_livres() -> None:
     # 2025-12-28 : « Le Masque et la Plume fête ses 70 ans »
     fiche = _fiche("70-ans-1", date(2025, 12, 28), {"cinéma", "livres", "théâtre"})
     hommage = _theme("radiofrance", "70-ans-1", {"hommage"})
