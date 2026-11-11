@@ -136,7 +136,7 @@ Types de doute :
 
 - `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ;
 - `désaccord de date` : les sources d'une même émission donnent des dates de première diffusion écartées de plus d'un jour ;
-- `absente de lmelp` : une émission de la liste, datée de 2017 à la dernière émission de lmelp, que lmelp ne contient pas ;
+- `absente de lmelp` : une émission de la liste, datée de 2017 à la dernière émission de lmelp, que lmelp ne contient pas. Une émission au thème `hommage` garde ce doute, avec `dans_la_liste = non` : son thème explique l'absence ;
 - `sans fiche radiofrance` : une attestation lmelp dont la fiche radiofrance.fr est introuvable ; elle est rapprochée par la date ;
 - `thème inconnu` : aucune source ne donne le thème de l'émission ;
 - `thèmes divergents` : les attestations de l'émission entière ne donnent pas les mêmes thèmes, ou un extrait porte un thème qu'aucune d'elles ne donne. Des extraits aux thèmes différents (une fiche par livre, une par film) décrivent une émission mixte, sans divergence ;
@@ -164,7 +164,7 @@ Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une 
 |---|---|
 | `source`, `source_id` | L'attestation à laquelle l'arbitrage s'attache, telle qu'elle figure dans `attestations.csv`. |
 | `sorte` | `thème`, `existence`, ou `écoute` pour un renvoi à l'écoute. |
-| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`). Pour un arbitrage d'existence, `n'existe pas`. Pour un renvoi à l'écoute, `à écouter`. |
+| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`), ou `hommage` seul. Pour un arbitrage d'existence, `n'existe pas`. Pour un renvoi à l'écoute, `à écouter`. |
 | `justification` | Facultative : « titre explicite », « écouté l'enregistrement », « connaissance de l'émission » ou texte libre. |
 | `date` | Date de la décision, au format ISO (`2026-11-10` ou `2026-11-10T14:30`). |
 
@@ -182,6 +182,7 @@ radiofrance,la-vie-devant-soi-d-emile-ajar,écoute,à écouter,,2026-11-11
 **Effets.** Les arbitrages s'appliquent après le rapprochement et avant le filtre de la liste :
 
 - un arbitrage de **thème** remplace exactement les thèmes de l'émission, sans les cumuler avec ceux des sources, et lève ses doutes de thème. Une émission arbitrée `théâtre` sort de la liste ; une émission arbitrée `livres;théâtre` y reste. La colonne `arbitrage` d'`emissions.csv` le signale ;
+- un arbitrage de thème **hommage** marque une émission sans critique nouvelle, consacrée au Masque ou à l'un de ses critiques : souvenirs, passage de témoin, anniversaire (« La dernière de Jérôme Garcin » le 31 décembre 2023, les 70 ans de l'émission le 28 décembre 2025). Le thème `hommage` ne se cumule avec aucun autre : il remplace tous ceux des sources, et l'émission sort de la liste même si elle évoque des livres. Aucune règle ne le déduit du titre : il s'attribue au cas par cas. Une ligne qui combine `hommage` avec un autre thème (`hommage;livres`) est refusée ;
 - un arbitrage d'**existence** retire l'émission de l'ensemble des émissions : elle n'est ni dans la liste ni dans `doutes.csv` ;
 - un renvoi à l'**écoute** laisse à l'émission les thèmes de ses sources et ses doutes, marqués `a_ecouter = oui` ;
 - un arbitrage dont l'attestation est introuvable n'a aucun effet et produit un doute `arbitrage orphelin` ;
@@ -200,7 +201,7 @@ La commande lit le cache, reconstruit la liste et lance un serveur local qui ser
 
 La page garde la frise et les filtres de la page publiée (année, thème, source, type de doute). Sous le détail de chaque émission s'ajoutent :
 
-- une case par thème (livres, cinéma, théâtre, opéra, télévision, musique, variétés), cochée pour les thèmes actuels, et le bouton **Arbitrer le thème** ;
+- une case par thème (livres, cinéma, théâtre, opéra, télévision, musique, variétés, hommage), cochée pour les thèmes actuels, et le bouton **Arbitrer le thème**. Cocher `hommage` décoche les autres thèmes, et cocher un autre thème décoche `hommage` ;
 - le bouton **N'existe pas** ;
 - le bouton **À écouter**, qui renvoie l'émission à l'écoute ;
 - les justifications en un clic, « titre explicite », « écouté l'enregistrement » et « connaissance de l'émission », et un champ libre facultatif ;
@@ -232,7 +233,7 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, ou `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute. |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
 
-Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
+Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
 
 ## Règles de construction
 

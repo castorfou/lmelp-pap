@@ -255,3 +255,19 @@ def test_un_renvoi_a_l_ecoute_survit_a_la_reconstruction_de_la_liste(
         if d["emission_id"] == "1967-01-01"
     ) == [("attestation fragile", "oui"), ("thème inconnu", "oui")]
     assert "1967-01-01" in _ids(sortie / "emissions.csv")
+
+
+def test_un_arbitrage_qui_combine_hommage_avec_un_autre_theme_est_refuse(
+    tmp_path: Path,
+) -> None:
+    cache, sortie = tmp_path / "cache", tmp_path / "sortie"
+    _cache_rempli(cache)
+    sortie.mkdir()
+    (sortie / "arbitrages.csv").write_text(
+        "source,source_id,sorte,valeur,justification,date\n"
+        "wayback_podcast,ITEMA_23820437,thème,hommage;livres,,2026-11-11\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="ligne 2 : le thème hommage"):
+        main(["emissions", "--cache", str(cache), "--sortie", str(sortie)])

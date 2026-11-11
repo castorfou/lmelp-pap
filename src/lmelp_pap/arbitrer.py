@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Any
 
 from lmelp_pap.arbitrages import (
-    THEMES,
     ajouter_arbitrage,
+    erreur_de_themes,
     lire_arbitrages,
     retirer_arbitrages,
     valeur,
@@ -81,10 +81,8 @@ class Atelier:
             sorte = demande.get("sorte")
             themes = frozenset(demande.get("themes") or ())
             if sorte == "thème":
-                if not themes or not themes <= set(THEMES):
-                    raise DemandeInvalideError(
-                        f"thèmes invalides : {sorted(themes)} (attendu : {THEMES})"
-                    )
+                if erreur := erreur_de_themes(themes):
+                    raise DemandeInvalideError(erreur)
             elif sorte == "existence":
                 themes = frozenset()
             elif sorte == "écoute":

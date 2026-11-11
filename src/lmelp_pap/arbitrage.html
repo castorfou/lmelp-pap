@@ -23,6 +23,7 @@
 </style>
 <script>
 const THEMES = __THEMES__;  // lmelp_pap.arbitrages.THEMES
+const HOMMAGE = __HOMMAGE__;  // lmelp_pap.liste.HOMMAGE
 const RAISONS = ["titre explicite", "écouté l'enregistrement", "connaissance de l'émission"];
 
 document.querySelector("header").insertAdjacentHTML("afterend",
@@ -122,6 +123,16 @@ $("lignes").addEventListener("click", ev => {
   } else {
     envoyer("/api/annulations", { emission_id: id }, () => `${id} : arbitrage annulé.`);
   }
+});
+// Le thème hommage ne se cumule avec aucun autre : le cocher décoche les autres,
+// et inversement.
+$("lignes").addEventListener("change", ev => {
+  const coche = ev.target.closest(".arb input[type=checkbox]");
+  if (!coche || !coche.checked) return;
+  const hommage = coche.value === HOMMAGE;
+  coche.closest("fieldset").querySelectorAll("input[type=checkbox]").forEach(c => {
+    if (c !== coche && (hommage || c.value === HOMMAGE)) c.checked = false;
+  });
 });
 // Une émission sortie de la liste s'annule depuis la liste des arbitrages.
 $("arb-journal").addEventListener("click", ev => {

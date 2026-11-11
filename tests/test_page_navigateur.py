@@ -387,3 +387,26 @@ def test_une_emission_renvoyee_sans_doute_n_est_pas_a_ecouter(
     assert page.locator(".ligne .drap").count() == 0
     page.select_option("#doute", label="À écouter")
     assert _ids_affiches(page) == []
+
+
+def test_en_mode_arbitrage_hommage_ne_se_cumule_avec_aucun_autre_theme(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    emissions = donnees_page(dossier)
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api={"emissions": emissions, "arbitrages": []},
+    )
+    page.locator("#arb-nombre", has_text="0").wait_for()
+    page.locator('.ligne[data-id="2015-01-04"]').click()  # thème livres
+    livres = page.get_by_role("checkbox", name="livres")
+    hommage = page.get_by_role("checkbox", name="hommage")
+    page.get_by_role("checkbox", name="théâtre").check()
+
+    hommage.check()
+    coches = page.locator(".arb input[type=checkbox]:checked")
+    assert [coches.nth(i).input_value() for i in range(coches.count())] == ["hommage"]
+
+    livres.check()
+    assert not hommage.is_checked()
