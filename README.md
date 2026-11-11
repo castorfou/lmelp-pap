@@ -191,7 +191,7 @@ uv run --active lmelp-pap page
 uv run --active lmelp-pap emissions --help
 ```
 
-La première exécution collecte les sources en ligne (environ une heure) et les garde en cache dans `data/raw/cache/` ; les suivantes reconstruisent la liste sans accès réseau. Détails, sources et format des fichiers : [Liste des émissions](https://castorfou.github.io/lmelp-pap/user/liste-des-emissions/).
+La première exécution collecte les sources en ligne (environ une heure) et les garde en cache dans `data/raw/cache/` ; les suivantes reconstruisent la liste sans accès réseau. Pour intégrer les nouvelles émissions, rafraîchir les sources concernées : `uv run --active lmelp-pap emissions --source radiofrance --source wayback_podcast --refresh`, puis `--source lmelp --refresh` une fois l'émission vérifiée dans lmelp ([Mettre la liste à jour](https://castorfou.github.io/lmelp-pap/user/liste-des-emissions/#mettre-la-liste-a-jour)). Détails, sources et format des fichiers : [Liste des émissions](https://castorfou.github.io/lmelp-pap/user/liste-des-emissions/).
 
 ## Contribution
 

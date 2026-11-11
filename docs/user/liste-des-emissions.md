@@ -24,6 +24,36 @@ Exemple : rafraîchir seulement radiofrance.fr, puis reconstruire la liste.
 uv run --active lmelp-pap emissions --source radiofrance --refresh
 ```
 
+### Mettre la liste à jour
+
+Le cache ne se met pas à jour tout seul : une source dont la collecte est terminée n'est relue qu'avec `--refresh`. On ne rafraîchit que les sources qui ont du nouveau, les autres restent lues depuis le cache.
+
+**Après une nouvelle émission** (le lundi qui suit la diffusion du dimanche, par exemple) :
+
+```bash
+uv run --active lmelp-pap emissions --source radiofrance --source wayback_podcast --refresh
+```
+
+| Source | Ce que le rafraîchissement apporte | Durée |
+|---|---|---|
+| `radiofrance` | La fiche de l'émission, et celles des livres ou films qu'elle publie à part. Le parcours relit toutes les pages de liste, mais ne télécharge que les fiches absentes du cache. | quelques minutes |
+| `wayback_podcast` | Les fichiers audio archivés par la Wayback Machine, quand elle les a déjà conservés. | moins d'une minute |
+| `ina` | La notice de l'émission, que le catalogue publie avec du retard : inutile de la rafraîchir chaque semaine. | plusieurs minutes |
+
+Une fiche déjà en cache n'est jamais retéléchargée. Pour reprendre une fiche récupérée trop tôt (audio ou description encore absents), supprimer son fichier dans `data/raw/cache/radiofrance/fiches/` avant de rafraîchir.
+
+Depuis 2017, une émission littéraire que lmelp ne contient pas encore a un doute `absente de lmelp` : il disparaît quand l'émission est vérifiée dans lmelp et que cette source est rafraîchie.
+
+**Après une vérification dans lmelp**, depuis le devcontainer (seul accès à la base) :
+
+```bash
+uv run --active lmelp-pap emissions --source lmelp --refresh
+```
+
+La commande recopie les émissions vérifiées de la base dans le cache. L'émission a ensuite une ligne `lmelp` dans `attestations.csv`, et son doute `absente de lmelp` disparaît. Un doute `sans fiche radiofrance` signale que l'URL enregistrée dans lmelp ne correspond à aucune fiche radiofrance.fr du cache : l'attestation est alors rattachée par la date. Corriger l'URL dans lmelp, ou rafraîchir aussi `radiofrance` si la fiche est récente.
+
+Les sources se combinent dans une même commande (`--source radiofrance --source lmelp --refresh`). Chaque reconstruction réécrit les fichiers de `data/processed/` : vérifier le changement (`git diff --stat data/processed`), le committer, puis régénérer la page avec `lmelp-pap page`.
+
 ### Prérequis pour la source INA
 
 Le catalogue INA est une application JavaScript, parcourue avec Playwright. Il faut le navigateur Chromium et ses bibliothèques système :
