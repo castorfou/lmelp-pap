@@ -74,7 +74,7 @@ function journal(arbitrages) {
 function appliquer(d) {
   emissions = preparer(d.emissions);
   if (!emissions.some(e => e.id === etat.ouverte)) etat.ouverte = null;
-  remplirFiltres(); chiffres(); frise(); rendre(); journal(d.arbitrages);
+  remplirFiltres(); chiffres(); rendre(); journal(d.arbitrages);
 }
 
 async function envoyer(chemin, corps, message) {
