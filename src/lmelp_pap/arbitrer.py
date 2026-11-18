@@ -45,7 +45,9 @@ from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import (
     JOURS,
     Arbitrage,
+    CleAttestation,
     Emission,
+    Rivale,
     attestation_stable,
     au_jour_habituel,
     construire_liste,
@@ -76,9 +78,7 @@ class Atelier:
         self._doutes: dict[str, set[str]] = {}
         # les attestations ambiguës de chaque émission de la liste, avec leurs
         # rivales : identifiant de l'émission et attestation qui la désigne
-        self._ambigues: dict[
-            str, dict[tuple[str, str], tuple[tuple[str, tuple[str, str]], ...]]
-        ] = {}
+        self._ambigues: dict[str, dict[CleAttestation, tuple[Rivale, ...]]] = {}
         self._verrou = threading.Lock()
         with self._verrou:
             self._reconstruire()
@@ -154,7 +154,7 @@ class Atelier:
 
     def _rapprochement(
         self, emission: Emission, demande: dict[str, Any]
-    ) -> tuple[tuple[str, str], tuple[str, str] | None]:
+    ) -> tuple[CleAttestation, CleAttestation | None]:
         """L'attestation ambiguë de l'émission, et l'attestation qui désigne
         l'émission rivale où la déplacer (None pour la garder ici)."""
         attestation = (str(demande.get("source")), str(demande.get("source_id")))

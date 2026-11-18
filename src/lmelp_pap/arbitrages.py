@@ -12,9 +12,8 @@ jour et heure).
 import csv
 from datetime import date, datetime
 from pathlib import Path
-from typing import Literal
 
-from lmelp_pap.liste import HOMMAGE, Arbitrage
+from lmelp_pap.liste import HOMMAGE, Arbitrage, CleAttestation, Sorte
 
 
 INEXISTANTE = "n'existe pas"
@@ -61,9 +60,7 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
     if sorte == "thème" and themes:
         if erreur := erreur_de_themes(themes):
             raise ValueError(f"arbitrages.csv, ligne {numero} : {erreur}")
-        sorte_lue: Literal["thème", "existence", "écoute", "date", "rapprochement"] = (
-            "thème"
-        )
+        sorte_lue: Sorte = "thème"
     elif sorte == "existence" and valeur == INEXISTANTE:
         sorte_lue, themes = "existence", frozenset()
     elif sorte == "écoute" and valeur == A_ECOUTER:
@@ -94,7 +91,7 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
     )
 
 
-def _attestation(texte: str) -> tuple[str, str] | None:
+def _attestation(texte: str) -> CleAttestation | None:
     """Une attestation ``source:source_id``, ou None."""
     source, _, source_id = texte.partition(":")
     return (source, source_id) if source and source_id else None
@@ -131,7 +128,7 @@ def ajouter_arbitrage(chemin: Path, arbitrage: Arbitrage) -> None:
         )
 
 
-def retirer_arbitrages(chemin: Path, cles: set[tuple[str, str]]) -> int:
+def retirer_arbitrages(chemin: Path, cles: set[CleAttestation]) -> int:
     """Retire les lignes des attestations ``cles``, sans réécrire les autres.
 
     Rend le nombre de lignes retirées.
