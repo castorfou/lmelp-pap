@@ -166,7 +166,7 @@ Une ligne par **doute** : un point d'une émission que les sources ne permettent
 
 Types de doute :
 
-- `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ; `detail` donne les émissions rivales. Trois situations : deux émissions le même jour (`2007-03-25` et `2007-03-25-b`), une émission voisine (un fichier Wayback du 4 décembre 1958 rapprochable aussi du 6), ou des fiches par livre publiées le lendemain de l'émission. Un arbitrage de rapprochement le lève ;
+- `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ; `detail` donne les émissions rivales. Trois situations : deux émissions le même jour (`2007-03-25` et `2007-03-25-b`) sans archive commune (voir **Archive partagée** dans les règles de construction), une émission voisine (un fichier Wayback du 4 décembre 1958 rapprochable aussi du 6), ou des fiches par livre publiées le lendemain de l'émission. Un arbitrage de rapprochement le lève ;
 - `désaccord de date` : les sources d'une même émission donnent des dates de première diffusion écartées de plus d'un jour, et la règle du jour de diffusion (voir ci-dessous) ne le lève pas ;
 - `jour inhabituel` : la date de l'émission ne tombe pas le jour de diffusion habituel de sa période (`un mardi, quand l'émission passe le jeudi`). Les années de transition (1957, 1964-1965) n'ont pas ce doute ;
 - `absente de lmelp` : une émission de la liste ou au thème `hommage`, datée de 2017 à la dernière émission de lmelp, que lmelp ne contient pas. Pour une émission hommage, hors de la liste (`dans_la_liste = non`), le doute reste tracé : son thème explique l'absence ;
@@ -311,6 +311,8 @@ Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnee
 ## Règles de construction
 
 **Rapprochement.** Deux attestations décrivent la même émission si elles ont la même date, ou au plus trois jours d'écart avec des thèmes compatibles. Un thème inconnu est compatible avec tous les thèmes.
+
+**Archive partagée.** Deux émissions qui ont une date d'attestation en commun et dont des enregistrements partagent une archive (`ITEMA_24209925`) sont une seule émission : leurs attestations sont réunies, quels que soient leurs thèmes. Une fiche par livre que radiofrance.fr étiquette d'un thème incompatible avec l'émission (« Les Piliers de la Mer », de Sylvain Tesson, étiquetée « cinéma » le 3 août 2025) rejoint ainsi l'émission entière, au lieu de former une émission `-b` ; son thème produit un doute `thèmes divergents`. Une archive partagée sans date commune (`ITEMA_24041574`, en 1992 et en 2013) signale une republication : les émissions restent distinctes. La réunion a lieu avant les arbitrages de rapprochement.
 
 **Extraits.** Un extrait atteste son émission sans la décrire en entier :
 

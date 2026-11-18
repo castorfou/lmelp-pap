@@ -106,13 +106,13 @@ Le titre de la fiche (« Le Masque et la Plume du dimanche 29 mars ») ou le num
 
 Une émission suffixée `-b` (ou datée d'un vendredi) qui n'a que des extraits est le plus souvent faite de **fiches par livre** ou de fichiers de podcast mis en ligne autour de l'émission du dimanche. Elle a typiquement une `collision`, une `attestation fragile` ou un `jour inhabituel`. Rattacher ses attestations à l'émission du dimanche fait disparaître l'émission fantôme, et ses doutes avec elle.
 
-### Pourquoi une fiche par livre forme-t-elle une émission `-b` le même jour ?
+### Que devient une fiche par livre étiquetée d'un autre thème que l'émission ?
 
-Parce que radiofrance.fr l'a étiquetée d'un autre thème que l'émission. Le rapprochement ne réunit pas des attestations aux thèmes incompatibles : la fiche forme une émission à part. Exemple : 2025-08-03-b n'est que la fiche « Les Piliers de la Mer » de Sylvain Tesson, étiquetée « cinéma ».
+radiofrance.fr étiquette parfois une fiche par livre d'un thème incompatible avec l'émission : « Les Piliers de la Mer », de Sylvain Tesson, est étiquetée « cinéma » le 3 août 2025. Le rapprochement, qui exige des thèmes compatibles, ne suffit pas à la rattacher à l'émission du dimanche.
 
-Le numéro ITEMA le trahit : l'enregistrement de la fiche appartient à la même archive que l'émission complète du jour (`ITEMA_24209925` pour le 3 août 2025). Les attestations sans thème du jour, comme le fichier Wayback, deviennent alors `rapprochement ambigu` entre les deux.
+Le numéro ITEMA la rattache : l'enregistrement de la fiche appartient à la même archive que l'émission entière (`ITEMA_24209925`). La règle de l'**archive partagée** réunit deux émissions qui ont une date d'attestation commune et un ITEMA commun (voir [les règles de construction](liste-des-emissions.md#regles-de-construction)). La fiche rejoint l'émission du dimanche, et son thème erroné produit un doute `thèmes divergents`, à lever par un arbitrage de thème si l'émission n'est pas attestée par lmelp.
 
-Inutile d'arbitrer ces cas un par un : une règle les traite, deux émissions du même jour qui partagent un ITEMA n'en font qu'une (#37). Pour vérifier si une paire `X` / `X-b` partage un ITEMA, ouvrir le détail des deux émissions dans `lmelp-pap arbitrer` et comparer le numéro `ITEMA_…` de leurs enregistrements. `enregistrements.csv` ne suffit pas : il ne contient que les émissions de la liste, et la `-b` en est souvent absente.
+Une paire `X` / `X-b` qui subsiste n'a pas d'archive commune : ce sont deux émissions distinctes, ou un rapprochement ambigu à arbitrer.
 
 ## Thèmes
 

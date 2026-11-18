@@ -742,6 +742,85 @@ def test_un_extrait_au_theme_absent_de_l_emission_entiere_est_un_doute() -> None
     assert "thèmes divergents" in _types(doutes, "2024-08-18")
 
 
+_ARCHIVE_3_AOUT_2025 = "https://media.radiofrance-podcast.net/podcast09/14007-03.08.2025-ITEMA_24209925-2025F4007"
+
+
+def _dimanche_3_aout_2025() -> list[Attestation]:
+    """Le 3 août 2025 : la fiche par livre de Sylvain Tesson, étiquetée « cinéma »
+    par radiofrance.fr, partage l'archive (ITEMA) de l'émission entière."""
+    jour = date(2025, 8, 3)
+    return [
+        Attestation(
+            source="radiofrance",
+            source_id="le-masque-et-la-plume-du-dimanche-03-aout-2025-5191918",
+            date=jour,
+            themes=frozenset({"livres"}),
+            duree="00:51:36",
+            enregistrements=(
+                Enregistrement(
+                    url=f"{_ARCHIVE_3_AOUT_2025}S0215-NET_MFI_28633-27.m4a",
+                    type="intégral",
+                ),
+            ),
+        ),
+        Attestation(
+            source="radiofrance",
+            source_id="les-piliers-de-la-mer-de-sylvain-tesson-9180759",
+            date=jour,
+            themes=frozenset({"cinéma"}),
+            duree="00:08:32",
+            enregistrements=(
+                Enregistrement(
+                    url=f"{_ARCHIVE_3_AOUT_2025}S0216-ITE_00152552_RSCE-27.m4a",
+                    type="extrait",
+                ),
+            ),
+            extrait=True,
+        ),
+        Attestation(
+            source="wayback_podcast",
+            source_id="ITEMA_24209925",
+            date=jour,
+            enregistrements=(
+                Enregistrement(
+                    url=f"{_ARCHIVE_3_AOUT_2025}S0215-NET_MFI_28633-22.mp3",
+                    type="intégral",
+                ),
+            ),
+        ),
+    ]
+
+
+def test_deux_emissions_du_meme_jour_partageant_une_archive_n_en_font_qu_une() -> None:
+    _liste, doutes = construire_liste(_dimanche_3_aout_2025())
+
+    emissions = {d.emission_id for d in doutes}
+    assert "2025-08-03-b" not in emissions
+    assert _types(doutes, "2025-08-03") == ["thèmes divergents"]
+
+
+def test_une_archive_partagee_a_des_dates_differentes_ne_reunit_pas_les_emissions() -> (
+    None
+):
+    # ITEMA_24041574 : une même archive republiée en 1992 et en 2013
+    archive = "https://media.radiofrance-podcast.net/podcast09/14007-26.04.1992-ITEMA_24041574-2024F4007E0010-27.m4a"
+    emissions = [
+        Attestation(
+            source="radiofrance",
+            source_id=f"fiche-{jour.isoformat()}",
+            date=jour,
+            themes=frozenset({"livres"}),
+            enregistrements=(Enregistrement(url=archive, type="extrait"),),
+            extrait=True,
+        )
+        for jour in (date(1992, 4, 26), date(2013, 9, 22))
+    ]
+
+    liste, _doutes = construire_liste(emissions)
+
+    assert [e.id for e in liste] == ["1992-04-26", "2013-09-22"]
+
+
 def test_une_seconde_emission_le_meme_jour_est_une_collision() -> None:
     _liste, doutes = construire_liste(_dimanche_18_aout_2024())
 
