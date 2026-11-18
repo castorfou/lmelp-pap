@@ -6,6 +6,7 @@ Vocabulaire : voir CONTEXT.md. Décisions : docs/adr/0001, 0002 et 0003.
 import re
 from collections import defaultdict
 from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Literal
@@ -87,15 +88,23 @@ class Arbitrage:
     l'émission. Il porte sur un autre point que les autres sortes : il se cumule
     avec elles au lieu de les remplacer.
 
+    Un arbitrage de rapprochement (sorte ``rapprochement``) lève le
+    rapprochement ambigu de son attestation : il la garde dans son émission
+    (``cible`` vide) ou la déplace vers l'émission de l'attestation ``cible``.
+    Il se cumule lui aussi avec les autres sortes.
+
     Sa clé est l'attestation (source et identifiant dans la source), pas
     l'identifiant de l'émission, qui peut changer d'une construction à l'autre.
     """
 
     source: str
     source_id: str
-    sorte: Literal["thème", "existence", "écoute", "date"]
+    sorte: Literal["thème", "existence", "écoute", "date", "rapprochement"]
     themes: frozenset[str] = frozenset()  # pour un arbitrage de thème
     date_retenue: date | None = None  # pour un arbitrage de date
+    # pour un arbitrage de rapprochement : une attestation de l'émission cible,
+    # ou None pour garder l'attestation où elle est
+    cible: tuple[str, str] | None = None
     justification: str = ""
     date: datetime = datetime.min  # date de la décision
 
@@ -116,6 +125,9 @@ class Doute:
     source_id: str
     detail: str
     a_ecouter: bool = False  # l'émission, dans la liste, est renvoyée à l'écoute
+    # pour un rapprochement ambigu : chaque émission rivale, avec l'attestation
+    # qui la désigne dans un arbitrage de rapprochement
+    rivales: tuple[tuple[str, tuple[str, str]], ...] = ()
 
 
 def construire_liste(
@@ -141,14 +153,67 @@ def construire_liste(
             else:
                 _rapprocher(a, groupes, index)
 
+    _, _, rapprochements = _familles(arbitrages)
+    arbitrees, sans_cible = _deplacer(groupes, rapprochements)
     emissions, retirees = _arbitrer([_fusionner(g) for g in groupes], arbitrages)
     emissions.sort(key=_cle_de_tri)
     _attribuer_identifiants(emissions)
     liste = [e for e in emissions if _dans_la_liste(e)]
     return liste, (
-        _doutes(emissions)
+        _doutes(emissions, arbitrees)
         + [_contradiction(e, a, dans_la_liste=False) for e, a in retirees]
         + _orphelins(attestations, arbitrages)
+        + [_cible_introuvable(a, emissions) for a in sans_cible]
+    )
+
+
+def _deplacer(
+    groupes: list[list[Attestation]], rapprochements: Sequence[Arbitrage]
+) -> tuple[set[tuple[str, str]], list[Arbitrage]]:
+    """Applique le dernier arbitrage de rapprochement de chaque attestation :
+    une attestation déplacée rejoint le groupe de son attestation cible, comme
+    si elle y avait été rapprochée.
+
+    Rend les attestations dont l'arbitrage s'applique, et les arbitrages sans
+    effet faute d'attestation cible.
+    """
+    groupe_de = {a.cle: g for g in groupes for a in g}
+    appliques: set[tuple[str, str]] = set()
+    sans_cible: list[Arbitrage] = []
+    for cle, (_rang, arbitrage) in sorted(
+        _derniers(rapprochements).items(), key=lambda item: item[1][0]
+    ):
+        if cle not in groupe_de:
+            continue
+        if arbitrage.cible is not None:
+            depart, arrivee = groupe_de[cle], groupe_de.get(arbitrage.cible)
+            if arrivee is None:
+                sans_cible.append(arbitrage)
+                continue
+            attestation = next(a for a in depart if a.cle == cle)
+            if arrivee is not depart:
+                depart.remove(attestation)
+                arrivee.append(attestation)
+                groupe_de[cle] = arrivee
+        appliques.add(cle)
+    groupes[:] = [g for g in groupes if g]
+    return appliques, sans_cible
+
+
+def _cible_introuvable(arbitrage: Arbitrage, emissions: list[Emission]) -> Doute:
+    """Un arbitrage de rapprochement dont l'émission cible a disparu : sans
+    effet, c'est un doute sur l'émission de l'attestation arbitrée."""
+    emission = next(
+        (e for e in emissions if any(a.cle == arbitrage.cle for a in e.attestations)),
+        None,
+    )
+    return Doute(
+        type="arbitrage orphelin",
+        emission_id=emission.id if emission else "",
+        dans_la_liste=emission is not None and _dans_la_liste(emission),
+        source=arbitrage.source,
+        source_id=arbitrage.source_id,
+        detail=f"émission cible introuvable ; {_decision(arbitrage)}",
     )
 
 
@@ -174,12 +239,14 @@ def _orphelins(
 
 def _familles(
     arbitrages: Sequence[Arbitrage],
-) -> tuple[list[Arbitrage], list[Arbitrage]]:
-    """Les arbitrages de date, et les autres : chaque famille porte sur un point
-    différent de l'émission, et le plus récent ne l'emporte qu'au sein d'elle."""
+) -> tuple[list[Arbitrage], list[Arbitrage], list[Arbitrage]]:
+    """Les arbitrages de date, les décisions (thème, existence, écoute) et les
+    arbitrages de rapprochement : chaque famille porte sur un point différent,
+    et le plus récent ne l'emporte qu'au sein d'elle."""
     return (
         [a for a in arbitrages if a.sorte == "date"],
-        [a for a in arbitrages if a.sorte != "date"],
+        [a for a in arbitrages if a.sorte not in ("date", "rapprochement")],
+        [a for a in arbitrages if a.sorte == "rapprochement"],
     )
 
 
@@ -215,6 +282,10 @@ def _decision(arbitrage: Arbitrage) -> str:
         return "renvoyée à l'écoute"
     if arbitrage.sorte == "date":
         return f"date arbitrée {arbitrage.date_retenue}"
+    if arbitrage.sorte == "rapprochement":
+        if arbitrage.cible is None:
+            return "gardée dans son émission"
+        return f"déplacée vers l'émission de {':'.join(arbitrage.cible)}"
     return f"arbitrée {'+'.join(sorted(arbitrage.themes))}"
 
 
@@ -242,7 +313,7 @@ def _arbitrer(
     date retenue. Rend les émissions gardées, et les émissions vérifiées
     retirées avec leur arbitrage.
     """
-    dates, decisions = _familles(arbitrages)
+    dates, decisions, _rapprochements = _familles(arbitrages)
     par_attestation = _derniers(decisions)
     date_par_attestation = _derniers(dates)
     gardees: list[Emission] = []
@@ -278,10 +349,15 @@ def _arbitrer(
     return gardees, retirees
 
 
-def _doutes(emissions: list[Emission]) -> list[Doute]:
+def _doutes(
+    emissions: list[Emission], arbitrees: AbstractSet[tuple[str, str]] = frozenset()
+) -> list[Doute]:
     """Les doutes des émissions, dans la liste ou non : rapprochement, date
     (désaccord, jour inhabituel), collision, thème, republication, fragilité,
-    absence de lmelp."""
+    absence de lmelp.
+
+    Un arbitrage de rapprochement lève le rapprochement ambigu des attestations
+    ``arbitrees``."""
     doutes: list[Doute] = []
     # la première diffusion de la dernière émission vérifiée, pas sa publication
     derniere_verifiee = max(
@@ -301,6 +377,7 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
             attestation: Attestation | None = None,
             emission: Emission = emission,
             dans_la_liste: bool = dans_la_liste,
+            rivales: tuple[tuple[str, tuple[str, str]], ...] = (),
         ) -> None:
             doutes.append(
                 Doute(
@@ -311,6 +388,7 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                     source_id=attestation.source_id if attestation else "",
                     detail=detail,
                     a_ecouter=dans_la_liste and emission.a_ecouter,
+                    rivales=rivales,
                 )
             )
 
@@ -321,17 +399,18 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
                 if not any(_meme_fiche(a, b) for b in emission.attestations):
                     ajouter("sans fiche radiofrance", f"aucune fiche {a.url}", a)
                 continue
-            rivales = [
-                emissions[i].id
+            rivales = tuple(
+                (emissions[i].id, attestation_stable(emissions[i]).cle)
                 for i in _proches(a.date, par_jour)
                 if emissions[i] is not emission
                 and _rapprochable(a, emissions[i].attestations)
-            ]
-            if rivales:
+            )
+            if rivales and a.cle not in arbitrees:
                 ajouter(
                     "rapprochement ambigu",
-                    f"rapprochable aussi de {', '.join(rivales)}",
+                    f"rapprochable aussi de {', '.join(i for i, _ in rivales)}",
                     a,
+                    rivales=rivales,
                 )
         # Un arbitrage de date lève les doutes de date.
         dates = sorted(set(_dates_de_diffusion(emission.attestations)))
@@ -408,6 +487,21 @@ def _doutes(emissions: list[Emission]) -> list[Doute]:
         if fragilite:
             ajouter("attestation fragile", fragilite)
     return doutes
+
+
+# L'attestation la plus stable d'une émission la désigne dans un arbitrage : la
+# notice INA, sinon la fiche radiofrance.fr, sinon les autres sources dans cet ordre.
+STABILITE = ("ina", "radiofrance", "lmelp", "anciennes_listes", "wayback_podcast")
+
+
+def attestation_stable(emission: Emission) -> Attestation:
+    """L'attestation de l'émission à laquelle attacher un arbitrage, ou par
+    laquelle un arbitrage de rapprochement la désigne."""
+
+    def rang(a: Attestation) -> tuple[int, str]:
+        return (_rang(a.source, STABILITE), a.source_id)
+
+    return min(emission.attestations, key=rang)
 
 
 def _verifiee(emission: Emission) -> bool:

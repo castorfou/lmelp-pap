@@ -59,6 +59,8 @@ def test_chaque_emission_porte_ses_attestations_enregistrements_et_doutes() -> N
             "type": "rapprochement ambigu",
             "detail": "rapprochable aussi de 1958-12-06",
             "a_ecouter": False,
+            "source": "wayback_podcast",
+            "source_id": "ITEMA_24232446",
         }
     ]
     assert aragon["description"].endswith("</script> incluse")

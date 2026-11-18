@@ -164,7 +164,7 @@ Une ligne par **doute** : un point d'une émission que les sources ne permettent
 
 Types de doute :
 
-- `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ;
+- `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ; `detail` donne les émissions rivales. Trois situations : deux émissions le même jour (`2007-03-25` et `2007-03-25-b`), une émission voisine (un fichier Wayback du 4 décembre 1958 rapprochable aussi du 6), ou des fiches par livre publiées le lendemain de l'émission. Un arbitrage de rapprochement le lève ;
 - `désaccord de date` : les sources d'une même émission donnent des dates de première diffusion écartées de plus d'un jour, et la règle du jour de diffusion (voir ci-dessous) ne le lève pas ;
 - `jour inhabituel` : la date de l'émission ne tombe pas le jour de diffusion habituel de sa période (`un mardi, quand l'émission passe le jeudi`). Les années de transition (1957, 1964-1965) n'ont pas ce doute ;
 - `absente de lmelp` : une émission de la liste ou au thème `hommage`, datée de 2017 à la dernière émission de lmelp, que lmelp ne contient pas. Pour une émission hommage, hors de la liste (`dans_la_liste = non`), le doute reste tracé : son thème explique l'absence ;
@@ -175,7 +175,7 @@ Types de doute :
 - `republication` : un enregistrement d'une attestation porte, dans le nom de son fichier, une date à plus de trois jours de la sienne : une émission remise en ligne plus tard, ou une fiche rattachée à l'enregistrement d'une autre émission ;
 - `attestation fragile` : l'émission n'est attestée que par des extraits, que par la Wayback Machine, ou que par les deux ;
 - `contradiction lmelp` : un arbitrage contredit lmelp, en déclarant inexistante une émission vérifiée ou en lui donnant un autre thème que `livres` seul. L'arbitrage s'applique, mais la contradiction reste signalée ;
-- `arbitrage orphelin` : un arbitrage porte sur une attestation qu'aucune source ne donne plus ; il n'a aucun effet. Le doute n'a pas d'`emission_id` : `source` et `source_id` désignent l'attestation introuvable.
+- `arbitrage orphelin` : un arbitrage porte sur une attestation qu'aucune source ne donne plus ; il n'a aucun effet. Le doute n'a pas d'`emission_id` : `source` et `source_id` désignent l'attestation introuvable. Un arbitrage de rapprochement dont l'émission cible a disparu (son attestation cible est introuvable) est aussi orphelin : le doute porte alors sur l'émission de l'attestation arbitrée, avec `émission cible introuvable` dans `detail`, et le rapprochement ambigu, s'il demeure, reste un doute.
 
 Un champ simplement absent (durée, animateur) n'est pas un doute. Une émission dont la date est arbitrée n'a plus de doute de date (`désaccord de date`, `jour inhabituel`). Une émission attestée par lmelp n'a ni doute de thème (`thème inconnu`, `thèmes divergents`) ni doute d'existence (`republication`, `attestation fragile`). Une émission dont le thème est arbitré n'a plus de doute de thème ; une émission arbitrée inexistante n'a plus aucun doute.
 
@@ -205,13 +205,13 @@ Le renvoi s'enregistre et s'applique comme un arbitrage (voir ci-dessous) : il s
 
 ## Arbitrages
 
-Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une émission, sa date de première diffusion, ou le fait qu'elle n'existe pas. Les arbitrages sont enregistrés dans `data/processed/arbitrages.csv`, versionné, écrit par l'outil `lmelp-pap arbitrer` ou rédigé à la main, et appliqués à chaque construction de la liste : une décision survit ainsi aux régénérations.
+Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une émission, sa date de première diffusion, l'émission à laquelle se rattache une attestation, ou le fait qu'elle n'existe pas. Les arbitrages sont enregistrés dans `data/processed/arbitrages.csv`, versionné, écrit par l'outil `lmelp-pap arbitrer` ou rédigé à la main, et appliqués à chaque construction de la liste : une décision survit ainsi aux régénérations.
 
 | Colonne | Contenu |
 |---|---|
 | `source`, `source_id` | L'attestation à laquelle l'arbitrage s'attache, telle qu'elle figure dans `attestations.csv`. |
-| `sorte` | `thème`, `existence`, `date`, ou `écoute` pour un renvoi à l'écoute. |
-| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`), ou `hommage` seul. Pour un arbitrage d'existence, `n'existe pas`. Pour un arbitrage de date, la date retenue (`2020-08-02`). Pour un renvoi à l'écoute, `à écouter`. |
+| `sorte` | `thème`, `existence`, `date`, `rapprochement`, ou `écoute` pour un renvoi à l'écoute. |
+| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`), ou `hommage` seul. Pour un arbitrage d'existence, `n'existe pas`. Pour un arbitrage de date, la date retenue (`2020-08-02`). Pour un arbitrage de rapprochement, `garder ici`, ou l'attestation qui désigne l'émission cible, `source:source_id` (`ina:RD_3061769.001`). Pour un renvoi à l'écoute, `à écouter`. |
 | `justification` | Facultative : « titre explicite », « écouté l'enregistrement », « connaissance de l'émission » ou texte libre. |
 | `date` | Date de la décision, au format ISO (`2026-11-10` ou `2026-11-10T14:30`). |
 
@@ -223,9 +223,11 @@ ina,RD_4294389.001,thème,théâtre,titre explicite,2026-11-10
 radiofrance,le-mage-du-kremlin-de-giuliano-da-empoli-1192090,existence,n'existe pas,écouté l'enregistrement,2026-11-10
 radiofrance,la-vie-devant-soi-d-emile-ajar,écoute,à écouter,,2026-11-11
 ina,RD_11930110.001,date,2020-08-02,jour habituel,2026-11-11
+ina,RD_3061768.001,rapprochement,garder ici,titre explicite,2026-11-18
+radiofrance,les-livres-de-la-rentree-1234567,rapprochement,ina:RD_3061769.001,écouté l'enregistrement,2026-11-18
 ```
 
-**Attestation plutôt qu'émission.** Un arbitrage s'attache à une attestation et non à l'identifiant d'une émission, qui peut changer (nouvelle date retenue, suffixe `-b`). Il s'applique à l'émission qui contient cette attestation, quelle que soit sa date. Choisir l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr.
+**Attestation plutôt qu'émission.** Un arbitrage s'attache à une attestation et non à l'identifiant d'une émission, qui peut changer (nouvelle date retenue, suffixe `-b`). Il s'applique à l'émission qui contient cette attestation, quelle que soit sa date. Choisir l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr. Un arbitrage de rapprochement fait exception : il s'attache à l'attestation ambiguë elle-même, et désigne l'émission cible par une de ses attestations, jamais par son identifiant.
 
 **Effets.** Les arbitrages s'appliquent après le rapprochement et avant le filtre de la liste :
 
@@ -234,8 +236,9 @@ ina,RD_11930110.001,date,2020-08-02,jour habituel,2026-11-11
 - un arbitrage d'**existence** retire l'émission de l'ensemble des émissions : elle n'est ni dans la liste ni dans `doutes.csv` ;
 - un renvoi à l'**écoute** laisse à l'émission les thèmes de ses sources et ses doutes, marqués `a_ecouter = oui` ;
 - un arbitrage de **date** donne à l'émission la date retenue, d'où découle son identifiant (`2020-08-01` devient `2020-08-02`), et lève ses doutes de date. Retenir la date actuelle confirme une exception : le doute `jour inhabituel` disparaît, l'identifiant ne change pas. L'arbitrage de date porte sur un autre point que les autres sortes : il se cumule avec un arbitrage de thème ou un renvoi à l'écoute de la même émission au lieu de le remplacer ;
-- un arbitrage dont l'attestation est introuvable n'a aucun effet et produit un doute `arbitrage orphelin` ;
-- si plusieurs arbitrages portent sur la même émission, le plus récent l'emporte ; à date égale, le dernier du fichier. Les arbitrages de date se départagent entre eux, et les autres entre eux ;
+- un arbitrage de **rapprochement** lève le doute `rapprochement ambigu` de son attestation. **Garder ici** confirme sa position actuelle, sans rien changer d'autre. **Déplacer vers** l'envoie sur l'émission de l'attestation cible, avant la fusion : elle y participe comme si elle y avait été rapprochée (champs, thèmes, enregistrements, doutes), et quitte son ancienne émission, qui disparaît si elle n'avait plus d'autre attestation. Les autres arbitrages attachés à l'attestation déplacée la suivent. L'arbitrage de rapprochement porte sur un autre point que les autres sortes et se cumule avec eux ;
+- un arbitrage dont l'attestation est introuvable n'a aucun effet et produit un doute `arbitrage orphelin` ; de même pour un arbitrage de rapprochement dont l'attestation cible est introuvable ;
+- si plusieurs arbitrages portent sur la même émission, le plus récent l'emporte ; à date égale, le dernier du fichier. Les arbitrages de date se départagent entre eux, les arbitrages de rapprochement entre eux, et les autres entre eux ;
 - un arbitrage qui contredit lmelp s'applique, et produit un doute `contradiction lmelp`.
 
 Un arbitrage n'atteste aucune émission : il tranche entre ce que disent les sources. La commande `lmelp-pap emissions` indique le nombre d'arbitrages lus.
@@ -263,6 +266,14 @@ La page garde la frise et les filtres de la page publiée (année, thème, sourc
     [ Retenir cette date ]
   ```
 
+- pour chaque doute `rapprochement ambigu`, sur sa ligne de la section « Doutes », le bouton **Garder ici** et un bouton **Déplacer vers** par émission rivale :
+
+  ```
+  rapprochement ambigu · INA RD_3061768.001 · rapprochable aussi de 2007-03-25-b
+    [ Garder ici ]  [ Déplacer vers 2007-03-25-b ]
+  ```
+
+  La justification choisie sous l'émission accompagne la décision ;
 - les justifications en un clic, « titre explicite », « écouté l'enregistrement » et « connaissance de l'émission », et un champ libre facultatif ;
 - le bouton **Annuler l'arbitrage**, pour une émission dont le thème ou la date est arbitré, ou qui est renvoyée à l'écoute.
 
@@ -288,11 +299,11 @@ Le serveur expose une petite API JSON, utilisée par la page :
 
 | Requête | Effet |
 |---|---|
-| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`) et `arbitrage_date` (`date` et `justification`, ou `null`). |
-| `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, `"sorte": "date"` avec `"date": "2020-08-02"`, ou `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute. |
+| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. |
+| `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
 
-Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, date absente des dates candidates ou émission sans doute de date, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
+Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, date absente des dates candidates ou émission sans doute de date, attestation sans rapprochement ambigu ou émission qui n'est pas rivale, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
 
 ## Règles de construction
 

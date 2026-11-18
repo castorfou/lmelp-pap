@@ -241,7 +241,7 @@ const preparer = donnees => donnees.map(e => ({
   annee: +e.date.slice(0, 4),
   att: e.attestations.map(a => [a.source, a.date, a.titre, a.url]),
   enreg: e.enregistrements.map(r => [r.url, r.type, r.duree]),
-  doutes: e.doutes.map(d => [d.type, d.detail]),
+  doutes: e.doutes.map(d => [d.type, d.detail, d.source, d.source_id]),
   // renvoyée à l'écoute : ses doutes (colonne a_ecouter) ne se lèveront qu'en l'écoutant
   aEcouter: e.doutes.some(d => d.a_ecouter),
   sources: [...new Set(e.attestations.map(a => a.source))],
@@ -476,8 +476,11 @@ function detail(e) {
   if (e.enreg.length) h += `<div><h3>Enregistrements</h3><ul>` + e.enreg.map(([u, t, d]) =>
     `<li><span class="meta">${esc(t)}${d ? " · " + esc(dureeCourte(d)) : ""} ·</span> <a href="${esc(u)}" target="_blank" rel="noopener">${esc(nomCourt(u))}</a></li>`
   ).join("") + `</ul></div>`;
-  if (e.doutes.length) h += `<div><h3>Doutes</h3><ul>` + e.doutes.map(([t, d]) =>
-    `<li class="alerte">${esc(t)} · ${esc(d)}</li>`).join("") + `</ul></div>`;
+  // Un doute qui porte sur une attestation la nomme ; l'outil d'arbitrage y
+  // ajoute ses contrôles, absents de la page publiée.
+  if (e.doutes.length) h += `<div><h3>Doutes</h3><ul>` + e.doutes.map(([t, d, s, sid]) =>
+    `<li class="alerte">${esc(t)}${s ? ` · ${NOMS[s] || esc(s)} ${esc(sid)}` : ""} · ${esc(d)}` +
+    `${typeof controlesDoute === "function" ? controlesDoute(e, s, sid) : ""}</li>`).join("") + `</ul></div>`;
   // Les contrôles de l'outil d'arbitrage, absents de la page publiée.
   if (typeof controlesArbitrage === "function") h += controlesArbitrage(e);
   return h + `</div>`;
