@@ -862,15 +862,25 @@ def _itema(url: str) -> str | None:
     return m.group(0) if m else None
 
 
-def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
-    """Les enregistrements de toutes les sources, typés par archive (ITEMA).
+def _segment(url: str) -> str | None:
+    """L'archive (ITEMA) et le segment (``2025F4007S0215``) d'un fichier audio.
 
-    Une source qui sait qu'une archive est un extrait (radiofrance.fr connaît
+    Une même archive couvre parfois l'émission entière et ses extraits : seul
+    le segment les distingue. Il est le même pour tous les encodages du fichier.
+    """
+    m = re.search(r"ITEMA_\d+(-\d{4}F\d+[A-Z]\d+)?", url)
+    return m.group(0) if m else None
+
+
+def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
+    """Les enregistrements de toutes les sources, typés par segment d'archive.
+
+    Une source qui sait qu'un segment est un extrait (radiofrance.fr connaît
     la durée) l'emporte sur une autre qui ne voit que le nom du fichier. La
     durée d'un fichier vaut pour ses autres encodages (``-22.mp3``, ``-27.m4a``).
     """
     tous = [e for a in groupe for e in a.enregistrements]
-    extraits = {_itema(e.url) for e in tous if e.type == "extrait"} - {None}
+    extraits = {_segment(e.url) for e in tous if e.type == "extrait"} - {None}
     durees: dict[str, str] = {}
     for e in tous:
         if e.duree:
@@ -879,7 +889,7 @@ def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
         dict.fromkeys(
             replace(
                 e,
-                type="extrait" if _itema(e.url) in extraits else e.type,
+                type="extrait" if _segment(e.url) in extraits else e.type,
                 duree=e.duree or durees.get(_fichier(e.url)),
             )
             for e in tous
