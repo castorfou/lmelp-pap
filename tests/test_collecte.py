@@ -58,3 +58,55 @@ def test_une_fiche_est_enregistree_en_utf8_meme_sans_charset_annonce(
 
     enregistree = next((tmp_path / "fiches").glob("*.html"))
     assert "Jérôme Garcin" in enregistree.read_text(encoding="utf-8")
+
+
+def test_la_collecte_ina_met_en_cache_la_fiche_detaillee_de_chaque_notice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pandas as pd
+
+    from lmelp_pap.sources import ina_catalogue
+
+    url = "https://catalogue.ina.fr/doc/TV-RADIO/RD_1098450.001/le-masque-du-09-janvier-2000"
+    notices = pd.DataFrame(
+        [{"date_diffusion": "2000-01-09", "url_ina": f"{url}?rang=3", "source": "ina"}]
+    )
+    monkeypatch.setattr(
+        ina_catalogue, "scrape_ina_catalogue_raw", lambda facette: notices.copy()
+    )
+    fiche = '<td id="DE" class="val">cinéma ; film</td>'.encode()
+    demandees: list[str] = []
+
+    def faux_get(adresse: str, params: dict[str, str] | None = None) -> object:
+        demandees.append(adresse)
+        return SimpleNamespace(status_code=200, content=fiche)
+
+    monkeypatch.setattr(collecte, "_get", faux_get)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    collecte.collecter_ina(tmp_path)
+    collecte.collecter_ina(tmp_path)  # une fiche en cache n'est pas re-téléchargée
+
+    assert demandees == [url]
+    enregistree = (tmp_path / "fiches" / "RD_1098450.001.html").read_text("utf-8")
+    assert "cinéma ; film" in enregistree
+
+
+def test_la_lecture_du_cache_ina_tient_compte_des_fiches_detaillees(
+    tmp_path: Path,
+) -> None:
+    fixtures_ina = Path(__file__).parent / "fixtures" / "ina" / "fiches"
+    (tmp_path / "notices.csv").write_text(
+        "date_diffusion,titre,url_ina,facette_litterature\n"
+        "2000-01-09,Le masque et la plume du 09 janvier 2000,"
+        "https://catalogue.ina.fr/doc/TV-RADIO/RD_1098450.001/le-masque?rang=3,non\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "fiches").mkdir()
+    (tmp_path / "fiches" / "RD_1098450.001.html").write_text(
+        (fixtures_ina / "RD_1098450.001.html").read_text("utf-8"), "utf-8"
+    )
+
+    (notice,) = collecte.lire_ina(tmp_path)
+
+    assert notice.themes == frozenset({"cinéma"})

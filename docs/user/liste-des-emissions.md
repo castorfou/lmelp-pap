@@ -103,9 +103,17 @@ uv run --active lmelp-pap page && uv run --active mkdocs serve
 |---|---|---|
 | `radiofrance` | Les pages podcast de radiofrance.fr : émissions depuis 2003 (date, thème, titre, description, animateurs, audio à partir de 2006), et extraits d'archives de 1956 à 2002. | environ 1 h (une requête par seconde) |
 | `wayback_podcast` | Les fichiers audio du podcast conservés par la Wayback Machine : la date d'origine et l'identifiant d'archive Radio France (ITEMA) figurent dans le nom du fichier. Pas de thème. | moins d'une minute |
-| `ina` | Toutes les notices de la collection « Le masque et la plume » du catalogue INA : date, titre, chaîne, heure, durée. Le thème vient du titre, et les notices de la facette Littérature reçoivent le thème livres. | plusieurs minutes |
+| `ina` | Toutes les notices de la collection « Le masque et la plume » du catalogue INA : date, titre, chaîne, heure, durée, et la fiche détaillée de chaque notice (voir ci-dessous). | environ 2 h la première fois (une fiche toutes les deux secondes environ), puis quelques minutes : une fiche en cache n'est pas re-téléchargée |
 | `anciennes_listes` | Les listes d'émissions de l'ancien site France Inter, archivées par la Wayback Machine : liste annuelle (2002-2008) et listes mensuelles (2009-2012), avec date et thème. Un dimanche « Pas de masque et la plume » n'atteste aucune émission. | quelques minutes |
 | `lmelp` | Les émissions vérifiées à la main dans l'application lmelp (2014 à aujourd'hui), lues dans sa base MongoDB : page radiofrance.fr, titre, date de publication du podcast. C'est une **source vérifiée** (voir ci-dessous). | quelques secondes |
+
+### Les fiches détaillées INA
+
+La collecte INA enregistre, en plus de la liste des notices, la fiche détaillée de chacune dans `data/raw/cache/ina/fiches/`, un fichier par notice (`RD_1098450.001.html`). Une collecte interrompue reprend où elle s'était arrêtée.
+
+Le **thème** d'une notice vient de son titre et des champs de classement de sa fiche : descripteurs (« cinéma ; film ; débat »), chapeau (« Magazine d'actualité cinématographique… »), résumé producteur (« LITTERAIRE : avec la participation de… »). Le résumé documentaire, texte libre où une émission cinéma cite le roman adapté à l'écran, ne sert qu'à défaut : quand ni le titre ni ces champs ne donnent de thème. Les mêmes mots-clés s'appliquent partout, sans tenir compte des accents ni des majuscules ; les notices de la facette Littérature reçoivent en plus le thème livres. Les descripteurs et le chapeau sont surtout renseignés à partir du milieu des années 1990 ; plus tôt, le résumé producteur donne souvent le thème.
+
+Le **statut de diffusion** distingue la première diffusion d'une rediffusion (« Multidiffusé ») : une notice de rediffusion, souvent datée du lendemain, atteste l'émission mais ne date pas sa première diffusion. Elle ne produit donc pas de `désaccord de date`. Une notice sans fiche en cache date l'émission.
 
 ### La source vérifiée lmelp
 

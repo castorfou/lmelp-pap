@@ -49,9 +49,11 @@ class Attestation:
     url: str | None = None
     enregistrements: tuple[Enregistrement, ...] = ()
     extrait: bool = False  # un fragment, qui ne décrit pas l'émission entière
-    # La date de première diffusion, ou de publication dans le podcast (lmelp) :
-    # une date de publication ne date pas l'émission.
-    nature_date: Literal["première diffusion", "publication"] = "première diffusion"
+    # La date de première diffusion, de publication dans le podcast (lmelp) ou
+    # de rediffusion (INA) : seule une première diffusion date l'émission.
+    nature_date: Literal["première diffusion", "publication", "rediffusion"] = (
+        "première diffusion"
+    )
 
     @property
     def cle(self) -> CleAttestation:

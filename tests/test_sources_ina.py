@@ -77,3 +77,84 @@ def test_les_titres_television_musique_varietes_et_critique_dramatique() -> None
     assert notices["PH_PHD99255852"].themes == frozenset({"musique"})
     assert notices["PH_PHD99255882"].themes == frozenset({"variétés"})
     assert notices["PH_PHD88021037"].themes == frozenset({"théâtre"})
+
+
+FICHES = FIXTURES / "fiches"
+
+
+def _avec_fiche(source_id: str, titre: str, jour: str) -> Attestation:
+    """La notice ``source_id`` au titre générique, lue avec sa fiche détaillée."""
+    ligne = {
+        "date_diffusion": jour,
+        "titre": titre,
+        "url_ina": f"https://catalogue.ina.fr/doc/TV-RADIO/{source_id}/le-masque",
+        "facette_litterature": "non",
+    }
+    fiche = (FICHES / f"{source_id}.html").read_text(encoding="utf-8")
+    (notice,) = lire_notices([ligne], fiches={source_id: fiche})
+    return notice
+
+
+def test_les_descripteurs_de_la_fiche_donnent_le_theme_d_un_titre_generique() -> None:
+    # 2000-01-09 : descripteurs « cinéma ; film ; débat »
+    notice = _avec_fiche(
+        "RD_1098450.001", "Le masque et la plume du 09 janvier 2000", "2000-01-09"
+    )
+
+    assert notice.themes == frozenset({"cinéma"})
+
+
+def test_le_resume_producteur_donne_le_theme_meme_en_capitales_sans_accent() -> None:
+    # 1994-01-16 : ni descripteurs ni chapeau, résumé producteur « LITTERAIRE : … »
+    notice = _avec_fiche(
+        "RD_581453.001", "Le masque et la plume du 16 janvier 1994", "1994-01-16"
+    )
+
+    assert notice.themes == frozenset({"livres"})
+
+
+def test_une_notice_multidiffusee_ne_date_pas_la_premiere_diffusion() -> None:
+    # 2016-05-16 : rediffusion du lundi de l'émission du dimanche 15 mai 2016
+    rediffusion = _avec_fiche(
+        "RD_6476526.001",
+        "Le masque et la plume : émission du 16 mai 2016",
+        "2016-05-16",
+    )
+    premiere = _avec_fiche(
+        "RD_1098450.001", "Le masque et la plume du 09 janvier 2000", "2000-01-09"
+    )
+
+    assert rediffusion.nature_date == "rediffusion"
+    assert premiere.nature_date == "première diffusion"
+
+
+def _notice_avec(fiche: str) -> Attestation:
+    ligne = {
+        "date_diffusion": "1986-04-13",
+        "titre": "Le masque et la plume du 13 avril 1986",
+        "url_ina": "https://catalogue.ina.fr/doc/TV-RADIO/PH_X2/le-masque",
+        "facette_litterature": "non",
+    }
+    (notice,) = lire_notices([ligne], fiches={"PH_X2": fiche})
+    return notice
+
+
+def test_le_resume_documentaire_n_ajoute_pas_de_theme_aux_champs_de_classement() -> (
+    None
+):
+    # une émission cinéma dont le résumé cite le roman adapté à l'écran
+    fiche = (
+        '<td id="DE" class="v">cinéma ; film (Le diamant du Nil)</td>'
+        '<td id="RES" class="v">Débat sur les films, dont un adapté du roman de '
+        "Joan Wilder.</td>"
+    )
+
+    assert _notice_avec(fiche).themes == frozenset({"cinéma"})
+
+
+def test_a_defaut_de_champ_de_classement_le_resume_documentaire_donne_le_theme() -> (
+    None
+):
+    fiche = '<td id="RES" class="v">Débat à propos des livres suivants : …</td>'
+
+    assert _notice_avec(fiche).themes == frozenset({"livres"})
