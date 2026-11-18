@@ -7,6 +7,7 @@
 ## Guides
 
 - [Liste des émissions](liste-des-emissions.md) : construire et mettre à jour la liste avec `lmelp-pap emissions`, la consulter avec `lmelp-pap page`, sources, fichiers produits.
+- [FAQ : lever les doutes](faq.md) : questions fréquentes pendant l'arbitrage avec `lmelp-pap arbitrer` (cache en retard, dates de mise en ligne, rapprochements, thèmes inconnus).
 
 ## Contenu suggéré
 

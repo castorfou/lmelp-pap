@@ -1,0 +1,127 @@
+# FAQ : lever les doutes
+
+Questions fréquentes pendant l'arbitrage avec `lmelp-pap arbitrer`. La définition de chaque type de doute et le format de `arbitrages.csv` se trouvent dans [la liste des émissions](liste-des-emissions.md#doutescsv).
+
+## Méthode
+
+### Par où commencer ?
+
+Par les doutes des émissions **dans la liste** (`dans_la_liste = oui`) : ce sont les seuls qui peuvent changer la liste. Dans l'outil, filtrer sur une année, puis sur un type de doute, et traiter un type à la fois.
+
+Un doute d'une émission hors de la liste (cinéma, théâtre) n'a pas d'effet sur la liste. Il ne vaut la peine d'être levé que s'il laisse penser que l'émission est en fait littéraire.
+
+### Faut-il toujours arbitrer ?
+
+Non. Un doute se lève, dans l'ordre de préférence :
+
+1. par une **règle**, quand un motif explique beaucoup de cas ;
+2. par une **source**, quand l'information manque : une collecte à rafraîchir, une nouvelle source ;
+3. par un **arbitrage**, en dernier recours.
+
+Un arbitrage posé sur un doute qui vient d'un cache périmé reste attaché à un faux problème : rafraîchir d'abord (voir [Le doute vient-il d'un cache en retard ?](#le-doute-vient-il-dun-cache-en-retard)).
+
+### Comment vérifier l'effet d'un arbitrage ?
+
+L'outil reconstruit la liste à chaque clic et réécrit `data/processed/`. L'effet se voit dans la page, et dans `git diff data/processed/doutes.csv` : les lignes du doute levé disparaissent. Committer ensuite `arbitrages.csv` et les CSV de la liste.
+
+## Sources et cache
+
+### Le doute vient-il d'un cache en retard ?
+
+Le cache ne se met pas à jour tout seul. Une émission récente peut être connue d'une source (lmelp, souvent) et absente d'une autre dont la collecte est plus ancienne. Pour vérifier, regarder la fiche la plus récente du cache :
+
+```bash
+ls data/raw/cache/radiofrance/fiches | grep "$(date +%Y)" | sort | tail -3
+```
+
+Si elle est antérieure à l'émission, rafraîchir la source, puis laisser la construction lever le doute :
+
+```bash
+uv run --active lmelp-pap emissions --source radiofrance --refresh
+```
+
+Le rafraîchissement réécrit les CSV de `data/processed/` : quitter `lmelp-pap arbitrer` avant, et le relancer après (voir [Peut-on arbitrer pendant un rafraîchissement ?](#peut-on-arbitrer-pendant-un-rafraichissement)).
+
+### Combien de temps prend un rafraîchissement de radiofrance ?
+
+Compter de 5 à 15 minutes. Le `--refresh` parcourt toutes les pages de la liste des podcasts sur radiofrance.fr, jusqu'à la dernière, sans s'arrêter aux fiches déjà connues :
+
+- chaque page coûte une requête et une pause d'une seconde, pour une bonne centaine de pages ;
+- seules les fiches absentes du cache sont téléchargées, chacune avec une requête et une pause d'une seconde. Le site ajoute parfois d'anciennes fiches à son catalogue : un rafraîchissement n'apporte donc pas que des émissions récentes ;
+- quand le site limite le débit, la collecte attend 10 s, puis 20 s, puis 40 s avant de réessayer.
+
+### Peut-on arbitrer pendant un rafraîchissement ?
+
+Non. Au début d'un rafraîchissement, la collecte supprime le marqueur `collecte_terminee` de la source, et ne le remet qu'à la fin. Entre les deux, la construction de la liste considère la source comme incomplète et l'ignore. Un arbitrage enregistré pendant ce temps reconstruit la liste **sans cette source**, et réécrit les CSV de `data/processed/` avec beaucoup d'émissions et de doutes en moins.
+
+Interrompre un rafraîchissement (Ctrl+C) a le même effet, durable : le marqueur ne revient pas, et toutes les constructions suivantes ignorent la source jusqu'à ce qu'un rafraîchissement aille à son terme.
+
+La bonne séquence :
+
+1. quitter `lmelp-pap arbitrer` ;
+2. lancer le rafraîchissement et le laisser finir ;
+3. vérifier que le marqueur est revenu, puis relire le `git diff` des CSV de `data/processed/` ;
+4. relancer `lmelp-pap arbitrer`.
+
+```bash
+ls data/raw/cache/radiofrance/collecte_terminee
+git diff --stat data/processed/
+```
+
+### Que veut dire « sans fiche radiofrance » ?
+
+lmelp donne l'adresse de la fiche radiofrance.fr de l'émission, et cette fiche n'est pas dans le cache radiofrance. L'attestation lmelp est alors rattachée par la date. Deux causes :
+
+- **la fiche est récente** et le cache est plus ancien : rafraîchir radiofrance (cas le plus fréquent pour les émissions des dernières semaines) ;
+- **l'URL enregistrée dans lmelp est fausse** : la corriger dans lmelp.
+
+Ce doute ne s'arbitre pas.
+
+## Dates
+
+### Pourquoi un fichier de podcast est-il daté du vendredi ou du samedi ?
+
+La date inscrite dans le nom d'un fichier audio (`14007-13.02.2026-ITEMA_…`) est sa date de **mise en ligne**, pas celle de la diffusion. Le podcast est souvent publié un ou deux jours avant le dimanche. Ce décalage produit des `rapprochement ambigu` (le fichier est rapprochable aussi d'une émission du vendredi), des `jour inhabituel` et des `désaccord de date`.
+
+### Comment savoir à quelle émission appartient un fichier ?
+
+Par son numéro **ITEMA** : les fichiers qui partagent le même `ITEMA_…` sont des morceaux du même enregistrement. Si un fichier a le même ITEMA que l'enregistrement complet d'une émission (durée proche d'une heure dans `enregistrements.csv`), il appartient à cette émission.
+
+```bash
+grep ITEMA_24408480 data/processed/enregistrements.csv
+```
+
+## Rapprochements
+
+### Quel arbitrage pour un « rapprochement ambigu » ?
+
+Le `detail` donne l'émission rivale. Deux réponses possibles :
+
+- l'attestation est à sa place : arbitrage de rapprochement **`garder ici`** ;
+- elle appartient à l'émission rivale : arbitrage de rapprochement vers une attestation de l'émission cible.
+
+Le titre de la fiche (« Le Masque et la Plume du dimanche 29 mars ») ou le numéro ITEMA suffit le plus souvent : justification « titre explicite ».
+
+### Que sont les émissions `-b` qui n'ont que des extraits ?
+
+Une émission suffixée `-b` (ou datée d'un vendredi) qui n'a que des extraits est le plus souvent faite de **fiches par livre** ou de fichiers de podcast mis en ligne autour de l'émission du dimanche. Elle a typiquement une `collision`, une `attestation fragile` ou un `jour inhabituel`. Rattacher ses attestations à l'émission du dimanche fait disparaître l'émission fantôme, et ses doutes avec elle.
+
+### Pourquoi une fiche par livre forme-t-elle une émission `-b` le même jour ?
+
+Parce que radiofrance.fr l'a étiquetée d'un autre thème que l'émission. Le rapprochement ne réunit pas des attestations aux thèmes incompatibles : la fiche forme une émission à part. Exemple : 2025-08-03-b n'est que la fiche « Les Piliers de la Mer » de Sylvain Tesson, étiquetée « cinéma ».
+
+Le numéro ITEMA le trahit : l'enregistrement de la fiche appartient à la même archive que l'émission complète du jour (`ITEMA_24209925` pour le 3 août 2025). Les attestations sans thème du jour, comme le fichier Wayback, deviennent alors `rapprochement ambigu` entre les deux.
+
+Inutile d'arbitrer ces cas un par un : une règle les traite, deux émissions du même jour qui partagent un ITEMA n'en font qu'une (#37). Pour vérifier si une paire `X` / `X-b` partage un ITEMA, ouvrir le détail des deux émissions dans `lmelp-pap arbitrer` et comparer le numéro `ITEMA_…` de leurs enregistrements. `enregistrements.csv` ne suffit pas : il ne contient que les émissions de la liste, et la `-b` en est souvent absente.
+
+## Thèmes
+
+### Comment trancher un « thème inconnu » au titre générique ?
+
+Les notices INA des années 1980-2000 portent pour la plupart un titre générique (« Le masque et la plume du 13 janvier 1985 ») sans description. Rien ne permet de trancher leur thème sur pièces, ni d'un coup d'œil, ni par une règle sur le titre. Le **renvoi à l'écoute** les range sous « À écouter », pour que la file « À trancher » ne garde que ce qui peut l'être.
+
+Un thème inconnu au titre explicite (« Hommage à Jean-Louis Bory ») se tranche directement : justification « titre explicite ».
+
+### Que faire des « thèmes divergents » sur des extraits ?
+
+Une fiche d'extrait peut porter deux thèmes (`cinéma+théâtre`) quand l'émission entière n'en a qu'un. Si l'émission est hors de la liste et qu'aucune source ne la dit littéraire, le doute n'a pas d'effet sur la liste. Sinon, un arbitrage de thème fixe les thèmes de l'émission.
