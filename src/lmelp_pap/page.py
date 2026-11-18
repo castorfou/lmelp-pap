@@ -42,7 +42,9 @@ def donnees_page(dossier: Path) -> list[dict[str, Any]]:
     enregistrements = _par_emission(
         dossier / "enregistrements.csv", ("url", "type", "duree")
     )
-    doutes = _par_emission(dossier / "doutes.csv", ("type", "detail", "a_ecouter"))
+    doutes = _par_emission(
+        dossier / "doutes.csv", ("type", "detail", "a_ecouter", "source", "source_id")
+    )
     return [
         {
             "id": e["id"],
@@ -60,6 +62,9 @@ def donnees_page(dossier: Path) -> list[dict[str, Any]]:
                     "type": d["type"],
                     "detail": d["detail"],
                     "a_ecouter": d["a_ecouter"] == "oui",
+                    # l'attestation sur laquelle porte le doute, s'il y en a une
+                    "source": d["source"],
+                    "source_id": d["source_id"],
                 }
                 for d in doutes[e["id"]]
             ],

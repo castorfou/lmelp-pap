@@ -52,6 +52,20 @@ def url(tmp_path: Path, sortie: Path) -> Iterator[str]:
                 f"https://catalogue.ina.fr/doc/TV-RADIO/PH_RD202008{jour}/masque,"
                 "oui\n"
             )
+        # Mars 2015 : la notice sans thème du mardi 3 est rapprochée de
+        # l'émission livres du 1er, mais rapprochable aussi de celle, cinéma,
+        # du 5 : un rapprochement ambigu.
+        for jour, titre, litterature in (
+            ("01", "Livres", "oui"),
+            ("03", "Le masque et la plume", "non"),
+            ("05", "Cinéma", "non"),
+        ):
+            f.write(
+                f"2015-03-{jour},{titre},Le masque et la plume,France Inter,"
+                "20:00:00,00:55:00,Débat,"
+                f"https://catalogue.ina.fr/doc/TV-RADIO/PH_RD201503{jour}/masque,"
+                f"{litterature}\n"
+            )
     serveur = creer_serveur(cache, sortie, port=0)
     fil = threading.Thread(target=serveur.serve_forever, daemon=True)
     fil.start()
@@ -437,3 +451,110 @@ def test_une_date_arbitree_se_change_sans_annuler_l_arbitrage_de_theme(
     emission = _emission(donnees, "2020-08-01")
     assert emission["arbitrage_date"]["date"] == "2020-08-01"
     assert emission["arbitrage"]["sorte"] == "thème"
+
+
+# --- Arbitrage de rapprochement --------------------------------------------------
+
+
+def _attestations(donnees: dict[str, Any], emission_id: str) -> list[str]:
+    return [a["titre"] for a in _emission(donnees, emission_id)["attestations"]]
+
+
+def test_un_rapprochement_ambigu_a_son_attestation_et_ses_rivales(url: str) -> None:
+    emission = _emission(_get(f"{url}/api/donnees"), "2015-03-01")
+
+    assert {
+        "type": "rapprochement ambigu",
+        "detail": "rapprochable aussi de 2015-03-05",
+        "a_ecouter": False,
+        "source": "ina",
+        "source_id": "PH_RD20150303",
+    } in emission["doutes"]
+    assert emission["rapprochements"] == [
+        {"source": "ina", "source_id": "PH_RD20150303", "rivales": ["2015-03-05"]}
+    ]
+
+
+def test_garder_ici_leve_le_doute_sans_rien_changer_d_autre(
+    url: str, sortie: Path
+) -> None:
+    avant = _get(f"{url}/api/donnees")
+
+    donnees = _post(
+        f"{url}/api/arbitrages",
+        {
+            "emission_id": "2015-03-01",
+            "sorte": "rapprochement",
+            "source": "ina",
+            "source_id": "PH_RD20150303",
+            "vers": None,
+        },
+    )
+
+    emission = _emission(donnees, "2015-03-01")
+    assert "rapprochement ambigu" not in [d["type"] for d in emission["doutes"]]
+    assert emission["rapprochements"] == []
+    assert _ids(donnees) == _ids(avant)
+    assert _attestations(donnees, "2015-03-01") == _attestations(avant, "2015-03-01")
+    [arbitrage] = _lignes(sortie / "arbitrages.csv")
+    assert (
+        arbitrage["source"],
+        arbitrage["source_id"],
+        arbitrage["sorte"],
+        arbitrage["valeur"],
+    ) == ("ina", "PH_RD20150303", "rapprochement", "garder ici")
+
+
+def test_deplacer_vers_envoie_l_attestation_sur_l_emission_rivale(
+    url: str, tmp_path: Path, sortie: Path
+) -> None:
+    donnees = _post(
+        f"{url}/api/arbitrages",
+        {
+            "emission_id": "2015-03-01",
+            "sorte": "rapprochement",
+            "source": "ina",
+            "source_id": "PH_RD20150303",
+            "vers": "2015-03-05",
+        },
+    )
+
+    # l'émission cible, cinéma, est hors de la liste
+    assert _attestations(donnees, "2015-03-01") == ["Livres"]
+    assert "rapprochement ambigu" not in [
+        d["type"] for d in _emission(donnees, "2015-03-01")["doutes"]
+    ]
+    [arbitrage] = _lignes(sortie / "arbitrages.csv")
+    # la cible est désignée par une de ses attestations, pas par son identifiant
+    assert (arbitrage["sorte"], arbitrage["valeur"]) == (
+        "rapprochement",
+        "ina:PH_RD20150305",
+    )
+
+    reconstruite = Atelier(tmp_path / "cache", sortie).donnees()
+
+    assert _attestations(reconstruite, "2015-03-01") == ["Livres"]
+
+
+@pytest.mark.parametrize(
+    "corps",
+    [
+        # une émission qui n'est pas rivale
+        {"source_id": "PH_RD20150303", "vers": "2014-09-28"},
+        # une attestation sans rapprochement ambigu
+        {"source_id": "PH_RD20150301", "vers": None},
+        {"source_id": "PH_RD20150399", "vers": None},
+    ],
+)
+def test_un_arbitrage_de_rapprochement_invalide_est_refuse_sans_rien_ecrire(
+    url: str, sortie: Path, corps: dict[str, Any]
+) -> None:
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post(
+            f"{url}/api/arbitrages",
+            {"emission_id": "2015-03-01", "sorte": "rapprochement", "source": "ina"}
+            | corps,
+        )
+
+    assert erreur.value.code == 400
+    assert not (sortie / "arbitrages.csv").exists()

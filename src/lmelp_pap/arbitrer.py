@@ -9,14 +9,19 @@ API :
 - ``GET /`` : la page en mode arbitrage ;
 - ``GET /api/donnees`` : les données courantes ;
 - ``POST /api/arbitrages`` : enregistre un arbitrage sur une émission
-  (``emission_id``, ``sorte`` : ``thème``, ``existence``, ``date`` ou ``écoute``
-  pour un renvoi à l'écoute, ``themes``, ``date``, ``justification``) ;
+  (``emission_id``, ``sorte`` : ``thème``, ``existence``, ``date``,
+  ``rapprochement`` ou ``écoute`` pour un renvoi à l'écoute, ``themes``,
+  ``date``, ``justification``) ; un arbitrage de rapprochement porte en plus
+  l'attestation ambiguë (``source``, ``source_id``) et ``vers``, l'identifiant
+  de l'émission rivale où la déplacer, ou ``null`` pour la garder ici ;
 - ``POST /api/annulations`` : annule les arbitrages d'une émission
   (``emission_id``) ou d'une attestation (``source`` et ``source_id``).
 
 Chaque requête d'écriture renvoie les données à jour, comme ``GET /api/donnees``.
 Une émission y porte en plus, pour l'arbitrage de date, ses ``dates_candidates``
-(vides sans doute de date ni date arbitrée) et son ``arbitrage_date``.
+(vides sans doute de date ni date arbitrée) et son ``arbitrage_date`` ; pour
+l'arbitrage de rapprochement, ses ``rapprochements`` : chaque attestation
+ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 """
 
 import json
@@ -40,8 +45,10 @@ from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import (
     JOURS,
     Arbitrage,
-    Attestation,
+    CleAttestation,
     Emission,
+    Rivale,
+    attestation_stable,
     au_jour_habituel,
     construire_liste,
     dates_candidates,
@@ -49,9 +56,6 @@ from lmelp_pap.liste import (
 from lmelp_pap.page import construire_page, donnees_page
 
 
-# L'attestation la plus stable d'une émission porte l'arbitrage : la notice INA,
-# sinon la fiche radiofrance.fr, sinon les autres sources dans cet ordre.
-STABILITE = ("ina", "radiofrance", "lmelp", "anciennes_listes", "wayback_podcast")
 # Les doutes qu'un arbitrage de date lève.
 DOUTES_DE_DATE = ("désaccord de date", "jour inhabituel")
 
@@ -72,6 +76,9 @@ class Atelier:
         self._emissions: dict[str, Emission] = {}
         # les types de doute de chaque émission de la liste qui en a
         self._doutes: dict[str, set[str]] = {}
+        # les attestations ambiguës de chaque émission de la liste, avec leurs
+        # rivales : identifiant de l'émission et attestation qui la désigne
+        self._ambigues: dict[str, dict[CleAttestation, tuple[Rivale, ...]]] = {}
         self._verrou = threading.Lock()
         with self._verrou:
             self._reconstruire()
@@ -91,10 +98,10 @@ class Atelier:
         de la liste."""
         with self._verrou:
             emission = self._emission(demande.get("emission_id"))
-            attestation = attestation_stable(emission)
+            attestation = attestation_stable(emission).cle
             sorte = demande.get("sorte")
             themes = frozenset(demande.get("themes") or ())
-            retenue = None
+            retenue, cible = None, None
             if sorte == "thème":
                 if erreur := erreur_de_themes(themes):
                     raise DemandeInvalideError(erreur)
@@ -102,6 +109,9 @@ class Atelier:
                 themes = frozenset()
             elif sorte == "date":
                 retenue = self._date_candidate(emission, demande.get("date"))
+                themes = frozenset()
+            elif sorte == "rapprochement":
+                attestation, cible = self._rapprochement(emission, demande)
                 themes = frozenset()
             elif sorte == "écoute":
                 if emission.id not in self._doutes:
@@ -112,11 +122,12 @@ class Atelier:
             else:
                 raise DemandeInvalideError(f"sorte invalide : {sorte!r}")
             arbitrage = Arbitrage(
-                source=attestation.source,
-                source_id=attestation.source_id,
+                source=attestation[0],
+                source_id=attestation[1],
                 sorte=sorte,
                 themes=themes,
                 date_retenue=retenue,
+                cible=cible,
                 justification=str(demande.get("justification") or "").strip(),
                 date=datetime.now().replace(microsecond=0),
             )
@@ -140,6 +151,29 @@ class Atelier:
                 raise DemandeInvalideError("aucun arbitrage à annuler")
             self._reconstruire()
             return self._donnees()
+
+    def _rapprochement(
+        self, emission: Emission, demande: dict[str, Any]
+    ) -> tuple[CleAttestation, CleAttestation | None]:
+        """L'attestation ambiguë de l'émission, et l'attestation qui désigne
+        l'émission rivale où la déplacer (None pour la garder ici)."""
+        attestation = (str(demande.get("source")), str(demande.get("source_id")))
+        ambigues = self._ambigues.get(emission.id, {})
+        if attestation not in ambigues:
+            raise DemandeInvalideError(
+                f"{emission.id} n'a aucun rapprochement ambigu sur "
+                f"{attestation[0]}:{attestation[1]}"
+            )
+        vers = demande.get("vers")
+        if vers is None:
+            return attestation, None
+        rivales = dict(ambigues[attestation])
+        if vers not in rivales:
+            raise DemandeInvalideError(
+                f"émission rivale invalide : {vers!r} (attendu : "
+                f"{', '.join(rivales)}, ou null pour garder ici)"
+            )
+        return attestation, rivales[vers]
 
     def _date_candidate(self, emission: Emission, texte: object) -> date:
         """La date à retenir, parmi celles des sources d'une émission qui a un
@@ -175,21 +209,27 @@ class Atelier:
         ecrire_liste(liste, doutes, self.sortie)
         self._emissions = {e.id: e for e in liste}
         self._doutes = {}
+        self._ambigues = {}
         for d in doutes:
             if d.dans_la_liste:
                 self._doutes.setdefault(d.emission_id, set()).add(d.type)
+                if d.rivales:
+                    self._ambigues.setdefault(d.emission_id, {})[
+                        (d.source, d.source_id)
+                    ] = d.rivales
 
     def _donnees(self) -> dict[str, Any]:
         """Les données de la page et les arbitrages, du plus récent au plus ancien."""
         return {
-            "emissions": [self._avec_dates(e) for e in donnees_page(self.sortie)],
+            "emissions": [self._pour_arbitrer(e) for e in donnees_page(self.sortie)],
             "arbitrages": [
                 self._arbitrage(a) for a in reversed(lire_arbitrages(self.fichier))
             ],
         }
 
-    def _avec_dates(self, donnees: dict[str, Any]) -> dict[str, Any]:
-        """Une émission de la page, avec ce qu'il faut pour arbitrer sa date."""
+    def _pour_arbitrer(self, donnees: dict[str, Any]) -> dict[str, Any]:
+        """Une émission de la page, avec ce qu'il faut pour arbitrer sa date et
+        ses rapprochements."""
         emission = self._emissions[donnees["id"]]
         arbitrage = emission.arbitrage_date
         return {
@@ -214,6 +254,16 @@ class Atelier:
                 if arbitrage and arbitrage.date_retenue
                 else None
             ),
+            "rapprochements": [
+                {
+                    "source": source,
+                    "source_id": source_id,
+                    "rivales": [i for i, _cle in rivales],
+                }
+                for (source, source_id), rivales in sorted(
+                    self._ambigues.get(emission.id, {}).items()
+                )
+            ],
         }
 
     def _arbitrage(self, arbitrage: Arbitrage) -> dict[str, Any]:
@@ -236,16 +286,6 @@ class Atelier:
                 else None
             ),
         }
-
-
-def attestation_stable(emission: Emission) -> Attestation:
-    """L'attestation de l'émission à laquelle attacher un arbitrage."""
-
-    def rang(a: Attestation) -> tuple[int, str]:
-        ordre = STABILITE.index(a.source) if a.source in STABILITE else len(STABILITE)
-        return (ordre, a.source_id)
-
-    return min(emission.attestations, key=rang)
 
 
 def creer_serveur(

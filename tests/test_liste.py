@@ -1239,3 +1239,209 @@ def test_un_arbitrage_de_date_et_un_arbitrage_de_theme_se_cumulent() -> None:
 
     assert [(e.id, e.themes) for e in liste] == [("2020-08-02", frozenset({"livres"}))]
     assert (liste[0].arbitrage, liste[0].arbitrage_date) == (theme, date_)
+
+
+# --- Arbitrage de rapprochement -----------------------------------------------
+
+
+def _voisines() -> list[Attestation]:
+    """Une émission théâtre et une émission livres à quatre jours d'écart, et un
+    fichier Wayback sans thème entre les deux : rapproché de la première, hors de
+    la liste, il est rapprochable aussi de la seconde."""
+    return [
+        Attestation(
+            source="ina",
+            source_id="PHD1",
+            date=date(1960, 3, 6),
+            themes=frozenset({"théâtre"}),
+            titre="Le 6 mars",
+        ),
+        Attestation(
+            source="ina",
+            source_id="PHD2",
+            date=date(1960, 3, 10),
+            themes=frozenset({"livres"}),
+            titre="Le 10 mars",
+        ),
+        Attestation(
+            source="wayback_podcast",
+            source_id="ITEMA_9",
+            date=date(1960, 3, 8),
+            enregistrements=(
+                Enregistrement(url="https://x/ITEMA_9.mp3", type="intégral"),
+            ),
+        ),
+    ]
+
+
+def _rapprochement(
+    source: str,
+    source_id: str,
+    cible: tuple[str, str] | None,
+    jour: date = date(2026, 11, 11),
+) -> Arbitrage:
+    return Arbitrage(
+        source=source,
+        source_id=source_id,
+        sorte="rapprochement",
+        cible=cible,
+        justification="écouté l'enregistrement",
+        date=datetime.combine(jour, datetime.min.time()),
+    )
+
+
+def _attestations_par_emission(liste: list) -> dict[str, list[str]]:
+    return {e.id: [a.source_id for a in e.attestations] for e in liste}
+
+
+def test_garder_ici_leve_le_rapprochement_ambigu_sans_rien_changer() -> None:
+    avant, doutes_avant = construire_liste(_voisines())
+    assert "rapprochement ambigu" in [d.type for d in doutes_avant]
+
+    liste, doutes = construire_liste(
+        _voisines(), [_rapprochement("wayback_podcast", "ITEMA_9", None)]
+    )
+
+    assert _attestations_par_emission(liste) == _attestations_par_emission(avant)
+    assert _attestations_par_emission(liste) == {"1960-03-10": ["PHD2"]}
+    assert doutes == [d for d in doutes_avant if d.type != "rapprochement ambigu"]
+
+
+def test_deplacer_vers_fait_passer_l_attestation_et_ses_enregistrements() -> None:
+    arbitrage = _rapprochement("wayback_podcast", "ITEMA_9", ("ina", "PHD2"))
+
+    liste, doutes = construire_liste(_voisines(), [arbitrage])
+
+    assert _attestations_par_emission(liste) == {"1960-03-10": ["PHD2", "ITEMA_9"]}
+    assert [e.url for e in liste[0].enregistrements] == ["https://x/ITEMA_9.mp3"]
+    assert "rapprochement ambigu" not in [d.type for d in doutes]
+
+
+def test_un_rapprochement_dont_la_cible_a_disparu_est_un_arbitrage_orphelin() -> None:
+    arbitrage = _rapprochement("wayback_podcast", "ITEMA_9", ("ina", "PHD_DISPARUE"))
+
+    liste, doutes = construire_liste(_voisines(), [arbitrage])
+
+    # sans effet : l'attestation reste où elle est, et son doute aussi
+    assert _attestations_par_emission(liste) == {"1960-03-10": ["PHD2"]}
+    assert [
+        (d.type, d.emission_id, d.source_id, d.detail)
+        for d in doutes
+        if d.type in ("arbitrage orphelin", "rapprochement ambigu")
+    ] == [
+        (
+            "rapprochement ambigu",
+            "1960-03-06",
+            "ITEMA_9",
+            "rapprochable aussi de 1960-03-10",
+        ),
+        (
+            "arbitrage orphelin",
+            "1960-03-06",
+            "ITEMA_9",
+            "émission cible introuvable ; déplacée vers l'émission de ina:PHD_DISPARUE",
+        ),
+    ]
+
+
+def test_le_rapprochement_suit_l_emission_cible_quand_son_identifiant_change() -> None:
+    deplacer = _rapprochement("wayback_podcast", "ITEMA_9", ("ina", "PHD2"))
+    nouvelle_date = _date("ina", "PHD2", date(1960, 3, 11))
+
+    liste, _doutes = construire_liste(_voisines(), [deplacer, nouvelle_date])
+
+    assert _attestations_par_emission(liste) == {"1960-03-11": ["PHD2", "ITEMA_9"]}
+
+
+def test_un_rapprochement_vers_une_emission_inexistante_est_orphelin() -> None:
+    deplacer = _rapprochement("wayback_podcast", "ITEMA_9", ("ina", "PHD2"))
+    inexistante = replace(
+        _theme("ina", "PHD2", set()), sorte="existence", themes=frozenset()
+    )
+
+    liste, doutes = construire_liste(_voisines(), [deplacer, inexistante])
+
+    assert liste == []
+    assert [
+        (d.type, d.emission_id, d.dans_la_liste, d.source_id, d.detail)
+        for d in doutes
+        if d.type == "arbitrage orphelin"
+    ] == [
+        (
+            "arbitrage orphelin",
+            "",
+            False,
+            "ITEMA_9",
+            (
+                "émission cible arbitrée inexistante ; "
+                "déplacée vers l'émission de ina:PHD2"
+            ),
+        )
+    ]
+
+
+@pytest.mark.parametrize("ordre", ["chaîne d'abord", "cible d'abord"])
+def test_un_rapprochement_suit_sa_cible_quand_elle_est_deplacee_a_son_tour(
+    ordre: str,
+) -> None:
+    # le fichier Wayback va avec la notice théâtre, qui va elle-même au 10 mars
+    vers_phd1 = _rapprochement("wayback_podcast", "ITEMA_9", ("ina", "PHD1"))
+    vers_phd2 = _rapprochement("ina", "PHD1", ("ina", "PHD2"))
+    arbitrages = [vers_phd1, vers_phd2]
+    if ordre == "cible d'abord":
+        arbitrages.reverse()
+
+    liste, _doutes = construire_liste(_voisines(), arbitrages)
+
+    assert [(e.id, sorted(a.source_id for a in e.attestations)) for e in liste] == [
+        ("1960-03-10", ["ITEMA_9", "PHD1", "PHD2"])
+    ]
+
+
+def test_l_attestation_lmelp_d_une_fiche_deplacee_la_suit() -> None:
+    fiche = Attestation(
+        source="radiofrance",
+        source_id="fiche-1",
+        date=date(1960, 3, 8),
+        url="https://www.radiofrance.fr/fiche-1",
+        extrait=True,  # une fiche par livre
+    )
+    lmelp = Attestation(
+        source="lmelp",
+        source_id="episode-1",
+        date=date(1960, 3, 8),
+        themes=frozenset({"livres"}),
+        url="https://www.radiofrance.fr/fiche-1",
+        nature_date="publication",
+    )
+    attestations = [*_voisines()[:2], fiche, lmelp]
+    deplacer = _rapprochement("radiofrance", "fiche-1", ("ina", "PHD2"))
+
+    liste, doutes = construire_liste(attestations, [deplacer])
+
+    assert [(e.id, sorted(a.source_id for a in e.attestations)) for e in liste] == [
+        ("1960-03-10", ["PHD2", "episode-1", "fiche-1"])
+    ]
+    assert "sans fiche radiofrance" not in [d.type for d in doutes]
+
+
+def test_un_arbitrage_qui_suit_l_attestation_deplacee_est_un_doute() -> None:
+    # l'arbitrage de thème de l'émission du 6 est posé sur sa notice INA :
+    # déplacée, la notice l'emporte sur l'émission du 10, qui sort de la liste
+    theme = _theme("ina", "PHD1", {"théâtre"})
+    deplacer = _rapprochement("ina", "PHD1", ("ina", "PHD2"))
+
+    _liste, doutes = construire_liste(_voisines(), [theme, deplacer])
+
+    assert [
+        (d.type, d.emission_id, d.source_id, d.detail)
+        for d in doutes
+        if d.type == "arbitrage déplacé"
+    ] == [
+        (
+            "arbitrage déplacé",
+            "1960-03-10",
+            "PHD1",
+            "arbitrée théâtre, suit l'attestation déplacée vers l'émission de ina:PHD2",
+        )
+    ]

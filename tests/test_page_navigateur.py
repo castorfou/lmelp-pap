@@ -489,3 +489,100 @@ def test_sans_doute_de_date_il_n_y_a_pas_de_choix_de_date(
     page.locator('.ligne[data-id="2015-01-04"]').click()
 
     assert page.get_by_role("button", name="Retenir cette date").count() == 0
+
+
+def _avec_rapprochement_ambigu(emissions: list[dict[str, Any]]) -> None:
+    """Le fichier Wayback de 2015-01-11 est rapprochable aussi de 2015-01-18."""
+    for e in emissions:
+        e["dates_candidates"], e["arbitrage_date"] = [], None
+        e["rapprochements"] = []
+        if e["id"] == "2015-01-11":
+            e["doutes"] = [
+                {
+                    "type": "rapprochement ambigu",
+                    "detail": "rapprochable aussi de 2015-01-18",
+                    "a_ecouter": False,
+                    "source": "wayback_podcast",
+                    "source_id": "wayback_podcast-2015-01-11",
+                }
+            ]
+            e["rapprochements"] = [
+                {
+                    "source": "wayback_podcast",
+                    "source_id": "wayback_podcast-2015-01-11",
+                    "rivales": ["2015-01-18"],
+                }
+            ]
+
+
+@pytest.mark.parametrize(
+    ("bouton", "vers", "statut"),
+    [
+        ("Garder ici", None, "gardée ici"),
+        ("Déplacer vers 2015-01-18", "2015-01-18", "déplacée vers 2015-01-18"),
+    ],
+)
+def test_en_mode_arbitrage_un_rapprochement_ambigu_se_tranche_sur_sa_ligne(
+    navigateur: sync_api.Browser,
+    dossier: Path,
+    bouton: str,
+    vers: str | None,
+    statut: str,
+) -> None:
+    emissions = donnees_page(dossier)
+    _avec_rapprochement_ambigu(emissions)
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api={"emissions": emissions, "arbitrages": []},
+        decision={"emissions": emissions, "arbitrages": []},
+    )
+    page.locator("#arb-nombre", has_text="0").wait_for()
+    page.locator('.ligne[data-id="2015-01-11"]').click()
+
+    doute = page.locator(".detail li.alerte")
+    assert " ".join(doute.inner_text().split()) == (
+        "rapprochement ambigu · wayback wayback_podcast-2015-01-11 · "
+        "rapprochable aussi de 2015-01-18 Garder ici Déplacer vers 2015-01-18"
+    )
+    with page.expect_request("**/api/arbitrages") as requete:
+        doute.get_by_role("button", name=bouton).click()
+
+    assert requete.value.post_data_json == {
+        "emission_id": "2015-01-11",
+        "sorte": "rapprochement",
+        "source": "wayback_podcast",
+        "source_id": "wayback_podcast-2015-01-11",
+        "vers": vers,
+        "justification": "",
+    }
+    page.locator("#arb-statut", has_text=statut).wait_for()
+
+
+def test_la_page_publiee_montre_l_attestation_du_doute_sans_bouton(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    _ecrire(
+        dossier / "doutes.csv",
+        COLONNES_DOUTES,
+        [
+            {
+                "type": "rapprochement ambigu",
+                "emission_id": "2015-01-11",
+                "dans_la_liste": "oui",
+                "source": "wayback_podcast",
+                "source_id": "wayback_podcast-2015-01-11",
+                "detail": "rapprochable aussi de 2015-01-18",
+                "a_ecouter": "non",
+            }
+        ],
+    )
+    page = _ouvrir(navigateur, construire_page(dossier))
+    page.locator('.ligne[data-id="2015-01-11"]').click()
+
+    doute = page.locator(".detail li.alerte")
+    assert " ".join(doute.inner_text().split()) == (
+        "rapprochement ambigu · wayback wayback_podcast-2015-01-11 · "
+        "rapprochable aussi de 2015-01-18"
+    )
+    assert doute.get_by_role("button").count() == 0

@@ -24,7 +24,9 @@
 .arb-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .arb .arb-principal { background: var(--accent); border-color: var(--accent); color: var(--surface); }
 .arb .arb-danger { color: var(--alerte); border-color: var(--alerte); }
-.arb button:disabled, .arbitrage button:disabled { opacity: .5; cursor: wait; }
+.arb-doute { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.arb-doute button { font: inherit; font-size: 13px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer; }
+.arb button:disabled, .arbitrage button:disabled, .arb-doute button:disabled { opacity: .5; cursor: wait; }
 </style>
 <script>
 const THEMES = __THEMES__;  // lmelp_pap.arbitrages.THEMES
@@ -33,7 +35,7 @@ const RAISONS = ["titre explicite", "écouté l'enregistrement", "connaissance d
 
 document.querySelector("header").insertAdjacentHTML("afterend",
   `<section class="arbitrage" id="arbitrage" aria-label="Mode arbitrage">` +
-  `<div><span class="titre-mode">Mode arbitrage</span> · ouvrir une émission pour arbitrer son thème, son existence ou sa date, ou la renvoyer à l'écoute. ` +
+  `<div><span class="titre-mode">Mode arbitrage</span> · ouvrir une émission pour arbitrer son thème, son existence, sa date ou ses rapprochements, ou la renvoyer à l'écoute. ` +
   `Chaque décision est écrite dans <code>arbitrages.csv</code> et la liste est reconstruite aussitôt.</div>` +
   `<div class="statut" id="arb-statut" role="status" aria-live="polite"></div>` +
   `<details><summary>Arbitrages enregistrés (<span id="arb-nombre">…</span>)</summary><ul id="arb-journal"></ul></details>` +
@@ -53,6 +55,18 @@ function choixDate(e) {
   }).join("");
   return `<fieldset class="arb-dates"><legend>Date de première diffusion</legend>${choix}` +
     `<button type="button" class="arb-principal" data-action="date">Retenir cette date</button></fieldset>`;
+}
+
+// Les contrôles d'un rapprochement ambigu, sur la ligne de son doute : garder
+// l'attestation dans l'émission, ou la déplacer vers une émission rivale.
+function controlesDoute(e, source, sourceId) {
+  const r = (e.rapprochements || []).find(x => x.source === source && x.source_id === sourceId);
+  if (!r) return "";
+  const attributs = `data-id="${esc(e.id)}" data-source="${esc(source)}" data-source-id="${esc(sourceId)}"`;
+  return `<div class="arb-doute">` +
+    `<button type="button" data-rapprochement ${attributs}>Garder ici</button>` +
+    r.rivales.map(v => `<button type="button" data-rapprochement data-vers="${esc(v)}" ${attributs}>Déplacer vers ${esc(v)}</button>`).join("") +
+    `</div>`;
 }
 
 // Les contrôles d'arbitrage d'une émission, sous son détail.
@@ -103,7 +117,7 @@ function appliquer(d) {
 }
 
 async function envoyer(chemin, corps, message) {
-  document.querySelectorAll(".arb button, .arbitrage button").forEach(b => { b.disabled = true; });
+  document.querySelectorAll(".arb button, .arbitrage button, .arb-doute button").forEach(b => { b.disabled = true; });
   statut("Enregistrement…");
   try {
     const r = await fetch(chemin, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
@@ -113,13 +127,23 @@ async function envoyer(chemin, corps, message) {
     statut(message(d));
   } catch (err) {
     statut(`Échec : ${err.message}`, true);
-    document.querySelectorAll(".arb button, .arbitrage button").forEach(b => { b.disabled = false; });
+    document.querySelectorAll(".arb button, .arbitrage button, .arb-doute button").forEach(b => { b.disabled = false; });
   }
 }
 
 const encore = (d, id) => d.emissions.some(e => e.id === id);
 
 $("lignes").addEventListener("click", ev => {
+  const rapprochement = ev.target.closest("button[data-rapprochement]");
+  if (rapprochement) {
+    const { id, source, sourceId } = rapprochement.dataset;
+    const vers = rapprochement.dataset.vers || null;
+    const champ = rapprochement.closest(".detail").querySelector(".arb-texte");
+    envoyer("/api/arbitrages",
+      { emission_id: id, sorte: "rapprochement", source, source_id: sourceId, vers, justification: champ ? champ.value.trim() : "" },
+      () => `${NOMS[source] || source} · ${sourceId} : ` + (vers ? `déplacée vers ${vers}.` : `gardée ici, dans ${id}.`));
+    return;
+  }
   const bloc = ev.target.closest(".arb"); if (!bloc) return;
   const id = bloc.dataset.id, champ = bloc.querySelector(".arb-texte");
   const raison = ev.target.closest(".arb-raison");
