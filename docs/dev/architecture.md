@@ -2,7 +2,7 @@
 
 Le projet produit deux livrables, qui partagent une même construction de la liste :
 
-- **la liste publiée** : la page statique des émissions, générée à partir des CSV de `data/processed/` et publiée sur GitHub Pages ;
+- **la liste publiée** : la page statique des émissions, générée par la CI à partir des CSV de `data/processed/` et publiée sur GitHub Pages ;
 - **l'outil d'arbitrage** (`lmelp-pap arbitrer`) : un serveur local qui lève les doutes de la liste par des décisions humaines, enregistrées dans `arbitrages.csv`.
 
 Les données de référence sont les CSV versionnés de `data/processed/` ; la page n'en est qu'une vue.
@@ -36,8 +36,15 @@ flowchart TD
     Humain -->|écrit| Arb
     Humain -.->|reconstruit aussitôt| Construire
 
-    CSV -->|lmelp-pap page| HTML[docs/emissions/index.html]
-    HTML -->|"commit + push main<br/>workflow docs.yml"| GH[[GitHub Pages<br/>liste publiée]]
+    CSV -->|"commit + push main"| CI
+
+    subgraph CI["CI · workflow docs.yml"]
+        HTML["lmelp-pap page<br/>docs/emissions/index.html"]
+        Site[mkdocs build]
+        HTML --> Site
+    end
+
+    Site --> GH[[GitHub Pages<br/>liste publiée]]
 ```
 
 ## Étapes
@@ -48,15 +55,15 @@ flowchart TD
 
 **Arbitrage.** `lmelp-pap arbitrer` (`src/lmelp_pap/arbitrer.py`) sert la page de la liste avec ses contrôles d'arbitrage. Chaque décision s'ajoute à `arbitrages.csv` ; la liste est reconstruite depuis le cache, sans réseau, et ses CSV sont réécrits. Un arbitrage s'attache à une attestation, pas à l'identifiant d'une émission : il s'applique de nouveau à chaque construction, y compris après une nouvelle collecte.
 
-**Publication.** `lmelp-pap page` (`src/lmelp_pap/page.py`) génère `docs/emissions/index.html`, une page autonome qui embarque les données en JSON. Après un commit et un push sur `main`, la workflow `docs.yml` construit la documentation MkDocs et la déploie sur GitHub Pages, page des émissions comprise.
+**Publication.** Elle suit les CSV : un push sur `main` qui modifie `data/processed/` (ou `docs/`, `src/`) déclenche la workflow `docs.yml`. Elle lance `lmelp-pap page` (`src/lmelp_pap/page.py`), qui génère `docs/emissions/index.html`, une page autonome embarquant les données en JSON, puis construit la documentation MkDocs et la déploie sur GitHub Pages. La page générée n'est pas versionnée (`.gitignore`) ; en local, `lmelp-pap page` sert seulement à la prévisualiser avec `mkdocs serve`.
 
 Cycle type après une séance d'arbitrage ou une nouvelle collecte :
 
 ```bash
 uv run --active lmelp-pap emissions --source lmelp --refresh   # ou arbitrer
-uv run --active lmelp-pap page
-git diff --stat data/processed docs/emissions
-git add data/processed docs/emissions && git commit -m "docs(liste): mettre la liste à jour"
+git diff --stat data/processed
+git add data/processed && git commit -m "docs(liste): mettre la liste à jour"
+git push   # sur main, ou via une PR : la CI régénère et publie la page
 ```
 
 Le détail des commandes, des fichiers produits et des règles de construction est dans la documentation utilisateur, [Liste des émissions](../user/liste-des-emissions.md).
