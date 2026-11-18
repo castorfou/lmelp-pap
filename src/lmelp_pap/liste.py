@@ -161,6 +161,7 @@ def construire_liste(
                 index[a.date].append(groupes.index(fiche[0]))
             else:
                 _rapprocher(a, groupes, index)
+    _reunir_archives_partagees(groupes)
 
     deplacements = _deplacer(groupes, _familles(arbitrages).rapprochements)
     emissions, retirees = _arbitrer([_fusionner(g) for g in groupes], arbitrages)
@@ -945,6 +946,38 @@ def _rapprocher(
         position = len(groupes)
         groupes.append([a])
     index[a.date].append(position)
+
+
+def _reunir_archives_partagees(groupes: list[list[Attestation]]) -> None:
+    """Réunit les groupes du même jour dont des enregistrements partagent une
+    archive (ITEMA) : ils sont une seule émission.
+
+    Une fiche par livre étiquetée d'un thème incompatible avec l'émission n'a
+    pas pu y être rapprochée ; son archive la rattache. À des dates
+    différentes, une archive partagée signale une rediffusion : les groupes
+    restent distincts.
+    """
+    parent = list(range(len(groupes)))
+
+    def racine(i: int) -> int:
+        while parent[i] != i:
+            i = parent[i]
+        return i
+
+    premier: dict[tuple[date, str], int] = {}
+    for i, groupe in enumerate(groupes):
+        for jour in _dates_de_diffusion(groupe):
+            for a in groupe:
+                for e in a.enregistrements:
+                    if (itema := _itema(e.url)) is None:
+                        continue
+                    j = premier.setdefault((jour, itema), i)
+                    parent[max(racine(i), racine(j))] = min(racine(i), racine(j))
+    for i in range(len(groupes)):
+        if (r := racine(i)) != i:
+            groupes[r].extend(groupes[i])
+            groupes[i] = []
+    groupes[:] = [g for g in groupes if g]
 
 
 def _meme_fiche(verifiee: Attestation, b: Attestation) -> bool:
