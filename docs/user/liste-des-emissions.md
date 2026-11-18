@@ -52,7 +52,7 @@ uv run --active lmelp-pap emissions --source lmelp --refresh
 
 La commande recopie les émissions vérifiées de la base dans le cache. L'émission a ensuite une ligne `lmelp` dans `attestations.csv`, et son doute `absente de lmelp` disparaît. Un doute `sans fiche radiofrance` signale que l'URL enregistrée dans lmelp ne correspond à aucune fiche radiofrance.fr du cache : l'attestation est alors rattachée par la date. Corriger l'URL dans lmelp, ou rafraîchir aussi `radiofrance` si la fiche est récente.
 
-Les sources se combinent dans une même commande (`--source radiofrance --source lmelp --refresh`). Chaque reconstruction réécrit les fichiers de `data/processed/` : vérifier le changement (`git diff --stat data/processed`), le committer, puis régénérer la page avec `lmelp-pap page`.
+Les sources se combinent dans une même commande (`--source radiofrance --source lmelp --refresh`). Chaque reconstruction réécrit les fichiers de `data/processed/` : vérifier le changement (`git diff --stat data/processed`), puis le committer. Une fois le commit sur `main`, la page publiée est régénérée à partir des CSV et redéployée (voir « Consulter la liste »).
 
 ### Prérequis pour la source INA
 
@@ -292,7 +292,7 @@ Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans l
 | `--port PORT` | Port du serveur (par défaut 8765). |
 | `--sans-navigateur` | N'ouvre pas la page ; l'adresse s'affiche dans le terminal. |
 
-La page publiée (`lmelp-pap page`) n'a aucun de ces contrôles. Après une séance d'arbitrage, la régénérer pour qu'elle reflète les décisions.
+La page publiée n'a aucun de ces contrôles. Elle reflète les décisions d'une séance d'arbitrage une fois les CSV de `data/processed/` et `arbitrages.csv` committés sur `main`, qui la régénère et la redéploie.
 
 #### API
 
