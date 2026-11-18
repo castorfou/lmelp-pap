@@ -147,6 +147,8 @@ Une ligne par source et par émission : `emission_id`, `source`, `source_id`, `d
 
 Une ligne par fichier audio : `emission_id`, `url`, `type` (`intégral` ou `extrait`), `sources` qui le donnent, `duree`.
 
+Le `type` se décide par **segment** : l'archive (`ITEMA_24209925`) et le code qui la suit (`2025F4007S0215`). Une même archive couvre souvent l'émission entière et ses fiches par livre, chacune dans son segment (`S0215` pour l'émission, `S0216` à `S0219` pour les livres) : seul le segment les distingue. Un segment qu'une source sait être un extrait l'est pour tous ses fichiers, quel que soit leur encodage, même quand une autre source, qui ne voit que le nom du fichier, le croit intégral. Un fichier sans code de segment (`ITEMA_21072908-0.mp3`) garde le type que lui donne sa source.
+
 La `duree` (`HH:MM:SS`) est celle de la fiche radiofrance.fr qui publie le fichier ; elle vaut aussi pour les autres encodages du même fichier (même nom au suffixe près : `-22.mp3`, `-27.m4a`). Elle est vide quand aucune source ne la connaît, par exemple pour un fichier connu seulement par la Wayback Machine. Elle permet de juger, sans l'écouter, si un enregistrement est un court extrait : la durée de l'émission, dans `emissions.csv`, ne vient jamais d'un extrait.
 
 ### `doutes.csv`

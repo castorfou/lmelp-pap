@@ -423,6 +423,62 @@ def test_un_extrait_l_est_pour_tous_les_fichiers_de_son_archive() -> None:
     ]
 
 
+# L'émission du 3 août 2025 : une seule archive (ITEMA) pour l'émission entière
+# (segment S0215) et ses fiches par livre (S0216…), chaque fichier publié en
+# plusieurs encodages au nom distinct (-27-<empreinte>.m4a, -22-<empreinte>.mp3).
+_AOUT_2025 = "https://media.radiofrance-podcast.net/podcast09/14007-03.08.2025-ITEMA_24209925-2025F4007"
+URL_AOUT_INTEGRAL = f"{_AOUT_2025}S0215-NET_MFI_28633-27-0e049dfbe9.m4a"
+URL_AOUT_EXTRAIT = f"{_AOUT_2025}S0216-ITE_00152552_RSCE-27-a2c695976c.m4a"
+URL_AOUT_EXTRAIT_MP3 = f"{_AOUT_2025}S0216-ITE_00152552_RSCE-22-10ad9817e5.mp3"
+
+
+def test_l_emission_entiere_reste_integrale_quand_ses_extraits_partagent_son_archive() -> (
+    None
+):
+    dimanche = Attestation(
+        source="radiofrance",
+        source_id="le-masque-et-la-plume-du-dimanche-03-aout-2025-5191918",
+        date=date(2025, 8, 3),
+        themes=frozenset({"livres"}),
+        titre="Les nouveaux livres de Simon Chevrier, Sylvain Tesson",
+        duree="00:51:36",
+        enregistrements=(
+            Enregistrement(url=URL_AOUT_INTEGRAL, type="intégral", duree="00:51:36"),
+        ),
+    )
+    par_livre = Attestation(
+        source="radiofrance",
+        source_id="photo-sur-demande-de-simon-chevrier-8393889",
+        date=date(2025, 8, 3),
+        themes=frozenset({"livres"}),
+        titre='"Photo sur demande" : un premier roman',
+        duree="00:08:21",
+        enregistrements=(
+            Enregistrement(url=URL_AOUT_EXTRAIT, type="extrait", duree="00:08:21"),
+        ),
+        extrait=True,
+    )
+    # la Wayback ne connaît que le nom du fichier : lettre S, donc « intégral »
+    wayback = Attestation(
+        source="wayback_podcast",
+        source_id="ITEMA_24209925",
+        date=date(2025, 8, 3),
+        enregistrements=(
+            Enregistrement(url=URL_AOUT_INTEGRAL, type="intégral"),
+            Enregistrement(url=URL_AOUT_EXTRAIT_MP3, type="intégral"),
+        ),
+    )
+
+    liste, _doutes = construire_liste([dimanche, par_livre, wayback])
+
+    types = {e.url: e.type for e in liste[0].enregistrements}
+    assert types == {
+        URL_AOUT_INTEGRAL: "intégral",
+        URL_AOUT_EXTRAIT: "extrait",
+        URL_AOUT_EXTRAIT_MP3: "extrait",
+    }
+
+
 URL_HITCHCOCK = "https://media.radiofrance-podcast.net/podcast09/14007-01.01.1967-ITEMA_23820437-1967F4007E0001"
 
 
