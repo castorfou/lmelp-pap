@@ -125,7 +125,18 @@ Le doute reste dans deux cas :
 - aucune autre émission ne porte l'archive, ou elle n'est pas datée du jour du fichier : une archive remise en ligne un vendredi, par exemple ;
 - la fiche est la seule attestation de son émission : la règle ne fusionne pas deux émissions.
 
-Pour le lever, vérifier l'émission à l'écoute ou par le titre de la fiche : un arbitrage d'existence écarte une émission qui n'existe pas.
+Pour le lever, vérifier l'émission à l'écoute ou par le titre de la fiche, puis poser un arbitrage d'existence : **Existe** lève le doute (voir [Comment lever une attestation fragile ou une republication ?](#comment-lever-une-attestation-fragile-ou-une-republication)), **N'existe pas** écarte l'émission.
+
+## Existence
+
+### Comment lever une attestation fragile ou une republication ?
+
+Par un arbitrage d'existence **Existe**, quand une pièce suffit à dire que l'émission a été diffusée. Exemples :
+
+- `attestation fragile` : l'émission du 18 octobre 1975, « La Vie devant soi », d'Émile Ajar, n'est attestée que par un extrait d'archive de quatre minutes. Le titre suffit à dire qu'elle a existé : justification « titre explicite » ;
+- `republication` : radiofrance.fr a remis en ligne d'anciennes fiches, dont le fichier est daté du jour de la remise en ligne (2024-10-24, 2025-02-28). L'émission n'est pas en doute, seul son fichier est récent.
+
+« Existe » lève les deux doutes d'existence et rien d'autre : le thème, la date et l'appartenance à la liste ne changent pas. Arbitrer le thème ou retenir la date ne les lève pas ; recliquer ces boutons ajoute seulement des lignes à `arbitrages.csv`. Entre « Existe » et « N'existe pas », le plus récent l'emporte.
 
 ## Thèmes
 

@@ -81,6 +81,8 @@ class Emission:
     arbitrage: "Arbitrage | None" = None
     # l'arbitrage de date, qui se cumule avec le précédent
     arbitrage_date: "Arbitrage | None" = None
+    # l'arbitrage d'existence « existe », qui se cumule avec les précédents
+    arbitrage_existence: "Arbitrage | None" = None
 
     @property
     def a_ecouter(self) -> bool:
@@ -105,6 +107,12 @@ class Arbitrage:
     (``cible`` vide) ou la déplace vers l'émission de l'attestation ``cible``.
     Il se cumule lui aussi avec les autres sortes.
 
+    Un arbitrage d'existence retire l'émission (``existe`` faux, « n'existe
+    pas »), ou lève ses doutes d'existence, attestation fragile et
+    republication (``existe`` vrai). « Existe » se cumule avec les arbitrages de
+    thème et les renvois à l'écoute ; entre « existe » et « n'existe pas », le
+    plus récent l'emporte.
+
     Sa clé est l'attestation (source et identifiant dans la source), pas
     l'identifiant de l'émission, qui peut changer d'une construction à l'autre.
     """
@@ -117,6 +125,7 @@ class Arbitrage:
     # pour un arbitrage de rapprochement : une attestation de l'émission cible,
     # ou None pour garder l'attestation où elle est
     cible: CleAttestation | None = None
+    existe: bool = False  # pour un arbitrage d'existence : existe, ou non
     justification: str = ""
     date: datetime = datetime.min  # date de la décision
 
@@ -201,7 +210,7 @@ def _arbitrages_deplaces(
     familles = _familles(arbitrages)
     emission_de = {a.cle: e for e in emissions for a in e.attestations}
     doutes = []
-    for famille in (familles.decisions, familles.dates):
+    for famille in (familles.decisions, familles.dates, familles.existences):
         for cle, (_ordre, arbitrage) in sorted(_derniers(famille).items()):
             if cle not in parties:
                 continue
@@ -334,18 +343,25 @@ class _Familles(NamedTuple):
     """Les arbitrages par point de l'émission sur lequel ils portent."""
 
     dates: list["Arbitrage"]
-    decisions: list["Arbitrage"]  # thème, existence, écoute
+    decisions: list["Arbitrage"]  # thème, n'existe pas, écoute
     rapprochements: list["Arbitrage"]
+    existences: list["Arbitrage"]  # existe
 
 
 def _familles(arbitrages: Sequence[Arbitrage]) -> _Familles:
-    """Les arbitrages de date, les décisions et les arbitrages de
-    rapprochement : chaque famille porte sur un point différent, et le plus
-    récent ne l'emporte qu'au sein d'elle."""
+    """Les arbitrages de date, les décisions, les arbitrages de
+    rapprochement et les arbitrages « existe » : chaque famille porte sur un
+    point différent, et le plus récent ne l'emporte qu'au sein d'elle.
+    « Existe » et « n'existe pas » se départagent à part (``_arbitrer``)."""
     return _Familles(
         dates=[a for a in arbitrages if a.sorte == "date"],
-        decisions=[a for a in arbitrages if a.sorte not in ("date", "rapprochement")],
+        decisions=[
+            a
+            for a in arbitrages
+            if a.sorte not in ("date", "rapprochement") and not a.existe
+        ],
         rapprochements=[a for a in arbitrages if a.sorte == "rapprochement"],
+        existences=[a for a in arbitrages if a.sorte == "existence" and a.existe],
     )
 
 
@@ -369,6 +385,7 @@ def _contredit_lmelp(emission: Emission, arbitrage: Arbitrage) -> bool:
     return (
         _verifiee(emission)
         and arbitrage.sorte in ("thème", "existence")
+        and not arbitrage.existe
         and (arbitrage.sorte == "existence" or arbitrage.themes != {"livres"})
     )
 
@@ -376,7 +393,7 @@ def _contredit_lmelp(emission: Emission, arbitrage: Arbitrage) -> bool:
 def _decision(arbitrage: Arbitrage) -> str:
     """La décision d'un arbitrage, en clair, pour le détail d'un doute."""
     if arbitrage.sorte == "existence":
-        return "arbitrée inexistante"
+        return "arbitrée existante" if arbitrage.existe else "arbitrée inexistante"
     if arbitrage.sorte == "écoute":
         return "renvoyée à l'écoute"
     if arbitrage.sorte == "date":
@@ -412,14 +429,23 @@ def _arbitrer(
     le dernier arbitrage de date.
 
     Un arbitrage de thème remplace exactement ses thèmes ; un arbitrage
-    d'existence la retire de l'ensemble des émissions ; un renvoi à l'écoute
-    lui laisse les thèmes de ses sources ; un arbitrage de date lui donne la
-    date retenue. Rend les émissions gardées, et les émissions vérifiées
+    « n'existe pas » la retire de l'ensemble des émissions, sauf si un
+    arbitrage « existe » plus récent l'annule ; un arbitrage « existe » se
+    cumule avec le dernier arbitrage de thème ou renvoi à l'écoute ; un renvoi
+    à l'écoute lui laisse les thèmes de ses sources ; un arbitrage de date lui
+    donne la date retenue. Rend les émissions gardées, et les émissions vérifiées
     retirées avec leur arbitrage.
     """
     familles = _familles(arbitrages)
     par_attestation = _derniers(familles.decisions)
     date_par_attestation = _derniers(familles.dates)
+    existence_par_attestation = _derniers(
+        [a for a in arbitrages if a.sorte == "existence"]
+    )
+    # sous un arbitrage « existe », « n'existe pas » est sans effet
+    hors_existence = _derniers(
+        [a for a in familles.decisions if a.sorte != "existence"]
+    )
     gardees: list[Emission] = []
     retirees: list[tuple[Emission, Arbitrage]] = []
     for emission in emissions:
@@ -433,11 +459,18 @@ def _arbitrer(
             if arbitrage_date.date_retenue is not None:
                 emission.date = arbitrage_date.date_retenue
             emission.arbitrage_date = arbitrage_date
-        siens = [
-            par_attestation[a.cle]
+        existences = [
+            existence_par_attestation[a.cle]
             for a in emission.attestations
-            if a.cle in par_attestation
+            if a.cle in existence_par_attestation
         ]
+        decisions = par_attestation
+        if existences:
+            _ordre, existence = max(existences, key=lambda r: r[0])
+            if existence.existe:
+                emission.arbitrage_existence = existence
+                decisions = hors_existence
+        siens = [decisions[a.cle] for a in emission.attestations if a.cle in decisions]
         if not siens:
             gardees.append(emission)
             continue
@@ -574,6 +607,9 @@ def _doutes(
             divergence = _themes_divergents(emission.attestations)
             if divergence:
                 ajouter("thèmes divergents", divergence)
+        # Un arbitrage « existe » lève les doutes d'existence.
+        if emission.arbitrage_existence is not None:
+            continue
         for a in emission.attestations:
             # une date de publication ne date pas l'émission : son fichier se
             # compare à la date de l'émission

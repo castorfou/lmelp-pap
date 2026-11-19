@@ -212,6 +212,32 @@ def test_n_existe_pas_retire_l_emission_et_ses_doutes(url: str, sortie: Path) ->
     }
 
 
+def test_existe_leve_l_attestation_fragile_et_s_annule_depuis_l_emission(
+    url: str, sortie: Path
+) -> None:
+    donnees = _post(
+        f"{url}/api/arbitrages",
+        {
+            "emission_id": "1967-01-01",
+            "sorte": "existence",
+            "valeur": "existe",
+            "justification": "titre explicite",
+        },
+    )
+
+    [emission] = [e for e in donnees["emissions"] if e["id"] == "1967-01-01"]
+    assert [d["type"] for d in emission["doutes"]] == ["thème inconnu"]
+    assert emission["arbitrage_existence"] == {"justification": "titre explicite"}
+    [arbitrage] = _lignes(sortie / "arbitrages.csv")
+    assert (arbitrage["sorte"], arbitrage["valeur"]) == ("existence", "existe")
+
+    donnees = _post(f"{url}/api/annulations", {"emission_id": "1967-01-01"})
+
+    [emission] = [e for e in donnees["emissions"] if e["id"] == "1967-01-01"]
+    assert emission["arbitrage_existence"] is None
+    assert "attestation fragile" in {d["type"] for d in emission["doutes"]}
+
+
 @pytest.mark.parametrize(
     "corps",
     [
@@ -224,6 +250,7 @@ def test_n_existe_pas_retire_l_emission_et_ses_doutes(url: str, sortie: Path) ->
             "themes": ["hommage", "livres"],
         },
         {"emission_id": "1967-01-01", "sorte": "autre"},
+        {"emission_id": "1967-01-01", "sorte": "existence", "valeur": "peut-être"},
     ],
 )
 def test_une_demande_invalide_est_refusee_sans_rien_ecrire(
