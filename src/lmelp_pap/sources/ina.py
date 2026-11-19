@@ -19,7 +19,7 @@ from lmelp_pap.liste import Attestation
 SOURCE = "ina"
 
 _MOTS_CLES = {
-    "livres": r"littér|livre|roman|lire|édition|librairie|poète|goncourt",
+    "livres": r"littér|livre|roman|lire|librairie|poète|goncourt",
     "théâtre": r"th[ée][âa]tre|critiques dramatiques",
     "cinéma": r"cinéma|film",
     "opéra": r"opéra",
@@ -29,12 +29,11 @@ _MOTS_CLES = {
 }
 
 
-# Les champs d'une fiche détaillée qui classent l'émission : descripteurs,
-# chapeau, résumé producteur (« Cinéma », « LITTERAIRE »). Le résumé
-# documentaire, texte libre où une émission cinéma cite le roman adapté à
-# l'écran, ne sert qu'à défaut.
-_CHAMPS_DE_CLASSEMENT = ("DE", "CHAP", "RESPROD")
-_RESUME_DOCUMENTAIRE = "RES"
+# Les champs d'une fiche détaillée, du plus sûr au moins sûr : descripteurs,
+# chapeau, résumé producteur, résumé documentaire. Tous peuvent citer d'autres
+# arts que celui de l'émission (un film sur un écrivain, le roman adapté à
+# l'écran, Shakespeare) : seul tranche le premier qui ne désigne qu'un thème.
+_CHAMPS_DE_LA_FICHE = ("DE", "CHAP", "RESPROD", "RES")
 
 
 def lire_notices(
@@ -76,15 +75,15 @@ def identifiant(url: str) -> str:
 
 
 def _themes(ligne: dict[str, str], fiche: str | None = None) -> frozenset[str]:
-    """Les thèmes lus dans le titre de la notice et dans les champs de
-    classement de sa fiche détaillée, à défaut dans son résumé documentaire ;
-    la facette littérature ajoute les livres."""
-    textes = [ligne.get("titre") or ""]
-    if fiche is not None:
-        textes += [_champ(fiche, code) or "" for code in _CHAMPS_DE_CLASSEMENT]
-    themes = _mots_cles(" ".join(textes))
+    """Les thèmes lus dans le titre de la notice ; à défaut, le thème du premier
+    champ de sa fiche détaillée qui n'en désigne qu'un. La facette littérature
+    ajoute les livres."""
+    themes = _mots_cles(ligne.get("titre") or "")
     if not themes and fiche is not None:
-        themes = _mots_cles(_champ(fiche, _RESUME_DOCUMENTAIRE) or "")
+        for code in _CHAMPS_DE_LA_FICHE:
+            if len(du_champ := _mots_cles(_champ(fiche, code) or "")) == 1:
+                themes = du_champ
+                break
     if ligne.get("facette_litterature") == "oui":
         themes |= {"livres"}
     return frozenset(themes)

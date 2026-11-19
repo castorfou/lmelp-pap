@@ -152,6 +152,49 @@ def test_le_resume_documentaire_n_ajoute_pas_de_theme_aux_champs_de_classement()
     assert _notice_avec(fiche).themes == frozenset({"cinéma"})
 
 
+def test_le_resume_producteur_n_ajoute_pas_de_theme_au_titre() -> None:
+    # 2026-01-25 : le résumé producteur reprend la description de France Inter,
+    # qui cite le best-seller adapté et Shakespeare
+    ligne = {
+        "date_diffusion": "2026-01-25",
+        "titre": "Le Mage du Kremlin, Hamnet, quels films voir cette semaine",
+        "url_ina": "https://catalogue.ina.fr/doc/TV-RADIO/RD_X3/le-mage",
+        "facette_litterature": "non",
+    }
+    fiche = (
+        '<td id="RESPROD" class="v">[Source site internet de France Inter] '
+        "Chloé Zhao qui ressuscite Shakespeare… « Le Mage du Kremlin » est "
+        "l'adaptation du best-seller de Giuliano da Empoli. Le théâtre…</td>"
+    )
+
+    (notice,) = lire_notices([ligne], fiches={"RD_X3": fiche})
+
+    assert notice.themes == frozenset({"cinéma"})
+
+
+def test_le_premier_champ_qui_ne_designe_qu_un_theme_tranche() -> None:
+    # 2019-03-10 : les descripteurs d'un film sur un écrivain citent la
+    # littérature ; le chapeau dit l'émission consacrée au cinéma
+    fiche = (
+        '<td id="DE" class="v">cinéma ; film ; reine ; littérature</td>'
+        '<td id="CHAP" class="v">Magazine consacré aujourd\'hui au cinéma.</td>'
+    )
+
+    assert _notice_avec(fiche).themes == frozenset({"cinéma"})
+
+
+def test_un_resume_qui_designe_plusieurs_themes_ne_tranche_pas() -> None:
+    # 2026-07-12 : ni descripteurs ni chapeau ; la description de France Inter
+    # parle de théâtre et cite des auteurs
+    fiche = (
+        '<td id="RESPROD" class="v">[Source site internet de France Inter] '
+        "Les critiques du Masque débattent du théâtre du festival, dont "
+        "l'adaptation d'un roman.</td>"
+    )
+
+    assert _notice_avec(fiche).themes == frozenset()
+
+
 def test_a_defaut_de_champ_de_classement_le_resume_documentaire_donne_le_theme() -> (
     None
 ):
