@@ -114,6 +114,19 @@ Le numéro ITEMA la rattache : l'enregistrement de la fiche appartient à la mê
 
 Une paire `X` / `X-b` qui subsiste n'a pas d'archive commune : ce sont deux émissions distinctes, ou un rapprochement ambigu à arbitrer.
 
+### Que faire d'un doute « republication » ?
+
+Le doute signale une attestation dont l'enregistrement est daté, dans le nom de son fichier, à plus de trois jours d'elle : une émission remise en ligne plus tard, ou une fiche que radiofrance.fr date mal.
+
+Quand l'archive (ITEMA) du fichier appartient à une autre émission, datée du jour du fichier, la fiche rejoint cette émission et le doute disparaît : c'est la règle de l'**archive d'une autre émission** (voir [les règles de construction](liste-des-emissions.md#regles-de-construction)). La fiche « L'État sauvage », datée du 16 novembre 1961 et dont le fichier est l'archive de l'émission du 15 novembre 1964, rejoint ainsi cette émission.
+
+Le doute reste dans deux cas :
+
+- aucune autre émission ne porte l'archive, ou elle n'est pas datée du jour du fichier : une archive remise en ligne un vendredi, par exemple ;
+- la fiche est la seule attestation de son émission : la règle ne fusionne pas deux émissions.
+
+Pour le lever, vérifier l'émission à l'écoute ou par le titre de la fiche, puis poser un arbitrage d'existence : **Existe** lève le doute (voir [Comment lever une attestation fragile ou une republication ?](#comment-lever-une-attestation-fragile-ou-une-republication)), **N'existe pas** écarte l'émission.
+
 ## Existence
 
 ### Comment lever une attestation fragile ou une republication ?
