@@ -71,7 +71,6 @@ emission_id,source,source_id,date,themes,titre,url
 1961-06-15,ina,PH_PHD88021006,1961-06-15,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021006/litterature
 1961-10-26,ina,PH_PHD88021064,1961-10-26,livres,Littéraire,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021064/litteraire
 1961-11-16,ina,PH_PHD88021067,1961-11-16,livres,Jean CAU et Michel MOHRT invités du Masque et la plume,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021067/jean-cau-et-michel-mohrt-invites-du-masque-et-la-plume
-1961-11-16,radiofrance,georges-conchon-l-etat-sauvage-1624736,1961-11-16,livres,"""L'Etat sauvage"" de Georges Conchon, 1964",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/georges-conchon-l-etat-sauvage-1624736
 1961-11-16,radiofrance,jean-cau-la-pitie-de-dieu-9539607,1961-11-16,livres,"""La Pitié de Dieu"" de Jean Cau, 1961",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/jean-cau-la-pitie-de-dieu-9539607
 1961-12-07,ina,PH_PHD88021019,1961-12-07,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021019/litterature
 1962-01-04,ina,PH_PHD88021023,1962-01-04,livres,Questions de fin d'année,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021023/questions-de-fin-d-annee
@@ -112,6 +111,7 @@ emission_id,source,source_id,date,themes,titre,url
 1964-07-16,ina,PH_PHD99200596,1964-07-16,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99200596/litterature
 1964-11-01,ina,PH_PHD90000819,1964-11-01,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD90000819/litterature
 1964-11-15,ina,PH_PHD90000820,1964-11-15,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD90000820/litterature
+1964-11-15,radiofrance,georges-conchon-l-etat-sauvage-1624736,1961-11-16,livres,"""L'Etat sauvage"" de Georges Conchon, 1964",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/georges-conchon-l-etat-sauvage-1624736
 1964-11-15,wayback_podcast,ITEMA_23788885,1964-11-15,,,
 1965-01-17,ina,PH_PHD99200779,1965-01-17,livres,Littérature,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99200779/litterature
 1965-02-18,ina,PH_PHD99200856,1965-02-18,livres,Spéciale les 10 ans du Masque et la Plume,https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD99200856/speciale-les-10-ans-du-masque-et-la-plume
@@ -1657,7 +1657,6 @@ emission_id,source,source_id,date,themes,titre,url
 2022-10-02,ina,RD_14233210.001,2022-10-03,livres,Le masque et la plume : émission du 03 octobre 2022,https://catalogue.ina.fr/doc/TV-RADIO/RD_14233210.001/le-masque-et-la-plume-emission-du-03-octobre-2022
 2022-10-02,lmelp,le-masque-et-la-plume-du-dimanche-02-octobre-2022-6075286,2022-10-02,livres,"Les nouvelles pages de Jonathan Franzen, Simon Liberati, Lola Lafon, Brigitte Giraud…",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-du-dimanche-02-octobre-2022-6075286
 2022-10-02,radiofrance,brigitte-giraud-vivre-vite-3898134,2022-10-02,livres,"""Vivre vite"" de Brigitte Giraud, 2022",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/brigitte-giraud-vivre-vite-3898134
-2022-10-02,radiofrance,jean-baptiste-andrea-veiller-sur-elle-4917603,2022-10-02,livres,"""Veiller sur elle"" de Jean-Baptiste Andréa, 2023",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/jean-baptiste-andrea-veiller-sur-elle-4917603
 2022-10-02,radiofrance,le-masque-et-la-plume-du-dimanche-02-octobre-2022-6075286,2022-10-02,,"Les nouvelles pages de Jonathan Franzen, Simon Liberati, Lola Lafon, Brigitte Giraud…",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-du-dimanche-02-octobre-2022-6075286
 2022-10-02,wayback_podcast,ITEMA_23152794,2022-10-02,,,
 2022-10-30,ina,RD_14250582.001,2022-10-30,livres,Le masque et la plume : émission du 30 octobre 2022,https://catalogue.ina.fr/doc/TV-RADIO/RD_14250582.001/le-masque-et-la-plume-emission-du-30-octobre-2022
@@ -1762,6 +1761,7 @@ emission_id,source,source_id,date,themes,titre,url
 2023-11-12,wayback_podcast,ITEMA_23548905,2023-11-12,,,
 2023-12-10,ina,RD_15123506.001,2023-12-10,livres,Le masque et la plume : émission du 10 décembre 2023,https://catalogue.ina.fr/doc/TV-RADIO/RD_15123506.001/le-masque-et-la-plume-emission-du-10-decembre-2023
 2023-12-10,lmelp,le-masque-et-la-plume-du-dimanche-10-decembre-2023-5870209,2023-12-10,livres,"Les nouvelles pages de Jean-Baptiste Andrea, Nathacha Appanah, Dan Franck, Kevin Lambert…",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-du-dimanche-10-decembre-2023-5870209
+2023-12-10,radiofrance,jean-baptiste-andrea-veiller-sur-elle-4917603,2022-10-02,livres,"""Veiller sur elle"" de Jean-Baptiste Andréa, 2023",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/jean-baptiste-andrea-veiller-sur-elle-4917603
 2023-12-10,radiofrance,le-masque-et-la-plume-du-dimanche-10-decembre-2023-5870209,2023-12-10,livres,"Les nouvelles pages de Jean-Baptiste Andrea, Nathacha Appanah, Dan Franck, Kevin Lambert…",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/le-masque-et-la-plume-du-dimanche-10-decembre-2023-5870209
 2023-12-10,wayback_podcast,ITEMA_23578332,2023-12-08,,,
 2023-12-10,wayback_podcast,ITEMA_23579338,2023-12-10,,,

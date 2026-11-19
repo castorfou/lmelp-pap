@@ -11,11 +11,10 @@ emission_id,url,type,sources,duree
 1959-11-19,https://media.radiofrance-podcast.net/podcast09/14007-19.11.1959-ITEMA_23787916-2024F4007E0109-27.m4a,extrait,radiofrance;wayback_podcast,00:08:38
 1959-12-10,https://media.radiofrance-podcast.net/podcast09/14007-10.12.1959-ITEMA_24232449-1959F4007E0005-NET_MFI_F2B0F8DF-88F3-4930-987B-7313862AED70-27.m4a,extrait,radiofrance,00:10:14
 1960-12-15,https://media.radiofrance-podcast.net/podcast09/14007-15.12.1960-ITEMA_23787917-2024F4007E0110-27.m4a,extrait,radiofrance,00:01:41
-1961-11-16,https://media.radiofrance-podcast.net/podcast09/14007-15.11.1964-ITEMA_23788885-2024F4007E0113-27.m4a,extrait,radiofrance,00:05:06
 1961-11-16,https://media.radiofrance-podcast.net/podcast09/14007-16.11.1961-ITEMA_23787918-2024F4007E0111-27.m4a,extrait,radiofrance,00:09:33
 1962-11-29,https://media.radiofrance-podcast.net/podcast09/14007-29.11.1962-ITEMA_23787919-2024F4007E0112-27.m4a,extrait,radiofrance;wayback_podcast,00:05:41
-1964-11-15,https://media.radiofrance-podcast.net/podcast09/14007-15.11.1964-ITEMA_23788885-2024F4007E0113-22.mp3,extrait,wayback_podcast,
-1964-11-15,https://media.radiofrance-podcast.net/podcast09/14007-15.11.1964-ITEMA_23788885-2024F4007E0113-27.m4a,extrait,wayback_podcast,
+1964-11-15,https://media.radiofrance-podcast.net/podcast09/14007-15.11.1964-ITEMA_23788885-2024F4007E0113-22.mp3,extrait,wayback_podcast,00:05:06
+1964-11-15,https://media.radiofrance-podcast.net/podcast09/14007-15.11.1964-ITEMA_23788885-2024F4007E0113-27.m4a,extrait,radiofrance;wayback_podcast,00:05:06
 1965-11-21,https://media.radiofrance-podcast.net/podcast09/14007-21.11.1965-ITEMA_23787921-2024F4007E0114-27.m4a,extrait,radiofrance,00:11:14
 1966-11-20,https://media.radiofrance-podcast.net/podcast09/14007-20.11.1966-ITEMA_23787922-2024F4007E0115-27.m4a,extrait,radiofrance;wayback_podcast,00:09:39
 1966-11-20,https://media.radiofrance-podcast.net/podcast09/14007-20.11.1966-ITEMA_23787922-2024F4007E0115-22.mp3,extrait,wayback_podcast,00:09:39
@@ -554,7 +553,6 @@ emission_id,url,type,sources,duree
 2022-08-28,https://media.radiofrance-podcast.net/podcast09/14007-28.08.2022-ITEMA_23115045-2022F4007S0240-22.mp3,intégral,radiofrance;wayback_podcast,00:54:53
 2022-09-11,https://media.radiofrance-podcast.net/podcast09/14007-11.09.2022-ITEMA_23130319-2022F4007S0254-22.mp3,intégral,radiofrance;wayback_podcast,00:54:13
 2022-10-02,https://media.radiofrance-podcast.net/podcast09/14007-02.10.2022-ITEMA_23152794-2024F4007E0066-27.m4a,extrait,radiofrance;wayback_podcast,00:08:53
-2022-10-02,https://media.radiofrance-podcast.net/podcast09/14007-10.12.2023-ITEMA_23579338-2024F4007E0065-27.m4a,extrait,radiofrance,00:10:11
 2022-10-02,https://media.radiofrance-podcast.net/podcast09/14007-02.10.2022-ITEMA_23152794-2022F4007S0275-27.m4a,intégral,radiofrance,00:54:38
 2022-10-02,https://media.radiofrance-podcast.net/podcast09/14007-02.10.2022-ITEMA_23152794-2022F4007S0275-22.mp3,intégral,wayback_podcast,00:54:38
 2022-10-02,https://media.radiofrance-podcast.net/podcast09/14007-02.10.2022-ITEMA_23152794-2024F4007E0066-22.mp3,extrait,wayback_podcast,00:08:53
@@ -593,8 +591,8 @@ emission_id,url,type,sources,duree
 2023-12-10,https://media.radiofrance-podcast.net/podcast09/14007-08.12.2023-ITEMA_23578332-2021F8781S0001-22.mp3,intégral,wayback_podcast,
 2023-12-10,https://media.radiofrance-podcast.net/podcast09/14007-08.12.2023-ITEMA_23578332-2023F4007S0342-22.mp3,intégral,wayback_podcast,
 2023-12-10,https://media.radiofrance-podcast.net/podcast09/14007-10.12.2023-ITEMA_23579338-2023F4007S0344-27.m4a,intégral,radiofrance;wayback_podcast,00:54:42
-2023-12-10,https://media.radiofrance-podcast.net/podcast09/14007-10.12.2023-ITEMA_23579338-2024F4007E0065-22.mp3,extrait,wayback_podcast,
-2023-12-10,https://media.radiofrance-podcast.net/podcast09/14007-10.12.2023-ITEMA_23579338-2024F4007E0065-27.m4a,extrait,wayback_podcast,
+2023-12-10,https://media.radiofrance-podcast.net/podcast09/14007-10.12.2023-ITEMA_23579338-2024F4007E0065-22.mp3,extrait,wayback_podcast,00:10:11
+2023-12-10,https://media.radiofrance-podcast.net/podcast09/14007-10.12.2023-ITEMA_23579338-2024F4007E0065-27.m4a,extrait,radiofrance;wayback_podcast,00:10:11
 2023-12-24,https://media.radiofrance-podcast.net/podcast09/20904-24.12.2023-ITEMA_23594886-2023F4007S0358-27.m4a,intégral,radiofrance,00:55:01
 2023-12-24,https://media.radiofrance-podcast.net/podcast09/14007-24.12.2023-ITEMA_23594849-2023F4007S0358-22.mp3,intégral,wayback_podcast,
 2024-01-14,https://media.radiofrance-podcast.net/podcast09/20904-14.01.2024-ITEMA_23613950-2024F4007S0014-27.m4a,intégral,radiofrance,00:47:27
