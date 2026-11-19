@@ -1,6 +1,5 @@
 type,emission_id,dans_la_liste,source,source_id,detail,a_ecouter
 thèmes divergents,1957-05-16,non,,,"radiofrance:cinéma+théâtre (extrait), ina:théâtre",non
-rapprochement ambigu,1958-12-04,oui,wayback_podcast,ITEMA_24232446,rapprochable aussi de 1958-12-06,non
 attestation fragile,1958-12-06,non,,,attestée seulement par des extraits,non
 jour inhabituel,1958-12-06,non,,,"un samedi, quand l'émission passe le jeudi",non
 jour inhabituel,1959-01-23,non,,,"un vendredi, quand l'émission passe le jeudi",non
@@ -8,7 +7,6 @@ jour inhabituel,1959-03-23,non,,,"un lundi, quand l'émission passe le jeudi",no
 jour inhabituel,1959-04-28,non,,,"un mardi, quand l'émission passe le jeudi",non
 republication,1959-06-18,non,radiofrance,les-400-coups-de-francois-truffaut-2814275,"daté du 1959-06-18, enregistrement du 2024-10-24",non
 republication,1959-06-25,non,radiofrance,francois-truffaut-invite-du-masque-pour-les-400-coups-1481200,"daté du 1959-06-25, enregistrement du 2024-10-24",non
-republication,1961-11-16,oui,radiofrance,georges-conchon-l-etat-sauvage-1624736,"daté du 1961-11-16, enregistrement du 1964-11-15",non
 jour inhabituel,1962-01-24,non,,,"un mercredi, quand l'émission passe le jeudi",non
 thème inconnu,1962-04-05,oui,,,aucune source ne donne de thème,oui
 thèmes divergents,1964-11-29,non,,,"radiofrance:cinéma+théâtre (extrait), ina:théâtre",non
@@ -17,7 +15,6 @@ jour inhabituel,1969-10-11,non,,,"un samedi, quand l'émission passe le dimanche
 collision,1969-10-26-b,non,,,une autre émission le même jour : 1969-10-26,non
 rapprochement ambigu,1969-10-26-b,non,wayback_podcast,ITEMA_23820430,rapprochable aussi de 1969-10-26,non
 thèmes divergents,1969-11-23,non,,,"radiofrance:théâtre (extrait), ina:théâtre, radiofrance:cinéma (extrait)",non
-attestation fragile,1975-10-18,oui,,,attestée seulement par des extraits,non
 rapprochement ambigu,1975-10-19,non,wayback_podcast,ITEMA_23820425,rapprochable aussi de 1975-10-18,non
 jour inhabituel,1975-11-12,non,,,"un mercredi, quand l'émission passe le dimanche",non
 collision,1976-01-04-b,non,,,une autre émission le même jour : 1976-01-04,non
@@ -31,7 +28,6 @@ republication,1993-05-23,non,radiofrance,ma-saison-preferee-d-andre-techine-1993
 attestation fragile,1995-01-28,non,,,attestée seulement par des extraits,non
 jour inhabituel,1995-01-28,non,,,"un samedi, quand l'émission passe le dimanche",non
 republication,1995-01-28,non,radiofrance,nelly-et-monsieur-arnaud-de-claude-sautet-laureat-du-prix-des-auditeurs-du-maque-6882590,"daté du 1995-01-28, enregistrement du 1996-01-28",non
-republication,2000-10-29,non,radiofrance,mission-impossible-2-4404954,"daté du 2000-10-27, enregistrement du 2000-08-27",non
 thèmes divergents,2001-01-28,non,,,"radiofrance:cinéma+théâtre (extrait), ina:théâtre",non
 thème inconnu,2001-06-17,oui,,,aucune source ne donne de thème,oui
 thème inconnu,2001-08-05,oui,,,aucune source ne donne de thème,oui
@@ -94,7 +90,6 @@ rapprochement ambigu,2024-08-18-b,non,radiofrance,le-roman-de-jim-des-freres-lar
 rapprochement ambigu,2024-08-18-b,non,wayback_podcast,ITEMA_23832933,rapprochable aussi de 2024-08-18,non
 thèmes divergents,2024-11-03,non,,,"radiofrance:théâtre (extrait), radiofrance:théâtre (extrait), radiofrance:cinéma",non
 thèmes divergents,2024-12-29,non,,,"radiofrance:cinéma, radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma (extrait), radiofrance:cinéma+théâtre (extrait), radiofrance:cinéma (extrait)",non
-republication,2025-10-05,non,radiofrance,les-roseaux-sauvages-de-techine-prix-des-auditeurs-du-masque-7332770,"daté du 2025-10-04, enregistrement du 1995-02-12",non
 absente de lmelp,2025-12-22,non,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires,non
 jour inhabituel,2025-12-22,non,,,"un lundi, quand l'émission passe le dimanche",non
 absente de lmelp,2025-12-28,non,,,lmelp est complet depuis le 01/01/2017 pour les émissions littéraires,non
