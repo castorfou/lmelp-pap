@@ -327,6 +327,7 @@ Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnee
 
 - une émission dont toutes les attestations partiraient reste distincte : une émission qui republie l'archive d'une autre n'est pas fusionnée avec elle ;
 - une fiche qu'une source vérifiée rattache à son émission y reste ;
+- une attestation qui porte un arbitrage de rapprochement (`garder ici` ou une attestation cible) reste où l'arbitrage la met : la décision humaine l'emporte ;
 - une archive (ITEMA) qui désigne plusieurs émissions candidates datées du jour du fichier ne déplace rien ;
 - le fichier doit être daté du jour même de l'émission retenue : une archive remise en ligne un vendredi (`14007-24.10.2024-ITEMA_23902448-…`, des archives de 1959 sur François Truffaut) ne rejoint pas l'émission du dimanche suivant.
 

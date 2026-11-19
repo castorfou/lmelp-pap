@@ -174,9 +174,10 @@ def construire_liste(
             else:
                 _rapprocher(a, groupes, index)
     _reunir_archives_partagees(groupes)
-    _rattacher_aux_emissions_des_archives(groupes)
+    rapprochements = _familles(arbitrages).rapprochements
+    _rattacher_aux_emissions_des_archives(groupes, {a.cle for a in rapprochements})
 
-    deplacements = _deplacer(groupes, _familles(arbitrages).rapprochements)
+    deplacements = _deplacer(groupes, rapprochements)
     emissions, retirees = _arbitrer([_fusionner(g) for g in groupes], arbitrages)
     emissions.sort(key=_cle_de_tri)
     _attribuer_identifiants(emissions)
@@ -1041,7 +1042,9 @@ def _fichiers_eloignes(a: Attestation, reference: date) -> list[tuple[date, str]
     ]
 
 
-def _rattacher_aux_emissions_des_archives(groupes: list[list[Attestation]]) -> None:
+def _rattacher_aux_emissions_des_archives(
+    groupes: list[list[Attestation]], arbitrees: AbstractSet[CleAttestation]
+) -> None:
     """Déplace vers son émission une attestation dont l'enregistrement est
     l'archive (ITEMA) d'une autre émission, datée du jour de ce fichier.
 
@@ -1053,7 +1056,9 @@ def _rattacher_aux_emissions_des_archives(groupes: list[list[Attestation]]) -> N
     Une fiche qu'une source vérifiée rattache à son émission y reste (ADR
     0003). Une émission dont toutes les attestations partiraient n'est pas
     fusionnée avec une autre : une émission qui republie l'archive d'une autre
-    reste distincte (voir ``_reunir_archives_partagees``). Une archive qui désigne plusieurs émissions candidates ne déplace rien.
+    reste distincte (voir ``_reunir_archives_partagees``). Une attestation
+    qui porte un arbitrage de rapprochement (``arbitrees``) reste où il la met.
+    Une archive qui désigne plusieurs émissions candidates ne déplace rien.
     """
     jours = [_valeur("date", groupe) for groupe in groupes]
     par_archive: defaultdict[str, set[int]] = defaultdict(set)
@@ -1062,7 +1067,9 @@ def _rattacher_aux_emissions_des_archives(groupes: list[list[Attestation]]) -> N
             par_archive[itema].add(i)
 
     def cibles(a: Attestation, i: int) -> set[int]:
-        if any(_meme_fiche(b, a) for b in groupes[i] if b.source in SOURCES_VERIFIEES):
+        if a.cle in arbitrees or any(
+            _meme_fiche(b, a) for b in groupes[i] if b.source in SOURCES_VERIFIEES
+        ):
             return set()
         return {
             j
