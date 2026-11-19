@@ -92,6 +92,26 @@ def test_la_collecte_ina_met_en_cache_la_fiche_detaillee_de_chaque_notice(
     assert "cinéma ; film" in enregistree
 
 
+def test_la_collecte_des_fiches_ina_affiche_sa_progression(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """Seules les fiches absentes du cache sont comptées dans la progression."""
+    base = "https://catalogue.ina.fr/doc/TV-RADIO/RD_{}.001/le-masque"
+    (tmp_path / "fiches").mkdir()
+    (tmp_path / "fiches" / "RD_1.001.html").write_text("déjà là", "utf-8")
+    monkeypatch.setattr(
+        collecte,
+        "_get",
+        lambda adresse, params=None: SimpleNamespace(status_code=200, content=b"x"),
+    )
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    collecte._collecter_fiches_ina(tmp_path, [base.format(n) for n in (1, 2, 3)])
+
+    erreurs = capsys.readouterr().err
+    assert "ina : fiches détaillées 2/2" in erreurs
+
+
 def test_la_lecture_du_cache_ina_tient_compte_des_fiches_detaillees(
     tmp_path: Path,
 ) -> None:

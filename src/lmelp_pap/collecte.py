@@ -173,14 +173,32 @@ def _collecter_fiches_ina(dossier: Path, urls: Iterable[str]) -> None:
     """
     fiches = dossier / "fiches"
     fiches.mkdir(parents=True, exist_ok=True)
-    for url in dict.fromkeys(urls):
-        fichier = fiches / f"{ina.identifiant(url)}.html"
-        if fichier.exists():
-            continue
+    a_telecharger = [
+        (url, fichier)
+        for url in dict.fromkeys(urls)
+        if not (fichier := fiches / f"{ina.identifiant(url)}.html").exists()
+    ]
+    debut = time.monotonic()
+    for rang, (url, fichier) in enumerate(a_telecharger, start=1):
         reponse = _get(url)
         if reponse.status_code == 200:
             fichier.write_text(reponse.content.decode("utf-8"), "utf-8")
         time.sleep(_DELAI)
+        if rang % _PAS_DE_PROGRESSION == 0 or rang == len(a_telecharger):
+            _afficher_progression(rang, len(a_telecharger), time.monotonic() - debut)
+
+
+_PAS_DE_PROGRESSION = 100  # fiches entre deux lignes de progression
+
+
+def _afficher_progression(fait: int, total: int, ecoule: float) -> None:
+    """Une ligne sur stderr : lisible en direct comme dans un journal."""
+    restant = round(ecoule / fait * (total - fait) / 60)
+    print(
+        f"ina : fiches détaillées {fait}/{total} (≈ {restant} min restantes)",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 # Listes archivées : préfixe d'URL dans la Wayback Machine, encodage des pages.
