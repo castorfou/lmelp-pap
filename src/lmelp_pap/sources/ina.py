@@ -6,9 +6,12 @@ de la collection « Le masque et la plume », avec la colonne
 Littérature.
 """
 
+import html
 import re
-from collections.abc import Iterable
+import unicodedata
+from collections.abc import Iterable, Mapping
 from datetime import date
+from typing import Literal
 
 from lmelp_pap.liste import Attestation
 
@@ -16,7 +19,7 @@ from lmelp_pap.liste import Attestation
 SOURCE = "ina"
 
 _MOTS_CLES = {
-    "livres": r"littér|livre|roman|lire|édition|librairie|poète|goncourt",
+    "livres": r"littér|livre|roman|lire|librairie|poète|goncourt",
     "théâtre": r"th[ée][âa]tre|critiques dramatiques",
     "cinéma": r"cinéma|film",
     "opéra": r"opéra",
@@ -26,19 +29,36 @@ _MOTS_CLES = {
 }
 
 
-def lire_notices(lignes: Iterable[dict[str, str]]) -> list[Attestation]:
-    """Une attestation par notice datée ; les notices sans date sont ignorées."""
+# Les champs d'une fiche détaillée, du plus sûr au moins sûr : descripteurs,
+# chapeau, résumé producteur, résumé documentaire. Tous peuvent citer d'autres
+# arts que celui de l'émission (un film sur un écrivain, le roman adapté à
+# l'écran, Shakespeare) : seul tranche le premier qui ne désigne qu'un thème.
+_CHAMPS_DE_LA_FICHE = ("DE", "CHAP", "RESPROD", "RES")
+
+
+def lire_notices(
+    lignes: Iterable[dict[str, str]], fiches: Mapping[str, str] | None = None
+) -> list[Attestation]:
+    """Une attestation par notice datée ; les notices sans date sont ignorées.
+
+    ``fiches`` associe à l'identifiant d'une notice le HTML de sa fiche
+    détaillée, quand elle est en cache : ses descripteurs, son chapeau et ses
+    résumés donnent des thèmes que le titre seul ne donne pas.
+    """
     attestations = []
     for ligne in lignes:
         if not ligne.get("date_diffusion"):
             continue
         url = ligne["url_ina"].split("?", 1)[0]
+        source_id = identifiant(url)
+        fiche = (fiches or {}).get(source_id)
         attestations.append(
             Attestation(
                 source=SOURCE,
-                source_id=_identifiant(url),
+                source_id=source_id,
                 date=date.fromisoformat(ligne["date_diffusion"]),
-                themes=_themes(ligne),
+                themes=_themes(ligne, fiche),
+                nature_date=_nature_date(fiche),
                 titre=ligne.get("titre") or None,
                 chaine=ligne.get("chaine") or None,
                 heure=_horaire(ligne.get("heure")),
@@ -49,19 +69,58 @@ def lire_notices(lignes: Iterable[dict[str, str]]) -> list[Attestation]:
     return attestations
 
 
-def _identifiant(url: str) -> str:
+def identifiant(url: str) -> str:
     """``…/doc/TV-RADIO/PH_PHD88021484/titre`` → ``PH_PHD88021484``."""
     return url.rstrip("/").split("/")[-2]
 
 
-def _themes(ligne: dict[str, str]) -> frozenset[str]:
-    """Les thèmes lus dans le titre de la notice ; la facette littérature ajoute
-    les livres."""
-    titre = (ligne.get("titre") or "").lower()
-    themes = {t for t, motif in _MOTS_CLES.items() if re.search(motif, titre)}
+def _themes(ligne: dict[str, str], fiche: str | None = None) -> frozenset[str]:
+    """Les thèmes lus dans le titre de la notice ; à défaut, le thème du premier
+    champ de sa fiche détaillée qui n'en désigne qu'un. La facette littérature
+    ajoute les livres."""
+    themes = _mots_cles(ligne.get("titre") or "")
+    if not themes and fiche is not None:
+        for code in _CHAMPS_DE_LA_FICHE:
+            if len(du_champ := _mots_cles(_champ(fiche, code) or "")) == 1:
+                themes = du_champ
+                break
     if ligne.get("facette_litterature") == "oui":
-        themes.add("livres")
+        themes |= {"livres"}
     return frozenset(themes)
+
+
+def _mots_cles(texte: str) -> set[str]:
+    """Les thèmes dont un mot-clé figure dans le texte, accents et casse ignorés."""
+    texte = _sans_accents(texte.lower())
+    return {
+        t for t, motif in _MOTS_CLES.items() if re.search(_sans_accents(motif), texte)
+    }
+
+
+def _nature_date(fiche: str | None) -> Literal["première diffusion", "rediffusion"]:
+    """Une notice dont le statut n'est pas « Première diffusion » (« Multidiffusé »)
+    est une rediffusion : elle atteste l'émission sans dater sa première diffusion.
+    Sans fiche, la notice date l'émission."""
+    if fiche is None:
+        return "première diffusion"
+    statut = _champ(fiche, "STADIF")
+    if statut is None or statut == "Première diffusion":
+        return "première diffusion"
+    return "rediffusion"
+
+
+def _sans_accents(texte: str) -> str:
+    """« LITTÉRAIRE », « LITTERAIRE » et « littéraire » se lisent pareil."""
+    decompose = unicodedata.normalize("NFKD", texte)
+    return "".join(c for c in decompose if not unicodedata.combining(c))
+
+
+def _champ(fiche: str, code: str) -> str | None:
+    """Le texte d'un champ de la fiche détaillée (``<td id="DE">``), sans balises."""
+    m = re.search(rf'<td id="{code}"[^>]*>(.*?)</td>', fiche, re.DOTALL)
+    if m is None:
+        return None
+    return html.unescape(re.sub(r"<[^>]+>", " ", m.group(1))).strip() or None
 
 
 def _horaire(valeur: str | None) -> str | None:

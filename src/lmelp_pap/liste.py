@@ -49,9 +49,12 @@ class Attestation:
     url: str | None = None
     enregistrements: tuple[Enregistrement, ...] = ()
     extrait: bool = False  # un fragment, qui ne décrit pas l'émission entière
-    # La date de première diffusion, ou de publication dans le podcast (lmelp) :
-    # une date de publication ne date pas l'émission.
-    nature_date: Literal["première diffusion", "publication"] = "première diffusion"
+    # La date de première diffusion, de publication (dans le podcast pour
+    # lmelp, d'une fiche rattachée par son archive) ou de rediffusion (INA) :
+    # seule une première diffusion date l'émission.
+    nature_date: Literal["première diffusion", "publication", "rediffusion"] = (
+        "première diffusion"
+    )
 
     @property
     def cle(self) -> CleAttestation:
@@ -78,6 +81,8 @@ class Emission:
     arbitrage: "Arbitrage | None" = None
     # l'arbitrage de date, qui se cumule avec le précédent
     arbitrage_date: "Arbitrage | None" = None
+    # l'arbitrage d'existence « existe », qui se cumule avec les précédents
+    arbitrage_existence: "Arbitrage | None" = None
 
     @property
     def a_ecouter(self) -> bool:
@@ -102,6 +107,12 @@ class Arbitrage:
     (``cible`` vide) ou la déplace vers l'émission de l'attestation ``cible``.
     Il se cumule lui aussi avec les autres sortes.
 
+    Un arbitrage d'existence retire l'émission (``existe`` faux, « n'existe
+    pas »), ou lève ses doutes d'existence, attestation fragile et
+    republication (``existe`` vrai). « Existe » se cumule avec les arbitrages de
+    thème et les renvois à l'écoute ; entre « existe » et « n'existe pas », le
+    plus récent l'emporte.
+
     Sa clé est l'attestation (source et identifiant dans la source), pas
     l'identifiant de l'émission, qui peut changer d'une construction à l'autre.
     """
@@ -114,6 +125,7 @@ class Arbitrage:
     # pour un arbitrage de rapprochement : une attestation de l'émission cible,
     # ou None pour garder l'attestation où elle est
     cible: CleAttestation | None = None
+    existe: bool = False  # pour un arbitrage d'existence : existe, ou non
     justification: str = ""
     date: datetime = datetime.min  # date de la décision
 
@@ -161,8 +173,11 @@ def construire_liste(
                 index[a.date].append(groupes.index(fiche[0]))
             else:
                 _rapprocher(a, groupes, index)
+    _reunir_archives_partagees(groupes)
+    rapprochements = _familles(arbitrages).rapprochements
+    _rattacher_aux_emissions_des_archives(groupes, {a.cle for a in rapprochements})
 
-    deplacements = _deplacer(groupes, _familles(arbitrages).rapprochements)
+    deplacements = _deplacer(groupes, rapprochements)
     emissions, retirees = _arbitrer([_fusionner(g) for g in groupes], arbitrages)
     emissions.sort(key=_cle_de_tri)
     _attribuer_identifiants(emissions)
@@ -196,7 +211,7 @@ def _arbitrages_deplaces(
     familles = _familles(arbitrages)
     emission_de = {a.cle: e for e in emissions for a in e.attestations}
     doutes = []
-    for famille in (familles.decisions, familles.dates):
+    for famille in (familles.decisions, familles.dates, familles.existences):
         for cle, (_ordre, arbitrage) in sorted(_derniers(famille).items()):
             if cle not in parties:
                 continue
@@ -329,18 +344,25 @@ class _Familles(NamedTuple):
     """Les arbitrages par point de l'émission sur lequel ils portent."""
 
     dates: list["Arbitrage"]
-    decisions: list["Arbitrage"]  # thème, existence, écoute
+    decisions: list["Arbitrage"]  # thème, n'existe pas, écoute
     rapprochements: list["Arbitrage"]
+    existences: list["Arbitrage"]  # existe
 
 
 def _familles(arbitrages: Sequence[Arbitrage]) -> _Familles:
-    """Les arbitrages de date, les décisions et les arbitrages de
-    rapprochement : chaque famille porte sur un point différent, et le plus
-    récent ne l'emporte qu'au sein d'elle."""
+    """Les arbitrages de date, les décisions, les arbitrages de
+    rapprochement et les arbitrages « existe » : chaque famille porte sur un
+    point différent, et le plus récent ne l'emporte qu'au sein d'elle.
+    « Existe » et « n'existe pas » se départagent à part (``_arbitrer``)."""
     return _Familles(
         dates=[a for a in arbitrages if a.sorte == "date"],
-        decisions=[a for a in arbitrages if a.sorte not in ("date", "rapprochement")],
+        decisions=[
+            a
+            for a in arbitrages
+            if a.sorte not in ("date", "rapprochement") and not a.existe
+        ],
         rapprochements=[a for a in arbitrages if a.sorte == "rapprochement"],
+        existences=[a for a in arbitrages if a.sorte == "existence" and a.existe],
     )
 
 
@@ -364,6 +386,7 @@ def _contredit_lmelp(emission: Emission, arbitrage: Arbitrage) -> bool:
     return (
         _verifiee(emission)
         and arbitrage.sorte in ("thème", "existence")
+        and not arbitrage.existe
         and (arbitrage.sorte == "existence" or arbitrage.themes != {"livres"})
     )
 
@@ -371,7 +394,7 @@ def _contredit_lmelp(emission: Emission, arbitrage: Arbitrage) -> bool:
 def _decision(arbitrage: Arbitrage) -> str:
     """La décision d'un arbitrage, en clair, pour le détail d'un doute."""
     if arbitrage.sorte == "existence":
-        return "arbitrée inexistante"
+        return "arbitrée existante" if arbitrage.existe else "arbitrée inexistante"
     if arbitrage.sorte == "écoute":
         return "renvoyée à l'écoute"
     if arbitrage.sorte == "date":
@@ -407,14 +430,23 @@ def _arbitrer(
     le dernier arbitrage de date.
 
     Un arbitrage de thème remplace exactement ses thèmes ; un arbitrage
-    d'existence la retire de l'ensemble des émissions ; un renvoi à l'écoute
-    lui laisse les thèmes de ses sources ; un arbitrage de date lui donne la
-    date retenue. Rend les émissions gardées, et les émissions vérifiées
+    « n'existe pas » la retire de l'ensemble des émissions, sauf si un
+    arbitrage « existe » plus récent l'annule ; un arbitrage « existe » se
+    cumule avec le dernier arbitrage de thème ou renvoi à l'écoute ; un renvoi
+    à l'écoute lui laisse les thèmes de ses sources ; un arbitrage de date lui
+    donne la date retenue. Rend les émissions gardées, et les émissions vérifiées
     retirées avec leur arbitrage.
     """
     familles = _familles(arbitrages)
     par_attestation = _derniers(familles.decisions)
     date_par_attestation = _derniers(familles.dates)
+    existence_par_attestation = _derniers(
+        [a for a in arbitrages if a.sorte == "existence"]
+    )
+    # sous un arbitrage « existe », « n'existe pas » est sans effet
+    hors_existence = _derniers(
+        [a for a in familles.decisions if a.sorte != "existence"]
+    )
     gardees: list[Emission] = []
     retirees: list[tuple[Emission, Arbitrage]] = []
     for emission in emissions:
@@ -428,11 +460,18 @@ def _arbitrer(
             if arbitrage_date.date_retenue is not None:
                 emission.date = arbitrage_date.date_retenue
             emission.arbitrage_date = arbitrage_date
-        siens = [
-            par_attestation[a.cle]
+        existences = [
+            existence_par_attestation[a.cle]
             for a in emission.attestations
-            if a.cle in par_attestation
+            if a.cle in existence_par_attestation
         ]
+        decisions = par_attestation
+        if existences:
+            _ordre, existence = max(existences, key=lambda r: r[0])
+            if existence.existe:
+                emission.arbitrage_existence = existence
+                decisions = hors_existence
+        siens = [decisions[a.cle] for a in emission.attestations if a.cle in decisions]
         if not siens:
             gardees.append(emission)
             continue
@@ -497,6 +536,9 @@ def _doutes(
                 # rattachée par sa fiche, sans ambiguïté ; sinon par la date
                 if not any(_meme_fiche(a, b) for b in emission.attestations):
                     ajouter("sans fiche radiofrance", f"aucune fiche {a.url}", a)
+                continue
+            if a.nature_date == "publication":
+                # rattachée par son archive : sa date ne la rapproche de rien
                 continue
             rivales = tuple(
                 (emissions[i].id, attestation_stable(emissions[i]).cle)
@@ -566,25 +608,27 @@ def _doutes(
             divergence = _themes_divergents(emission.attestations)
             if divergence:
                 ajouter("thèmes divergents", divergence)
-        for a in emission.attestations:
-            dates_des_fichiers = sorted(
-                {
-                    f.date
-                    for e in a.enregistrements
-                    if (f := lire_nom_fichier(e.url))
-                    and abs((f.date - a.date).days) > ECART_REPUBLICATION_JOURS
-                }
-            )
-            if dates_des_fichiers:
-                ajouter(
-                    "republication",
-                    f"daté du {a.date}, enregistrement du "
-                    + ", ".join(str(jour) for jour in dates_des_fichiers),
-                    a,
+        # Un arbitrage « existe » lève les doutes d'existence.
+        if emission.arbitrage_existence is None:
+            for a in emission.attestations:
+                # une date de publication ne date pas l'émission : son fichier
+                # se compare à la date de l'émission
+                reference = (
+                    a.date if a.nature_date == "première diffusion" else emission.date
                 )
-        fragilite = _fragilite(emission.attestations)
-        if fragilite:
-            ajouter("attestation fragile", fragilite)
+                dates_des_fichiers = sorted(
+                    {jour for jour, _url in _fichiers_eloignes(a, reference)}
+                )
+                if dates_des_fichiers:
+                    ajouter(
+                        "republication",
+                        f"daté du {a.date}, enregistrement du "
+                        + ", ".join(str(jour) for jour in dates_des_fichiers),
+                        a,
+                    )
+            fragilite = _fragilite(emission.attestations)
+            if fragilite:
+                ajouter("attestation fragile", fragilite)
     return doutes
 
 
@@ -862,15 +906,25 @@ def _itema(url: str) -> str | None:
     return m.group(0) if m else None
 
 
-def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
-    """Les enregistrements de toutes les sources, typés par archive (ITEMA).
+def _segment(url: str) -> str | None:
+    """L'archive (ITEMA) et le segment (``2025F4007S0215``) d'un fichier audio.
 
-    Une source qui sait qu'une archive est un extrait (radiofrance.fr connaît
+    Une même archive couvre parfois l'émission entière et ses extraits : seul
+    le segment les distingue. Il est le même pour tous les encodages du fichier.
+    """
+    m = re.search(r"ITEMA_\d+(-\d{4}F\d+[A-Z]\d+)?", url)
+    return m.group(0) if m else None
+
+
+def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
+    """Les enregistrements de toutes les sources, typés par segment d'archive.
+
+    Une source qui sait qu'un segment est un extrait (radiofrance.fr connaît
     la durée) l'emporte sur une autre qui ne voit que le nom du fichier. La
     durée d'un fichier vaut pour ses autres encodages (``-22.mp3``, ``-27.m4a``).
     """
     tous = [e for a in groupe for e in a.enregistrements]
-    extraits = {_itema(e.url) for e in tous if e.type == "extrait"} - {None}
+    extraits = {_segment(e.url) for e in tous if e.type == "extrait"} - {None}
     durees: dict[str, str] = {}
     for e in tous:
         if e.duree:
@@ -879,7 +933,7 @@ def _enregistrements(groupe: list[Attestation]) -> list[Enregistrement]:
         dict.fromkeys(
             replace(
                 e,
-                type="extrait" if _itema(e.url) in extraits else e.type,
+                type="extrait" if _segment(e.url) in extraits else e.type,
                 duree=e.duree or durees.get(_fichier(e.url)),
             )
             for e in tous
@@ -935,6 +989,104 @@ def _rapprocher(
         position = len(groupes)
         groupes.append([a])
     index[a.date].append(position)
+
+
+def _reunir_archives_partagees(groupes: list[list[Attestation]]) -> None:
+    """Réunit les groupes du même jour dont des enregistrements partagent une
+    archive (ITEMA) : ils sont une seule émission.
+
+    Une fiche par livre étiquetée d'un thème incompatible avec l'émission n'a
+    pas pu y être rapprochée ; son archive la rattache. À des dates
+    différentes, une archive partagée signale une rediffusion : les groupes
+    restent distincts.
+    """
+    parent = list(range(len(groupes)))
+
+    def racine(i: int) -> int:
+        while parent[i] != i:
+            i = parent[i]
+        return i
+
+    premier: dict[tuple[date, str], int] = {}
+    for i, groupe in enumerate(groupes):
+        for jour in _dates_de_diffusion(groupe):
+            for itema in _itemas(groupe):
+                j = premier.setdefault((jour, itema), i)
+                parent[max(racine(i), racine(j))] = min(racine(i), racine(j))
+    for i in range(len(groupes)):
+        if (r := racine(i)) != i:
+            groupes[r].extend(groupes[i])
+            groupes[i] = []
+    groupes[:] = [g for g in groupes if g]
+
+
+def _itemas(groupe: list[Attestation]) -> set[str]:
+    """Les archives (ITEMA) des enregistrements du groupe."""
+    return {
+        itema
+        for a in groupe
+        for e in a.enregistrements
+        if (itema := _itema(e.url)) is not None
+    }
+
+
+def _fichiers_eloignes(a: Attestation, reference: date) -> list[tuple[date, str]]:
+    """La date et l'URL de chaque enregistrement de l'attestation dont le nom de
+    fichier est daté à plus de ECART_REPUBLICATION_JOURS jours de
+    ``reference``."""
+    return [
+        (f.date, e.url)
+        for e in a.enregistrements
+        if (f := lire_nom_fichier(e.url))
+        and abs((f.date - reference).days) > ECART_REPUBLICATION_JOURS
+    ]
+
+
+def _rattacher_aux_emissions_des_archives(
+    groupes: list[list[Attestation]], arbitrees: AbstractSet[CleAttestation]
+) -> None:
+    """Déplace vers son émission une attestation dont l'enregistrement est
+    l'archive (ITEMA) d'une autre émission, datée du jour de ce fichier.
+
+    Le fichier est daté à plus de ECART_REPUBLICATION_JOURS jours de
+    l'attestation : la date de la source est fausse, ou celle d'une remise en
+    ligne. Dans l'émission qu'elle rejoint, cette date devient une date de
+    publication, qui ne date pas l'émission.
+
+    Une fiche qu'une source vérifiée rattache à son émission y reste (ADR
+    0003). Une émission dont toutes les attestations partiraient n'est pas
+    fusionnée avec une autre : une émission qui republie l'archive d'une autre
+    reste distincte (voir ``_reunir_archives_partagees``). Une attestation
+    qui porte un arbitrage de rapprochement (``arbitrees``) reste où il la met.
+    Une archive qui désigne plusieurs émissions candidates ne déplace rien.
+    """
+    jours = [_valeur("date", groupe) for groupe in groupes]
+    par_archive: defaultdict[str, set[int]] = defaultdict(set)
+    for i, groupe in enumerate(groupes):
+        for itema in _itemas(groupe):
+            par_archive[itema].add(i)
+
+    def cibles(a: Attestation, i: int) -> set[int]:
+        if a.cle in arbitrees or any(
+            _meme_fiche(b, a) for b in groupes[i] if b.source in SOURCES_VERIFIEES
+        ):
+            return set()
+        return {
+            j
+            for jour, url in _fichiers_eloignes(a, a.date)
+            if (itema := _itema(url)) is not None
+            for j in par_archive[itema]
+            if j != i and jours[j] == jour
+        }
+
+    departs: list[tuple[int, Attestation, int]] = []
+    for i, groupe in enumerate(groupes):
+        partantes = [(a, c) for a in groupe if len(c := cibles(a, i)) == 1]
+        if len(partantes) < len(groupe):
+            departs += [(i, a, min(c)) for a, c in partantes]
+    for i, a, j in departs:
+        groupes[i].remove(a)
+        groupes[j].append(replace(a, nature_date="publication"))
 
 
 def _meme_fiche(verifiee: Attestation, b: Attestation) -> bool:

@@ -103,9 +103,17 @@ uv run --active lmelp-pap page && uv run --active mkdocs serve
 |---|---|---|
 | `radiofrance` | Les pages podcast de radiofrance.fr : émissions depuis 2003 (date, thème, titre, description, animateurs, audio à partir de 2006), et extraits d'archives de 1956 à 2002. | environ 1 h (une requête par seconde) |
 | `wayback_podcast` | Les fichiers audio du podcast conservés par la Wayback Machine : la date d'origine et l'identifiant d'archive Radio France (ITEMA) figurent dans le nom du fichier. Pas de thème. | moins d'une minute |
-| `ina` | Toutes les notices de la collection « Le masque et la plume » du catalogue INA : date, titre, chaîne, heure, durée. Le thème vient du titre, et les notices de la facette Littérature reçoivent le thème livres. | plusieurs minutes |
+| `ina` | Toutes les notices de la collection « Le masque et la plume » du catalogue INA : date, titre, chaîne, heure, durée, et la fiche détaillée de chaque notice (voir ci-dessous). | environ 2 h la première fois (une fiche toutes les deux secondes environ), puis quelques minutes : une fiche en cache n'est pas re-téléchargée. La progression s'affiche toutes les 100 fiches, avec le temps restant estimé |
 | `anciennes_listes` | Les listes d'émissions de l'ancien site France Inter, archivées par la Wayback Machine : liste annuelle (2002-2008) et listes mensuelles (2009-2012), avec date et thème. Un dimanche « Pas de masque et la plume » n'atteste aucune émission. | quelques minutes |
 | `lmelp` | Les émissions vérifiées à la main dans l'application lmelp (2014 à aujourd'hui), lues dans sa base MongoDB : page radiofrance.fr, titre, date de publication du podcast. C'est une **source vérifiée** (voir ci-dessous). | quelques secondes |
+
+### Les fiches détaillées INA
+
+La collecte INA enregistre, en plus de la liste des notices, la fiche détaillée de chacune dans `data/raw/cache/ina/fiches/`, un fichier par notice (`RD_1098450.001.html`). Une collecte interrompue reprend où elle s'était arrêtée.
+
+Le **thème** d'une notice vient d'abord de son titre. Quand le titre n'en donne aucun (« Le masque et la plume du 09 janvier 2000 »), il vient de la fiche, dont les champs sont lus dans l'ordre : descripteurs (« cinéma ; film ; débat »), chapeau (« Magazine présenté par Jérôme GARCIN consacré aujourd'hui au cinéma »), résumé producteur (« LITTERAIRE : avec la participation de… »), résumé documentaire. Le **premier champ qui ne désigne qu'un thème** tranche : un champ qui en désigne plusieurs ne dit rien de sûr, car tous citent volontiers d'autres arts que celui de l'émission (les descripteurs d'un film sur un écrivain portent « littérature », la description d'une émission cinéma cite le roman adapté et Shakespeare). Une notice dont aucun champ ne tranche reste au thème inconnu. Les mêmes mots-clés s'appliquent partout, sans tenir compte des accents ni des majuscules ; les notices de la facette Littérature reçoivent en plus le thème livres. Les descripteurs et le chapeau sont surtout renseignés à partir du milieu des années 1990 ; plus tôt, le résumé producteur donne souvent le thème. Pour les émissions récentes, le résumé producteur reprend la description de France Inter.
+
+Le **statut de diffusion** distingue la première diffusion d'une rediffusion (« Multidiffusé ») : une notice de rediffusion, souvent datée du lendemain, atteste l'émission mais ne date pas sa première diffusion. Elle ne produit donc pas de `désaccord de date`. Une notice sans fiche en cache date l'émission.
 
 ### La source vérifiée lmelp
 
@@ -147,6 +155,8 @@ Une ligne par source et par émission : `emission_id`, `source`, `source_id`, `d
 
 Une ligne par fichier audio : `emission_id`, `url`, `type` (`intégral` ou `extrait`), `sources` qui le donnent, `duree`.
 
+Le `type` se décide par **segment** : l'archive (`ITEMA_24209925`) et le code qui la suit (`2025F4007S0215`). Une même archive couvre souvent l'émission entière et ses fiches par livre, chacune dans son segment (`S0215` pour l'émission, `S0216` à `S0219` pour les livres) : seul le segment les distingue. Un segment qu'une source sait être un extrait l'est pour tous ses fichiers, quel que soit leur encodage, même quand une autre source, qui ne voit que le nom du fichier, le croit intégral. Un fichier sans code de segment (`ITEMA_21072908-0.mp3`) garde le type que lui donne sa source.
+
 La `duree` (`HH:MM:SS`) est celle de la fiche radiofrance.fr qui publie le fichier ; elle vaut aussi pour les autres encodages du même fichier (même nom au suffixe près : `-22.mp3`, `-27.m4a`). Elle est vide quand aucune source ne la connaît, par exemple pour un fichier connu seulement par la Wayback Machine. Elle permet de juger, sans l'écouter, si un enregistrement est un court extrait : la durée de l'émission, dans `emissions.csv`, ne vient jamais d'un extrait.
 
 ### `doutes.csv`
@@ -164,7 +174,7 @@ Une ligne par **doute** : un point d'une émission que les sources ne permettent
 
 Types de doute :
 
-- `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ; `detail` donne les émissions rivales. Trois situations : deux émissions le même jour (`2007-03-25` et `2007-03-25-b`), une émission voisine (un fichier Wayback du 4 décembre 1958 rapprochable aussi du 6), ou des fiches par livre publiées le lendemain de l'émission. Un arbitrage de rapprochement le lève ;
+- `rapprochement ambigu` : une attestation aurait pu être rapprochée de plusieurs émissions ; `detail` donne les émissions rivales. Trois situations : deux émissions le même jour (`2007-03-25` et `2007-03-25-b`) sans archive commune (voir **Archive partagée** dans les règles de construction), une émission voisine (un fichier Wayback du 4 décembre 1958 rapprochable aussi du 6), ou des fiches par livre publiées le lendemain de l'émission. Un arbitrage de rapprochement le lève ;
 - `désaccord de date` : les sources d'une même émission donnent des dates de première diffusion écartées de plus d'un jour, et la règle du jour de diffusion (voir ci-dessous) ne le lève pas ;
 - `jour inhabituel` : la date de l'émission ne tombe pas le jour de diffusion habituel de sa période (`un mardi, quand l'émission passe le jeudi`). Les années de transition (1957, 1964-1965) n'ont pas ce doute ;
 - `absente de lmelp` : une émission de la liste ou au thème `hommage`, datée de 2017 à la dernière émission de lmelp, que lmelp ne contient pas. Pour une émission hommage, hors de la liste (`dans_la_liste = non`), le doute reste tracé : son thème explique l'absence ;
@@ -172,13 +182,13 @@ Types de doute :
 - `thème inconnu` : aucune source ne donne le thème de l'émission ;
 - `thèmes divergents` : les attestations de l'émission entière ne donnent pas les mêmes thèmes, ou un extrait porte un thème qu'aucune d'elles ne donne. Des extraits aux thèmes différents (une fiche par livre, une par film) décrivent une émission mixte, sans divergence ;
 - `collision` : une autre émission a la même date de première diffusion ; le doute porte sur l'émission suffixée (`-b`, `-c`) ;
-- `republication` : un enregistrement d'une attestation porte, dans le nom de son fichier, une date à plus de trois jours de la sienne : une émission remise en ligne plus tard, ou une fiche rattachée à l'enregistrement d'une autre émission ;
+- `republication` : un enregistrement d'une attestation porte, dans le nom de son fichier, une date à plus de trois jours de la sienne : une émission remise en ligne plus tard, ou une fiche rattachée à l'enregistrement d'une autre émission. Une fiche dont l'archive est celle d'une autre émission, datée du jour du fichier, rejoint cette émission sans doute (voir **Archive d'une autre émission** dans les règles de construction) ;
 - `attestation fragile` : l'émission n'est attestée que par des extraits, que par la Wayback Machine, ou que par les deux ;
 - `contradiction lmelp` : un arbitrage contredit lmelp, en déclarant inexistante une émission vérifiée ou en lui donnant un autre thème que `livres` seul. L'arbitrage s'applique, mais la contradiction reste signalée ;
 - `arbitrage orphelin` : un arbitrage porte sur une attestation qu'aucune source ne donne plus ; il n'a aucun effet. Le doute n'a pas d'`emission_id` : `source` et `source_id` désignent l'attestation introuvable. Un arbitrage de rapprochement dont l'émission cible a disparu (son attestation cible est introuvable) est aussi orphelin : le doute porte alors sur l'émission de l'attestation arbitrée, avec `émission cible introuvable` dans `detail`, et le rapprochement ambigu, s'il demeure, reste un doute. Il en va de même quand l'émission cible est arbitrée inexistante (`émission cible arbitrée inexistante`) : l'attestation déplacée sort de la liste avec elle, et le doute n'a pas d'`emission_id` ;
 - `arbitrage déplacé` : un arbitrage de thème, d'existence, d'écoute ou de date est posé sur une attestation déplacée par un arbitrage de rapprochement. Il la suit dans l'émission cible et quitte son ancienne émission. Le doute porte sur l'émission cible ; il se lève en annulant l'arbitrage déplacé, puis en arbitrant à nouveau chaque émission si besoin.
 
-Un champ simplement absent (durée, animateur) n'est pas un doute. Une émission dont la date est arbitrée n'a plus de doute de date (`désaccord de date`, `jour inhabituel`). Une émission attestée par lmelp n'a ni doute de thème (`thème inconnu`, `thèmes divergents`) ni doute d'existence (`republication`, `attestation fragile`). Une émission dont le thème est arbitré n'a plus de doute de thème ; une émission arbitrée inexistante n'a plus aucun doute.
+Un champ simplement absent (durée, animateur) n'est pas un doute. Une émission dont la date est arbitrée n'a plus de doute de date (`désaccord de date`, `jour inhabituel`). Une émission attestée par lmelp n'a ni doute de thème (`thème inconnu`, `thèmes divergents`) ni doute d'existence (`republication`, `attestation fragile`). Une émission dont le thème est arbitré n'a plus de doute de thème ; une émission arbitrée « existe » n'a plus de doute d'existence ; une émission arbitrée inexistante n'a plus aucun doute.
 
 `lmelp-pap emissions` affiche le nombre de doutes par type à la fin de la construction.
 
@@ -206,13 +216,13 @@ Le renvoi s'enregistre et s'applique comme un arbitrage (voir ci-dessous) : il s
 
 ## Arbitrages
 
-Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une émission, sa date de première diffusion, l'émission à laquelle se rattache une attestation, ou le fait qu'elle n'existe pas. Les arbitrages sont enregistrés dans `data/processed/arbitrages.csv`, versionné, écrit par l'outil `lmelp-pap arbitrer` ou rédigé à la main, et appliqués à chaque construction de la liste : une décision survit ainsi aux régénérations.
+Un **arbitrage** est une décision humaine qui lève un doute : le thème d'une émission, sa date de première diffusion, l'émission à laquelle se rattache une attestation, ou le fait qu'elle existe ou n'existe pas. Les arbitrages sont enregistrés dans `data/processed/arbitrages.csv`, versionné, écrit par l'outil `lmelp-pap arbitrer` ou rédigé à la main, et appliqués à chaque construction de la liste : une décision survit ainsi aux régénérations.
 
 | Colonne | Contenu |
 |---|---|
 | `source`, `source_id` | L'attestation à laquelle l'arbitrage s'attache, telle qu'elle figure dans `attestations.csv`. |
 | `sorte` | `thème`, `existence`, `date`, `rapprochement`, ou `écoute` pour un renvoi à l'écoute. |
-| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`), ou `hommage` seul. Pour un arbitrage d'existence, `n'existe pas`. Pour un arbitrage de date, la date retenue (`2020-08-02`). Pour un arbitrage de rapprochement, `garder ici`, ou l'attestation qui désigne l'émission cible, `source:source_id` (`ina:RD_3061769.001`). Pour un renvoi à l'écoute, `à écouter`. |
+| `valeur` | Pour un arbitrage de thème, les thèmes séparés par `;` (`théâtre`, `livres;cinéma`), ou `hommage` seul. Pour un arbitrage d'existence, `existe` ou `n'existe pas`. Pour un arbitrage de date, la date retenue (`2020-08-02`). Pour un arbitrage de rapprochement, `garder ici`, ou l'attestation qui désigne l'émission cible, `source:source_id` (`ina:RD_3061769.001`). Pour un renvoi à l'écoute, `à écouter`. |
 | `justification` | Facultative : « titre explicite », « écouté l'enregistrement », « connaissance de l'émission » ou texte libre. |
 | `date` | Date de la décision, au format ISO (`2026-11-10` ou `2026-11-10T14:30`). |
 
@@ -234,12 +244,13 @@ radiofrance,les-livres-de-la-rentree-1234567,rapprochement,ina:RD_3061769.001,é
 
 - un arbitrage de **thème** remplace exactement les thèmes de l'émission, sans les cumuler avec ceux des sources, et lève ses doutes de thème. Une émission arbitrée `théâtre` sort de la liste ; une émission arbitrée `livres;théâtre` y reste. La colonne `arbitrage` d'`emissions.csv` le signale ;
 - un arbitrage de thème **hommage** marque une émission sans critique nouvelle, consacrée au Masque ou à l'un de ses critiques : souvenirs, passage de témoin, anniversaire (« La dernière de Jérôme Garcin » le 31 décembre 2023, les 70 ans de l'émission le 28 décembre 2025). Le thème `hommage` ne se cumule avec aucun autre : il remplace tous ceux des sources, et l'émission sort de la liste même si elle évoque des livres. Aucune règle ne le déduit du titre : il s'attribue au cas par cas. Une ligne qui combine `hommage` avec un autre thème (`hommage;livres`) est refusée, comme une ligne dont un thème n'est pas dans la liste des thèmes ;
-- un arbitrage d'**existence** retire l'émission de l'ensemble des émissions : elle n'est ni dans la liste ni dans `doutes.csv` ;
+- un arbitrage d'existence **n'existe pas** retire l'émission de l'ensemble des émissions : elle n'est ni dans la liste ni dans `doutes.csv` ;
+- un arbitrage d'existence **existe** lève les doutes d'existence de l'émission (`attestation fragile`, `republication`), sans toucher à ses thèmes, à sa date ni à son appartenance à la liste. Il se cumule avec un arbitrage de thème, un renvoi à l'écoute ou un arbitrage de date. Un arbitrage de thème ou de date ne lève pas les doutes d'existence : seul « existe » les lève ;
 - un renvoi à l'**écoute** laisse à l'émission les thèmes de ses sources et ses doutes, marqués `a_ecouter = oui` ;
 - un arbitrage de **date** donne à l'émission la date retenue, d'où découle son identifiant (`2020-08-01` devient `2020-08-02`), et lève ses doutes de date. Retenir la date actuelle confirme une exception : le doute `jour inhabituel` disparaît, l'identifiant ne change pas. L'arbitrage de date porte sur un autre point que les autres sortes : il se cumule avec un arbitrage de thème ou un renvoi à l'écoute de la même émission au lieu de le remplacer ;
 - un arbitrage de **rapprochement** lève le doute `rapprochement ambigu` de son attestation. **Garder ici** confirme sa position actuelle, sans rien changer d'autre. **Déplacer vers** l'envoie sur l'émission de l'attestation cible, avant que ses champs soient établis : elle y participe comme si elle y avait été rapprochée (champs, thèmes, enregistrements, doutes), et quitte son ancienne émission, qui disparaît si elle n'avait plus d'autre attestation. L'attestation lmelp rattachée à une fiche déplacée suit la fiche. Une cible elle-même déplacée est suivie jusqu'à son émission d'arrivée, quel que soit l'ordre des arbitrages ; des déplacements en cycle laissent leurs attestations en place. Les autres arbitrages attachés à l'attestation déplacée la suivent, et chacun produit un doute `arbitrage déplacé`. L'arbitrage de rapprochement porte sur un autre point que les autres sortes et se cumule avec eux ;
 - un arbitrage dont l'attestation est introuvable n'a aucun effet et produit un doute `arbitrage orphelin` ; de même pour un arbitrage de rapprochement dont l'attestation cible est introuvable ;
-- si plusieurs arbitrages portent sur la même émission, le plus récent l'emporte ; à date égale, le dernier du fichier. Les arbitrages de date se départagent entre eux, les arbitrages de rapprochement entre eux, et les autres entre eux ;
+- si plusieurs arbitrages portent sur la même émission, le plus récent l'emporte ; à date égale, le dernier du fichier. Les arbitrages de date se départagent entre eux, les arbitrages de rapprochement entre eux, « existe » et « n'existe pas » entre eux, et les arbitrages de thème, « n'existe pas » et les renvois à l'écoute entre eux. Un « existe » plus récent qu'un « n'existe pas » l'annule : l'émission revient avec son dernier arbitrage de thème ou renvoi à l'écoute ;
 - un arbitrage qui contredit lmelp s'applique, et produit un doute `contradiction lmelp`.
 
 Un arbitrage n'atteste aucune émission : il tranche entre ce que disent les sources. La commande `lmelp-pap emissions` indique le nombre d'arbitrages lus.
@@ -255,7 +266,7 @@ La commande lit le cache, reconstruit la liste et lance un serveur local qui ser
 La page garde la frise et les filtres de la page publiée (année, thème, source, type de doute). Sous le détail de chaque émission s'ajoutent :
 
 - une case par thème (livres, cinéma, théâtre, opéra, télévision, musique, variétés, hommage), cochée pour les thèmes actuels, et le bouton **Arbitrer le thème**. Cocher `hommage` décoche les autres thèmes, et cocher un autre thème décoche `hommage` ;
-- le bouton **N'existe pas** ;
+- le bouton **Existe**, qui lève les doutes d'existence, et le bouton **N'existe pas** ;
 - le bouton **À écouter**, qui renvoie l'émission à l'écoute ;
 - pour une émission qui a un doute de date (`désaccord de date` ou `jour inhabituel`), ou dont la date est déjà arbitrée, chaque date candidate, c'est-à-dire chaque date de première diffusion que donnent ses sources, avec son jour et ses sources. La date actuelle est cochée et le jour habituel signalé. Le bouton **Retenir cette date** enregistre un arbitrage de date ; sur une date déjà arbitrée, il la remplace sans toucher à l'arbitrage de thème ni au renvoi à l'écoute :
 
@@ -276,7 +287,7 @@ La page garde la frise et les filtres de la page publiée (année, thème, sourc
 
   La justification choisie sous l'émission accompagne la décision ;
 - les justifications en un clic, « titre explicite », « écouté l'enregistrement » et « connaissance de l'émission », et un champ libre facultatif ;
-- le bouton **Annuler l'arbitrage**, pour une émission dont le thème ou la date est arbitré, ou qui est renvoyée à l'écoute.
+- le bouton **Annuler l'arbitrage**, pour une émission dont le thème, la date ou l'existence est arbitré, ou qui est renvoyée à l'écoute. Il retire tous les arbitrages de l'émission, « existe » compris.
 
 L'outil attache l'arbitrage à l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr, sinon une autre attestation. À chaque décision, il écrit `arbitrages.csv`, reconstruit la liste, réécrit ses CSV, et la page se met à jour aussitôt : l'émission change d'aspect, ou sort de la liste (arbitrée sans le thème livres, ou inexistante). Un message sous le bandeau « Mode arbitrage » confirme la décision.
 
@@ -301,7 +312,7 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | Requête | Effet |
 |---|---|
 | `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. |
-| `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
+| `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
 
 Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, date absente des dates candidates ou émission sans doute de date, attestation sans rapprochement ambigu ou émission qui n'est pas rivale, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
@@ -309,6 +320,18 @@ Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnee
 ## Règles de construction
 
 **Rapprochement.** Deux attestations décrivent la même émission si elles ont la même date, ou au plus trois jours d'écart avec des thèmes compatibles. Un thème inconnu est compatible avec tous les thèmes.
+
+**Archive partagée.** Deux émissions qui ont une date d'attestation en commun et dont des enregistrements partagent une archive (`ITEMA_24209925`) sont une seule émission : leurs attestations sont réunies, quels que soient leurs thèmes. Une fiche par livre que radiofrance.fr étiquette d'un thème incompatible avec l'émission (« Les Piliers de la Mer », de Sylvain Tesson, étiquetée « cinéma » le 3 août 2025) rejoint ainsi l'émission entière, au lieu de former une émission `-b` ; son thème produit un doute `thèmes divergents`. Une archive partagée sans date commune (`ITEMA_24041574`, en 1992 et en 2013) signale une republication : les émissions restent distinctes. La réunion a lieu avant les arbitrages de rapprochement.
+
+**Archive d'une autre émission.** Une attestation dont un enregistrement porte, dans le nom de son fichier, une date à plus de trois jours de la sienne, et l'archive (ITEMA) d'une autre émission datée de ce jour-là, rejoint cette émission. La fiche « L'État sauvage », de Georges Conchon, que radiofrance.fr date du 16 novembre 1961, porte ainsi le fichier `14007-15.11.1964-ITEMA_23788885-…`, l'archive de l'émission du 15 novembre 1964 : elle rejoint cette émission. Dans l'émission qu'elle rejoint, sa date devient une date de **publication** : elle reste dans `attestations.csv`, mais ne date pas l'émission, n'entre pas dans le désaccord de date et ne la rapproche d'aucune autre émission. La règle déplace une attestation, jamais une émission entière :
+
+- une émission dont toutes les attestations partiraient reste distincte : une émission qui republie l'archive d'une autre n'est pas fusionnée avec elle ;
+- une fiche qu'une source vérifiée rattache à son émission y reste ;
+- une attestation qui porte un arbitrage de rapprochement (`garder ici` ou une attestation cible) reste où l'arbitrage la met : la décision humaine l'emporte ;
+- une archive (ITEMA) qui désigne plusieurs émissions candidates datées du jour du fichier ne déplace rien ;
+- le fichier doit être daté du jour même de l'émission retenue : une archive remise en ligne un vendredi (`14007-24.10.2024-ITEMA_23902448-…`, des archives de 1959 sur François Truffaut) ne rejoint pas l'émission du dimanche suivant.
+
+Le déplacement a lieu après la réunion des archives partagées et avant les arbitrages de rapprochement.
 
 **Extraits.** Un extrait atteste son émission sans la décrire en entier :
 

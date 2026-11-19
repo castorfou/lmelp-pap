@@ -423,6 +423,62 @@ def test_un_extrait_l_est_pour_tous_les_fichiers_de_son_archive() -> None:
     ]
 
 
+# L'émission du 3 août 2025 : une seule archive (ITEMA) pour l'émission entière
+# (segment S0215) et ses fiches par livre (S0216…), chaque fichier publié en
+# plusieurs encodages au nom distinct (-27-<empreinte>.m4a, -22-<empreinte>.mp3).
+_AOUT_2025 = "https://media.radiofrance-podcast.net/podcast09/14007-03.08.2025-ITEMA_24209925-2025F4007"
+URL_AOUT_INTEGRAL = f"{_AOUT_2025}S0215-NET_MFI_28633-27-0e049dfbe9.m4a"
+URL_AOUT_EXTRAIT = f"{_AOUT_2025}S0216-ITE_00152552_RSCE-27-a2c695976c.m4a"
+URL_AOUT_EXTRAIT_MP3 = f"{_AOUT_2025}S0216-ITE_00152552_RSCE-22-10ad9817e5.mp3"
+
+
+def test_l_emission_entiere_reste_integrale_quand_ses_extraits_partagent_son_archive() -> (
+    None
+):
+    dimanche = Attestation(
+        source="radiofrance",
+        source_id="le-masque-et-la-plume-du-dimanche-03-aout-2025-5191918",
+        date=date(2025, 8, 3),
+        themes=frozenset({"livres"}),
+        titre="Les nouveaux livres de Simon Chevrier, Sylvain Tesson",
+        duree="00:51:36",
+        enregistrements=(
+            Enregistrement(url=URL_AOUT_INTEGRAL, type="intégral", duree="00:51:36"),
+        ),
+    )
+    par_livre = Attestation(
+        source="radiofrance",
+        source_id="photo-sur-demande-de-simon-chevrier-8393889",
+        date=date(2025, 8, 3),
+        themes=frozenset({"livres"}),
+        titre='"Photo sur demande" : un premier roman',
+        duree="00:08:21",
+        enregistrements=(
+            Enregistrement(url=URL_AOUT_EXTRAIT, type="extrait", duree="00:08:21"),
+        ),
+        extrait=True,
+    )
+    # la Wayback ne connaît que le nom du fichier : lettre S, donc « intégral »
+    wayback = Attestation(
+        source="wayback_podcast",
+        source_id="ITEMA_24209925",
+        date=date(2025, 8, 3),
+        enregistrements=(
+            Enregistrement(url=URL_AOUT_INTEGRAL, type="intégral"),
+            Enregistrement(url=URL_AOUT_EXTRAIT_MP3, type="intégral"),
+        ),
+    )
+
+    liste, _doutes = construire_liste([dimanche, par_livre, wayback])
+
+    types = {e.url: e.type for e in liste[0].enregistrements}
+    assert types == {
+        URL_AOUT_INTEGRAL: "intégral",
+        URL_AOUT_EXTRAIT: "extrait",
+        URL_AOUT_EXTRAIT_MP3: "extrait",
+    }
+
+
 URL_HITCHCOCK = "https://media.radiofrance-podcast.net/podcast09/14007-01.01.1967-ITEMA_23820437-1967F4007E0001"
 
 
@@ -686,6 +742,249 @@ def test_un_extrait_au_theme_absent_de_l_emission_entiere_est_un_doute() -> None
     assert "thèmes divergents" in _types(doutes, "2024-08-18")
 
 
+_ARCHIVE_3_AOUT_2025 = "https://media.radiofrance-podcast.net/podcast09/14007-03.08.2025-ITEMA_24209925-2025F4007"
+
+
+def _dimanche_3_aout_2025() -> list[Attestation]:
+    """Le 3 août 2025 : la fiche par livre de Sylvain Tesson, étiquetée « cinéma »
+    par radiofrance.fr, partage l'archive (ITEMA) de l'émission entière."""
+    jour = date(2025, 8, 3)
+    return [
+        Attestation(
+            source="radiofrance",
+            source_id="le-masque-et-la-plume-du-dimanche-03-aout-2025-5191918",
+            date=jour,
+            themes=frozenset({"livres"}),
+            duree="00:51:36",
+            enregistrements=(
+                Enregistrement(
+                    url=f"{_ARCHIVE_3_AOUT_2025}S0215-NET_MFI_28633-27.m4a",
+                    type="intégral",
+                ),
+            ),
+        ),
+        Attestation(
+            source="radiofrance",
+            source_id="les-piliers-de-la-mer-de-sylvain-tesson-9180759",
+            date=jour,
+            themes=frozenset({"cinéma"}),
+            duree="00:08:32",
+            enregistrements=(
+                Enregistrement(
+                    url=f"{_ARCHIVE_3_AOUT_2025}S0216-ITE_00152552_RSCE-27.m4a",
+                    type="extrait",
+                ),
+            ),
+            extrait=True,
+        ),
+        Attestation(
+            source="wayback_podcast",
+            source_id="ITEMA_24209925",
+            date=jour,
+            enregistrements=(
+                Enregistrement(
+                    url=f"{_ARCHIVE_3_AOUT_2025}S0215-NET_MFI_28633-22.mp3",
+                    type="intégral",
+                ),
+            ),
+        ),
+    ]
+
+
+def test_deux_emissions_du_meme_jour_partageant_une_archive_n_en_font_qu_une() -> None:
+    _liste, doutes = construire_liste(_dimanche_3_aout_2025())
+
+    emissions = {d.emission_id for d in doutes}
+    assert "2025-08-03-b" not in emissions
+    assert _types(doutes, "2025-08-03") == ["thèmes divergents"]
+
+
+def test_une_archive_partagee_a_des_dates_differentes_ne_reunit_pas_les_emissions() -> (
+    None
+):
+    # ITEMA_24041574 : une même archive republiée en 1992 et en 2013
+    archive = "https://media.radiofrance-podcast.net/podcast09/14007-26.04.1992-ITEMA_24041574-2024F4007E0010-27.m4a"
+    emissions = [
+        Attestation(
+            source="radiofrance",
+            source_id=f"fiche-{jour.isoformat()}",
+            date=jour,
+            themes=frozenset({"livres"}),
+            enregistrements=(Enregistrement(url=archive, type="extrait"),),
+            extrait=True,
+        )
+        for jour in (date(1992, 4, 26), date(2013, 9, 22))
+    ]
+
+    liste, _doutes = construire_liste(emissions)
+
+    assert [e.id for e in liste] == ["1992-04-26", "2013-09-22"]
+
+
+_ARCHIVE_CONCHON = _MEDIA + "14007-15.11.1964-ITEMA_23788885-2024F4007E0113"
+
+
+def _conchon() -> list[Attestation]:
+    """La fiche de « L'État sauvage », datée du 16/11/1961 par radiofrance.fr,
+    dont l'enregistrement est l'archive de l'émission du 15/11/1964."""
+    jeudi, dimanche = date(1961, 11, 16), date(1964, 11, 15)
+    return [
+        Attestation(
+            source="radiofrance",
+            source_id="georges-conchon-l-etat-sauvage-1624736",
+            date=jeudi,
+            themes=frozenset({"livres"}),
+            enregistrements=(
+                Enregistrement(url=f"{_ARCHIVE_CONCHON}-27.m4a", type="extrait"),
+            ),
+            extrait=True,
+        ),
+        Attestation(
+            source="radiofrance",
+            source_id="jean-cau-la-pitie-de-dieu-9539607",
+            date=jeudi,
+            themes=frozenset({"livres"}),
+            extrait=True,
+        ),
+        Attestation(
+            source="ina",
+            source_id="PH_PHD88021067",
+            date=jeudi,
+            themes=frozenset({"livres"}),
+        ),
+        Attestation(
+            source="wayback_podcast",
+            source_id="ITEMA_23788885",
+            date=dimanche,
+            enregistrements=(
+                Enregistrement(url=f"{_ARCHIVE_CONCHON}-22.mp3", type="extrait"),
+            ),
+            extrait=True,
+        ),
+        Attestation(
+            source="ina",
+            source_id="PH_PHD90000820",
+            date=dimanche,
+            themes=frozenset({"livres"}),
+        ),
+    ]
+
+
+def test_une_fiche_dont_l_archive_est_celle_d_une_autre_emission_la_rejoint() -> None:
+    liste, doutes = construire_liste(_conchon())
+
+    assert {i: sorted(ids) for i, ids in _attestations_par_emission(liste).items()} == {
+        "1961-11-16": ["PH_PHD88021067", "jean-cau-la-pitie-de-dieu-9539607"],
+        "1964-11-15": [
+            "ITEMA_23788885",
+            "PH_PHD90000820",
+            "georges-conchon-l-etat-sauvage-1624736",
+        ],
+    }
+    assert [e.date for e in liste] == [date(1961, 11, 16), date(1964, 11, 15)]
+    assert _types(doutes, "1961-11-16") == []
+    assert _types(doutes, "1964-11-15") == []
+
+
+def test_une_emission_dont_toutes_les_attestations_partiraient_reste_distincte() -> (
+    None
+):
+    # la fiche Conchon seule : partir viderait l'émission du 16/11/1961
+    fiche, _cau, _ina, wayback, ina_1964 = _conchon()
+
+    liste, doutes = construire_liste([fiche, wayback, ina_1964])
+
+    assert {i: sorted(ids) for i, ids in _attestations_par_emission(liste).items()} == {
+        "1961-11-16": ["georges-conchon-l-etat-sauvage-1624736"],
+        "1964-11-15": ["ITEMA_23788885", "PH_PHD90000820"],
+    }
+    assert "republication" in _types(doutes, "1961-11-16")
+
+
+@pytest.mark.parametrize(
+    "cible", [None, ("ina", "PH_PHD88021067")], ids=["garder ici", "cible"]
+)
+def test_un_arbitrage_de_rapprochement_l_emporte_sur_l_archive_d_une_autre_emission(
+    cible: tuple[str, str] | None,
+) -> None:
+    fiche = "georges-conchon-l-etat-sauvage-1624736"
+
+    liste, _doutes = construire_liste(
+        _conchon(), [_rapprochement("radiofrance", fiche, cible)]
+    )
+
+    (emission,) = [
+        e for e in liste if any(a.source_id == fiche for a in e.attestations)
+    ]
+    assert emission.id == "1961-11-16"
+    (attestation,) = [a for a in emission.attestations if a.source_id == fiche]
+    assert attestation.nature_date == "première diffusion"
+
+
+def test_une_archive_remise_en_ligne_hors_du_jour_d_une_emission_reste_ou_elle_est() -> (
+    None
+):
+    # ITEMA_23902448 : les archives de 1959 sur Truffaut, remises en ligne le
+    # vendredi 24/10/2024, que la Wayback rapproche de l'émission du 27/10/2024
+    archive = _MEDIA + "14007-24.10.2024-ITEMA_23902448-1959F4007E0001-27.m4a"
+    jeudi, dimanche = date(1959, 6, 25), date(2024, 10, 27)
+    attestations = [
+        Attestation(
+            source="radiofrance",
+            source_id="francois-truffaut-invite-du-masque-pour-les-400-coups-1481200",
+            date=jeudi,
+            themes=frozenset({"cinéma"}),
+            enregistrements=(Enregistrement(url=archive, type="extrait"),),
+            extrait=True,
+        ),
+        Attestation(
+            source="ina", source_id="PH_1", date=jeudi, themes=frozenset({"cinéma"})
+        ),
+        Attestation(
+            source="wayback_podcast",
+            source_id="ITEMA_23902448",
+            date=date(2024, 10, 24),
+            enregistrements=(Enregistrement(url=archive, type="extrait"),),
+            extrait=True,
+        ),
+        Attestation(
+            source="radiofrance",
+            source_id="le-masque-et-la-plume-du-dimanche-27-octobre-2024",
+            date=dimanche,
+            themes=frozenset({"cinéma"}),
+        ),
+    ]
+
+    _liste, doutes = construire_liste(attestations)
+
+    (republication,) = [d for d in doutes if d.type == "republication"]
+    assert republication.emission_id == "1959-06-25"
+
+
+def test_une_fiche_que_lmelp_verifie_ne_rejoint_pas_l_emission_de_son_archive() -> None:
+    # 2025-04-06 : l'émission du Quai du Polar, dont la fiche porte l'archive
+    # de sa rediffusion du 29/06/2025
+    slug = "le-masque-et-la-plume-depuis-le-quai-du-polar-a-lyon-du-dimanche-06-avril"
+    archive = _MEDIA + "14007-29.06.2025-ITEMA_24183916-2025F4007S0096-27.m4a"
+    fiche = replace(
+        _fiche(slug, date(2025, 4, 6), {"livres"}),
+        enregistrements=(Enregistrement(url=archive, type="intégral"),),
+    )
+    rediffusion = Attestation(
+        source="wayback_podcast",
+        source_id="ITEMA_24183916",
+        date=date(2025, 6, 29),
+        enregistrements=(Enregistrement(url=archive, type="intégral"),),
+    )
+
+    liste, doutes = construire_liste(
+        [fiche, _lmelp(slug, date(2025, 4, 7)), rediffusion]
+    )
+
+    assert _attestations_par_emission(liste)["2025-04-06"] == [slug, slug]
+    assert "sans fiche radiofrance" not in _types(doutes, "2025-04-06")
+
+
 def test_une_seconde_emission_le_meme_jour_est_une_collision() -> None:
     _liste, doutes = construire_liste(_dimanche_18_aout_2024())
 
@@ -893,6 +1192,81 @@ def test_un_arbitrage_d_existence_retire_l_emission_et_ses_doutes() -> None:
 
     assert liste == []
     assert doutes == []
+
+
+def _existence(
+    attestation: Attestation, existe: bool, jour: date = date(2026, 11, 10)
+) -> Arbitrage:
+    return Arbitrage(
+        source=attestation.source,
+        source_id=attestation.source_id,
+        sorte="existence",
+        existe=existe,
+        justification="titre explicite",
+        date=datetime.combine(jour, datetime.min.time()),
+    )
+
+
+def test_un_arbitrage_existe_leve_republication_et_attestation_fragile() -> None:
+    mage = _mage_du_kremlin()
+
+    liste, doutes = construire_liste([mage], [_existence(mage, existe=True)])
+
+    assert [(e.id, e.themes) for e in liste] == [("2026-01-14", frozenset({"livres"}))]
+    # le doute de date reste : « existe » ne porte que sur l'existence
+    assert _types(doutes, "2026-01-14") == ["jour inhabituel"]
+
+
+def test_entre_existe_et_n_existe_pas_le_plus_recent_l_emporte() -> None:
+    mage = _mage_du_kremlin()
+    existe = _existence(mage, existe=True, jour=date(2026, 11, 11))
+    inexistante = _existence(mage, existe=False)
+
+    liste, _doutes = construire_liste([mage], [existe, inexistante])
+    assert [e.id for e in liste] == ["2026-01-14"]
+
+    liste, _doutes = construire_liste(
+        [mage], [replace(existe, date=datetime(2026, 11, 9)), inexistante]
+    )
+    assert liste == []
+
+
+def test_un_arbitrage_existe_garde_le_theme_arbitre() -> None:
+    avignon = _avignon()
+    theme = _theme("radiofrance", "festival-d-avignon-5488789", {"livres", "théâtre"})
+    existe = _existence(avignon[1], existe=True, jour=date(2026, 11, 11))
+
+    liste, _doutes = construire_liste(avignon, [theme, existe])
+
+    assert [(e.id, e.themes) for e in liste] == [
+        ("2010-07-11", frozenset({"livres", "théâtre"}))
+    ]
+    assert liste[0].arbitrage == theme
+    assert liste[0].arbitrage_existence == existe
+
+
+def test_un_arbitrage_existe_annule_n_existe_pas_et_rend_le_theme_arbitre() -> None:
+    avignon = _avignon()
+    theme = _theme(
+        "radiofrance", "festival-d-avignon-5488789", {"livres"}, date(2026, 11, 9)
+    )
+    inexistante = _existence(avignon[1], existe=False, jour=date(2026, 11, 10))
+    existe = _existence(avignon[1], existe=True, jour=date(2026, 11, 11))
+
+    liste, _doutes = construire_liste(avignon, [theme, inexistante, existe])
+
+    assert [(e.id, e.themes) for e in liste] == [("2010-07-11", frozenset({"livres"}))]
+    assert liste[0].arbitrage == theme
+
+
+def test_un_arbitrage_existe_sur_une_attestation_introuvable_est_orphelin() -> None:
+    orphelin = replace(_existence(_mage_du_kremlin(), existe=True), source_id="x-1")
+
+    _liste, doutes = construire_liste([_mage_du_kremlin()], [orphelin])
+
+    assert [(d.type, d.source_id) for d in doutes if "orphelin" in d.type] == [
+        ("arbitrage orphelin", "x-1")
+    ]
 
 
 def test_entre_deux_arbitrages_d_une_attestation_le_plus_recent_l_emporte() -> None:

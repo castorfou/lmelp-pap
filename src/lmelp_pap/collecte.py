@@ -12,7 +12,7 @@ import os
 import re
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC
 from pathlib import Path
 from typing import Any
@@ -55,9 +55,13 @@ def lire_wayback_podcast(dossier: Path) -> list[Attestation]:
 
 
 def lire_ina(dossier: Path) -> list[Attestation]:
-    """Les notices du catalogue INA, telles que la collecte les a enregistrées."""
+    """Les notices du catalogue INA, telles que la collecte les a enregistrées,
+    avec la fiche détaillée de celles qui en ont une en cache."""
+    fiches = {
+        f.stem: f.read_text(encoding="utf-8") for f in dossier.glob("fiches/*.html")
+    }
     with (dossier / "notices.csv").open(encoding="utf-8", newline="") as f:
-        return ina.lire_notices(csv.DictReader(f))
+        return ina.lire_notices(csv.DictReader(f), fiches=fiches)
 
 
 def lire_anciennes_listes(dossier: Path) -> list[Attestation]:
@@ -158,6 +162,43 @@ def collecter_ina(dossier: Path) -> None:
         sans_rang(toutes["url_ina"]).isin(litterature).map({True: "oui", False: "non"})
     )
     toutes.drop(columns=["source"]).to_csv(dossier / "notices.csv", index=False)
+    _collecter_fiches_ina(dossier, sans_rang(toutes["url_ina"]))
+
+
+def _collecter_fiches_ina(dossier: Path, urls: Iterable[str]) -> None:
+    """Télécharge la fiche détaillée de chaque notice : descripteurs, chapeau,
+    résumés, statut de diffusion. Une fiche déjà en cache n'est pas
+    téléchargée de nouveau : une collecte interrompue reprend où elle s'était
+    arrêtée.
+    """
+    fiches = dossier / "fiches"
+    fiches.mkdir(parents=True, exist_ok=True)
+    a_telecharger = [
+        (url, fichier)
+        for url in dict.fromkeys(urls)
+        if not (fichier := fiches / f"{ina.identifiant(url)}.html").exists()
+    ]
+    debut = time.monotonic()
+    for rang, (url, fichier) in enumerate(a_telecharger, start=1):
+        reponse = _get(url)
+        if reponse.status_code == 200:
+            fichier.write_text(reponse.content.decode("utf-8"), "utf-8")
+        time.sleep(_DELAI)
+        if rang % _PAS_DE_PROGRESSION == 0 or rang == len(a_telecharger):
+            _afficher_progression(rang, len(a_telecharger), time.monotonic() - debut)
+
+
+_PAS_DE_PROGRESSION = 100  # fiches entre deux lignes de progression
+
+
+def _afficher_progression(fait: int, total: int, ecoule: float) -> None:
+    """Une ligne sur stderr : lisible en direct comme dans un journal."""
+    restant = round(ecoule / fait * (total - fait) / 60)
+    print(
+        f"ina : fiches détaillées {fait}/{total} (≈ {restant} min restantes)",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 # Listes archivées : préfixe d'URL dans la Wayback Machine, encodage des pages.

@@ -2,9 +2,9 @@
 
 Colonnes : ``source``, ``source_id`` (l'attestation arbitrée), ``sorte``
 (``thème``, ``existence``, ``date``, ``rapprochement``, ou ``écoute`` pour un
-renvoi à l'écoute), ``valeur`` (les thèmes séparés par ``;``, ``n'existe pas``,
-la date retenue au format ISO, ``à écouter``, ou pour un rapprochement
-``garder ici`` ou l'attestation cible ``source:source_id``),
+renvoi à l'écoute), ``valeur`` (les thèmes séparés par ``;``, ``existe`` ou
+``n'existe pas``, la date retenue au format ISO, ``à écouter``, ou pour un
+rapprochement ``garder ici`` ou l'attestation cible ``source:source_id``),
 ``justification`` (facultative) et ``date`` de la décision (ISO 8601, jour ou
 jour et heure).
 """
@@ -16,6 +16,7 @@ from pathlib import Path
 from lmelp_pap.liste import HOMMAGE, Arbitrage, CleAttestation, Sorte
 
 
+EXISTANTE = "existe"
 INEXISTANTE = "n'existe pas"
 A_ECOUTER = "à écouter"
 GARDER_ICI = "garder ici"
@@ -56,13 +57,13 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
     """L'arbitrage d'une ligne du fichier ; ``ValueError`` si elle est invalide."""
     sorte, valeur = ligne["sorte"].strip(), ligne["valeur"].strip()
     themes = frozenset(t.strip() for t in valeur.split(";") if t.strip())
-    retenue, cible = None, None
+    retenue, cible, existe = None, None, False
     if sorte == "thème" and themes:
         if erreur := erreur_de_themes(themes):
             raise ValueError(f"arbitrages.csv, ligne {numero} : {erreur}")
         sorte_lue: Sorte = "thème"
-    elif sorte == "existence" and valeur == INEXISTANTE:
-        sorte_lue, themes = "existence", frozenset()
+    elif sorte == "existence" and valeur in (EXISTANTE, INEXISTANTE):
+        sorte_lue, themes, existe = "existence", frozenset(), valeur == EXISTANTE
     elif sorte == "écoute" and valeur == A_ECOUTER:
         sorte_lue, themes = "écoute", frozenset()
     elif sorte == "date" and (retenue := lire_date(valeur)):
@@ -75,9 +76,10 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
         raise ValueError(
             f"arbitrages.csv, ligne {numero} : sorte « {sorte} » et valeur "
             f"« {valeur} » invalides (attendu : thème et des thèmes séparés par "
-            f"« ; », existence et « {INEXISTANTE} », date et une date "
-            f"AAAA-MM-JJ, écoute et « {A_ECOUTER} », ou rapprochement et "
-            f"« {GARDER_ICI} » ou une attestation source:source_id)"
+            f"« ; », existence et « {EXISTANTE} » ou « {INEXISTANTE} », date "
+            f"et une date AAAA-MM-JJ, écoute et « {A_ECOUTER} », ou "
+            f"rapprochement et « {GARDER_ICI} » ou une attestation "
+            f"source:source_id)"
         )
     return Arbitrage(
         source=ligne["source"].strip(),
@@ -86,6 +88,7 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
         themes=themes,
         date_retenue=retenue,
         cible=cible,
+        existe=existe,
         justification=(ligne.get("justification") or "").strip(),
         date=datetime.fromisoformat(ligne["date"].strip()),
     )
@@ -150,10 +153,11 @@ def retirer_arbitrages(chemin: Path, cles: set[CleAttestation]) -> int:
 
 
 def valeur(arbitrage: Arbitrage) -> str:
-    """La colonne ``valeur`` : les thèmes séparés par ``;``, ``n'existe pas``, la
-    date retenue, ``à écouter``, ``garder ici`` ou l'attestation cible."""
+    """La colonne ``valeur`` : les thèmes séparés par ``;``, ``existe`` ou
+    ``n'existe pas``, la date retenue, ``à écouter``, ``garder ici`` ou
+    l'attestation cible."""
     if arbitrage.sorte == "existence":
-        return INEXISTANTE
+        return EXISTANTE if arbitrage.existe else INEXISTANTE
     if arbitrage.sorte == "écoute":
         return A_ECOUTER
     if arbitrage.sorte == "date":
