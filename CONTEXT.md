@@ -43,7 +43,7 @@ Le ou les domaines critiqués dans une émission : livres, cinéma, théâtre, o
 _Avoid_ : type, catégorie, genre
 
 **Enregistrement** :
-Un fichier audio d'une émission, intégral ou extrait, publié par une source. Une émission peut avoir plusieurs enregistrements.
+Un fichier audio d'une émission, intégral ou extrait, fourni par une source : publié en ligne, ou confié par le fonds privé d'un passionné (cassette numérisée). Une émission peut avoir plusieurs enregistrements. Un enregistrement intégral couvre toute l'émission ; plusieurs extraits mis bout à bout n'en font pas un.
 _Avoid_ : audio, podcast, MP3
 
 **Animateur** :
@@ -57,7 +57,7 @@ _Avoid_ : jour de programmation, créneau
 ### Sources et liste
 
 **Source** :
-Un fonds qui atteste l'existence d'émissions (catalogue INA, base des podcasts France Inter, lmelp…).
+Un fonds qui atteste l'existence d'émissions (catalogue INA, base des podcasts France Inter, lmelp, collection privée d'un passionné…).
 _Avoid_ : provider, origine
 
 **Source vérifiée** :
