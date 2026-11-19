@@ -821,6 +821,135 @@ def test_une_archive_partagee_a_des_dates_differentes_ne_reunit_pas_les_emission
     assert [e.id for e in liste] == ["1992-04-26", "2013-09-22"]
 
 
+_ARCHIVE_CONCHON = _MEDIA + "14007-15.11.1964-ITEMA_23788885-2024F4007E0113"
+
+
+def _conchon() -> list[Attestation]:
+    """La fiche de « L'État sauvage », datée du 16/11/1961 par radiofrance.fr,
+    dont l'enregistrement est l'archive de l'émission du 15/11/1964."""
+    jeudi, dimanche = date(1961, 11, 16), date(1964, 11, 15)
+    return [
+        Attestation(
+            source="radiofrance",
+            source_id="georges-conchon-l-etat-sauvage-1624736",
+            date=jeudi,
+            themes=frozenset({"livres"}),
+            enregistrements=(
+                Enregistrement(url=f"{_ARCHIVE_CONCHON}-27.m4a", type="extrait"),
+            ),
+            extrait=True,
+        ),
+        Attestation(
+            source="radiofrance",
+            source_id="jean-cau-la-pitie-de-dieu-9539607",
+            date=jeudi,
+            themes=frozenset({"livres"}),
+            extrait=True,
+        ),
+        Attestation(
+            source="ina",
+            source_id="PH_PHD88021067",
+            date=jeudi,
+            themes=frozenset({"livres"}),
+        ),
+        Attestation(
+            source="wayback_podcast",
+            source_id="ITEMA_23788885",
+            date=dimanche,
+            enregistrements=(
+                Enregistrement(url=f"{_ARCHIVE_CONCHON}-22.mp3", type="extrait"),
+            ),
+            extrait=True,
+        ),
+        Attestation(
+            source="ina",
+            source_id="PH_PHD90000820",
+            date=dimanche,
+            themes=frozenset({"livres"}),
+        ),
+    ]
+
+
+def test_une_fiche_dont_l_archive_est_celle_d_une_autre_emission_la_rejoint() -> None:
+    liste, doutes = construire_liste(_conchon())
+
+    assert {i: sorted(ids) for i, ids in _attestations_par_emission(liste).items()} == {
+        "1961-11-16": ["PH_PHD88021067", "jean-cau-la-pitie-de-dieu-9539607"],
+        "1964-11-15": [
+            "ITEMA_23788885",
+            "PH_PHD90000820",
+            "georges-conchon-l-etat-sauvage-1624736",
+        ],
+    }
+    assert [e.date for e in liste] == [date(1961, 11, 16), date(1964, 11, 15)]
+    assert _types(doutes, "1961-11-16") == []
+    assert _types(doutes, "1964-11-15") == []
+
+
+def test_une_archive_remise_en_ligne_hors_du_jour_d_une_emission_reste_ou_elle_est() -> (
+    None
+):
+    # ITEMA_23902448 : les archives de 1959 sur Truffaut, remises en ligne le
+    # vendredi 24/10/2024, que la Wayback rapproche de l'émission du 27/10/2024
+    archive = _MEDIA + "14007-24.10.2024-ITEMA_23902448-1959F4007E0001-27.m4a"
+    jeudi, dimanche = date(1959, 6, 25), date(2024, 10, 27)
+    attestations = [
+        Attestation(
+            source="radiofrance",
+            source_id="francois-truffaut-invite-du-masque-pour-les-400-coups-1481200",
+            date=jeudi,
+            themes=frozenset({"cinéma"}),
+            enregistrements=(Enregistrement(url=archive, type="extrait"),),
+            extrait=True,
+        ),
+        Attestation(
+            source="ina", source_id="PH_1", date=jeudi, themes=frozenset({"cinéma"})
+        ),
+        Attestation(
+            source="wayback_podcast",
+            source_id="ITEMA_23902448",
+            date=date(2024, 10, 24),
+            enregistrements=(Enregistrement(url=archive, type="extrait"),),
+            extrait=True,
+        ),
+        Attestation(
+            source="radiofrance",
+            source_id="le-masque-et-la-plume-du-dimanche-27-octobre-2024",
+            date=dimanche,
+            themes=frozenset({"cinéma"}),
+        ),
+    ]
+
+    _liste, doutes = construire_liste(attestations)
+
+    (republication,) = [d for d in doutes if d.type == "republication"]
+    assert republication.emission_id == "1959-06-25"
+
+
+def test_une_fiche_que_lmelp_verifie_ne_rejoint_pas_l_emission_de_son_archive() -> None:
+    # 2025-04-06 : l'émission du Quai du Polar, dont la fiche porte l'archive
+    # de sa rediffusion du 29/06/2025
+    slug = "le-masque-et-la-plume-depuis-le-quai-du-polar-a-lyon-du-dimanche-06-avril"
+    archive = _MEDIA + "14007-29.06.2025-ITEMA_24183916-2025F4007S0096-27.m4a"
+    fiche = replace(
+        _fiche(slug, date(2025, 4, 6), {"livres"}),
+        enregistrements=(Enregistrement(url=archive, type="intégral"),),
+    )
+    rediffusion = Attestation(
+        source="wayback_podcast",
+        source_id="ITEMA_24183916",
+        date=date(2025, 6, 29),
+        enregistrements=(Enregistrement(url=archive, type="intégral"),),
+    )
+
+    liste, doutes = construire_liste(
+        [fiche, _lmelp(slug, date(2025, 4, 7)), rediffusion]
+    )
+
+    assert _attestations_par_emission(liste)["2025-04-06"] == [slug, slug]
+    assert "sans fiche radiofrance" not in _types(doutes, "2025-04-06")
+
+
 def test_une_seconde_emission_le_meme_jour_est_une_collision() -> None:
     _liste, doutes = construire_liste(_dimanche_18_aout_2024())
 

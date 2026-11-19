@@ -182,7 +182,7 @@ Types de doute :
 - `thème inconnu` : aucune source ne donne le thème de l'émission ;
 - `thèmes divergents` : les attestations de l'émission entière ne donnent pas les mêmes thèmes, ou un extrait porte un thème qu'aucune d'elles ne donne. Des extraits aux thèmes différents (une fiche par livre, une par film) décrivent une émission mixte, sans divergence ;
 - `collision` : une autre émission a la même date de première diffusion ; le doute porte sur l'émission suffixée (`-b`, `-c`) ;
-- `republication` : un enregistrement d'une attestation porte, dans le nom de son fichier, une date à plus de trois jours de la sienne : une émission remise en ligne plus tard, ou une fiche rattachée à l'enregistrement d'une autre émission ;
+- `republication` : un enregistrement d'une attestation porte, dans le nom de son fichier, une date à plus de trois jours de la sienne : une émission remise en ligne plus tard, ou une fiche rattachée à l'enregistrement d'une autre émission. Une fiche dont l'archive est celle d'une autre émission, datée du jour du fichier, rejoint cette émission sans doute (voir **Archive d'une autre émission** dans les règles de construction) ;
 - `attestation fragile` : l'émission n'est attestée que par des extraits, que par la Wayback Machine, ou que par les deux ;
 - `contradiction lmelp` : un arbitrage contredit lmelp, en déclarant inexistante une émission vérifiée ou en lui donnant un autre thème que `livres` seul. L'arbitrage s'applique, mais la contradiction reste signalée ;
 - `arbitrage orphelin` : un arbitrage porte sur une attestation qu'aucune source ne donne plus ; il n'a aucun effet. Le doute n'a pas d'`emission_id` : `source` et `source_id` désignent l'attestation introuvable. Un arbitrage de rapprochement dont l'émission cible a disparu (son attestation cible est introuvable) est aussi orphelin : le doute porte alors sur l'émission de l'attestation arbitrée, avec `émission cible introuvable` dans `detail`, et le rapprochement ambigu, s'il demeure, reste un doute. Il en va de même quand l'émission cible est arbitrée inexistante (`émission cible arbitrée inexistante`) : l'attestation déplacée sort de la liste avec elle, et le doute n'a pas d'`emission_id` ;
@@ -321,6 +321,14 @@ Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnee
 **Rapprochement.** Deux attestations décrivent la même émission si elles ont la même date, ou au plus trois jours d'écart avec des thèmes compatibles. Un thème inconnu est compatible avec tous les thèmes.
 
 **Archive partagée.** Deux émissions qui ont une date d'attestation en commun et dont des enregistrements partagent une archive (`ITEMA_24209925`) sont une seule émission : leurs attestations sont réunies, quels que soient leurs thèmes. Une fiche par livre que radiofrance.fr étiquette d'un thème incompatible avec l'émission (« Les Piliers de la Mer », de Sylvain Tesson, étiquetée « cinéma » le 3 août 2025) rejoint ainsi l'émission entière, au lieu de former une émission `-b` ; son thème produit un doute `thèmes divergents`. Une archive partagée sans date commune (`ITEMA_24041574`, en 1992 et en 2013) signale une republication : les émissions restent distinctes. La réunion a lieu avant les arbitrages de rapprochement.
+
+**Archive d'une autre émission.** Une attestation dont un enregistrement porte, dans le nom de son fichier, une date à plus de trois jours de la sienne, et l'archive (ITEMA) d'une autre émission datée de ce jour-là, rejoint cette émission. La fiche « L'État sauvage », de Georges Conchon, que radiofrance.fr date du 16 novembre 1961, porte ainsi le fichier `14007-15.11.1964-ITEMA_23788885-…`, l'archive de l'émission du 15 novembre 1964 : elle rejoint cette émission. Dans l'émission qu'elle rejoint, sa date devient une date de **publication** : elle reste dans `attestations.csv`, mais ne date pas l'émission, n'entre pas dans le désaccord de date et ne la rapproche d'aucune autre émission. La règle déplace une attestation, jamais une émission entière :
+
+- une émission dont toutes les attestations partiraient reste distincte : une émission qui republie l'archive d'une autre n'est pas fusionnée avec elle ;
+- une fiche qu'une source vérifiée rattache à son émission y reste ;
+- le fichier doit être daté du jour même de l'émission retenue : une archive remise en ligne un vendredi (`14007-24.10.2024-ITEMA_23902448-…`, des archives de 1959 sur François Truffaut) ne rejoint pas l'émission du dimanche suivant.
+
+Le déplacement a lieu après la réunion des archives partagées et avant les arbitrages de rapprochement.
 
 **Extraits.** Un extrait atteste son émission sans la décrire en entier :
 

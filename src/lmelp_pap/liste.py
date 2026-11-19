@@ -49,8 +49,9 @@ class Attestation:
     url: str | None = None
     enregistrements: tuple[Enregistrement, ...] = ()
     extrait: bool = False  # un fragment, qui ne décrit pas l'émission entière
-    # La date de première diffusion, de publication dans le podcast (lmelp) ou
-    # de rediffusion (INA) : seule une première diffusion date l'émission.
+    # La date de première diffusion, de publication (dans le podcast pour
+    # lmelp, d'une fiche rattachée par son archive) ou de rediffusion (INA) :
+    # seule une première diffusion date l'émission.
     nature_date: Literal["première diffusion", "publication", "rediffusion"] = (
         "première diffusion"
     )
@@ -164,6 +165,7 @@ def construire_liste(
             else:
                 _rapprocher(a, groupes, index)
     _reunir_archives_partagees(groupes)
+    _rejoindre_les_archives(groupes)
 
     deplacements = _deplacer(groupes, _familles(arbitrages).rapprochements)
     emissions, retirees = _arbitrer([_fusionner(g) for g in groupes], arbitrages)
@@ -501,6 +503,9 @@ def _doutes(
                 if not any(_meme_fiche(a, b) for b in emission.attestations):
                     ajouter("sans fiche radiofrance", f"aucune fiche {a.url}", a)
                 continue
+            if a.nature_date == "publication":
+                # rattachée par son archive : sa date ne la rapproche de rien
+                continue
             rivales = tuple(
                 (emissions[i].id, attestation_stable(emissions[i]).cle)
                 for i in _proches(a.date, par_jour)
@@ -570,12 +575,17 @@ def _doutes(
             if divergence:
                 ajouter("thèmes divergents", divergence)
         for a in emission.attestations:
+            # une date de publication ne date pas l'émission : son fichier se
+            # compare à la date de l'émission
+            reference = (
+                a.date if a.nature_date == "première diffusion" else (emission.date)
+            )
             dates_des_fichiers = sorted(
                 {
                     f.date
                     for e in a.enregistrements
                     if (f := lire_nom_fichier(e.url))
-                    and abs((f.date - a.date).days) > ECART_REPUBLICATION_JOURS
+                    and abs((f.date - reference).days) > ECART_REPUBLICATION_JOURS
                 }
             )
             if dates_des_fichiers:
@@ -980,6 +990,51 @@ def _reunir_archives_partagees(groupes: list[list[Attestation]]) -> None:
             groupes[r].extend(groupes[i])
             groupes[i] = []
     groupes[:] = [g for g in groupes if g]
+
+
+def _rejoindre_les_archives(groupes: list[list[Attestation]]) -> None:
+    """Déplace vers son émission une attestation dont l'enregistrement est
+    l'archive (ITEMA) d'une autre émission, datée du jour de ce fichier.
+
+    Le fichier est daté à plus de ECART_REPUBLICATION_JOURS jours de
+    l'attestation : la date de la source est fausse, ou celle d'une remise en
+    ligne. Dans l'émission qu'elle rejoint, cette date devient une date de
+    publication, qui ne date pas l'émission.
+
+    Une fiche qu'une source vérifiée rattache à son émission y reste (ADR
+    0003). Une émission dont toutes les attestations partiraient n'est pas
+    fusionnée avec une autre : une émission qui republie l'archive d'une autre
+    reste distincte (voir ``_reunir_archives_partagees``).
+    """
+    jours = [_valeur("date", groupe) for groupe in groupes]
+    par_archive: defaultdict[str, set[int]] = defaultdict(set)
+    for i, groupe in enumerate(groupes):
+        for a in groupe:
+            for e in a.enregistrements:
+                if (itema := _itema(e.url)) is not None:
+                    par_archive[itema].add(i)
+
+    def cibles(a: Attestation, i: int) -> set[int]:
+        if any(_meme_fiche(b, a) for b in groupes[i] if b.source in SOURCES_VERIFIEES):
+            return set()
+        return {
+            j
+            for e in a.enregistrements
+            if (f := lire_nom_fichier(e.url))
+            and abs((f.date - a.date).days) > ECART_REPUBLICATION_JOURS
+            and (itema := _itema(e.url)) is not None
+            for j in par_archive[itema]
+            if j != i and jours[j] == f.date
+        }
+
+    departs: list[tuple[int, Attestation, int]] = []
+    for i, groupe in enumerate(groupes):
+        partantes = [(a, c) for a in groupe if len(c := cibles(a, i)) == 1]
+        if len(partantes) < len(groupe):
+            departs += [(i, a, min(c)) for a, c in partantes]
+    for i, a, j in departs:
+        groupes[i].remove(a)
+        groupes[j].append(replace(a, nature_date="publication"))
 
 
 def _meme_fiche(verifiee: Attestation, b: Attestation) -> bool:
