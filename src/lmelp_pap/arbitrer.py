@@ -11,7 +11,8 @@ API :
 - ``POST /api/arbitrages`` : enregistre un arbitrage sur une émission
   (``emission_id``, ``sorte`` : ``thème``, ``existence``, ``date``,
   ``rapprochement`` ou ``écoute`` pour un renvoi à l'écoute, ``themes``,
-  ``date``, ``justification``) ; un arbitrage de rapprochement porte en plus
+  ``date``, ``justification``) ; un arbitrage d'existence porte en plus
+  ``valeur`` : ``existe``, ou ``n'existe pas`` (par défaut) ; un arbitrage de rapprochement porte en plus
   l'attestation ambiguë (``source``, ``source_id``) et ``vers``, l'identifiant
   de l'émission rivale où la déplacer, ou ``null`` pour la garder ici ;
 - ``POST /api/annulations`` : annule les arbitrages d'une émission
@@ -19,7 +20,8 @@ API :
 
 Chaque requête d'écriture renvoie les données à jour, comme ``GET /api/donnees``.
 Une émission y porte en plus, pour l'arbitrage de date, ses ``dates_candidates``
-(vides sans doute de date ni date arbitrée) et son ``arbitrage_date`` ; pour
+(vides sans doute de date ni date arbitrée) et son ``arbitrage_date`` ; son
+``arbitrage_existence``, quand elle est arbitrée « existe » ; pour
 l'arbitrage de rapprochement, ses ``rapprochements`` : chaque attestation
 ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 """
@@ -33,6 +35,8 @@ from pathlib import Path
 from typing import Any
 
 from lmelp_pap.arbitrages import (
+    EXISTANTE,
+    INEXISTANTE,
     ajouter_arbitrage,
     erreur_de_themes,
     lire_arbitrages,
@@ -101,11 +105,12 @@ class Atelier:
             attestation = attestation_stable(emission).cle
             sorte = demande.get("sorte")
             themes = frozenset(demande.get("themes") or ())
-            retenue, cible = None, None
+            retenue, cible, existe = None, None, False
             if sorte == "thème":
                 if erreur := erreur_de_themes(themes):
                     raise DemandeInvalideError(erreur)
             elif sorte == "existence":
+                existe = self._existe(demande.get("valeur", INEXISTANTE))
                 themes = frozenset()
             elif sorte == "date":
                 retenue = self._date_candidate(emission, demande.get("date"))
@@ -128,6 +133,7 @@ class Atelier:
                 themes=themes,
                 date_retenue=retenue,
                 cible=cible,
+                existe=existe,
                 justification=str(demande.get("justification") or "").strip(),
                 date=datetime.now().replace(microsecond=0),
             )
@@ -174,6 +180,16 @@ class Atelier:
                 f"{', '.join(rivales)}, ou null pour garder ici)"
             )
         return attestation, rivales[vers]
+
+    @staticmethod
+    def _existe(texte: object) -> bool:
+        """La valeur d'un arbitrage d'existence : existe, ou n'existe pas."""
+        if texte not in (EXISTANTE, INEXISTANTE):
+            raise DemandeInvalideError(
+                f"valeur d'existence invalide : {texte!r} (attendu : "
+                f"{EXISTANTE!r} ou {INEXISTANTE!r})"
+            )
+        return texte == EXISTANTE
 
     def _date_candidate(self, emission: Emission, texte: object) -> date:
         """La date à retenir, parmi celles des sources d'une émission qui a un
@@ -232,6 +248,7 @@ class Atelier:
         ses rapprochements."""
         emission = self._emissions[donnees["id"]]
         arbitrage = emission.arbitrage_date
+        existence = emission.arbitrage_existence
         return {
             **donnees,
             "dates_candidates": [
@@ -253,6 +270,9 @@ class Atelier:
                 }
                 if arbitrage and arbitrage.date_retenue
                 else None
+            ),
+            "arbitrage_existence": (
+                {"justification": existence.justification} if existence else None
             ),
             "rapprochements": [
                 {
