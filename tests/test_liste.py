@@ -1030,6 +1030,81 @@ def test_un_arbitrage_d_existence_retire_l_emission_et_ses_doutes() -> None:
     assert doutes == []
 
 
+def _existence(
+    attestation: Attestation, existe: bool, jour: date = date(2026, 11, 10)
+) -> Arbitrage:
+    return Arbitrage(
+        source=attestation.source,
+        source_id=attestation.source_id,
+        sorte="existence",
+        existe=existe,
+        justification="titre explicite",
+        date=datetime.combine(jour, datetime.min.time()),
+    )
+
+
+def test_un_arbitrage_existe_leve_republication_et_attestation_fragile() -> None:
+    mage = _mage_du_kremlin()
+
+    liste, doutes = construire_liste([mage], [_existence(mage, existe=True)])
+
+    assert [(e.id, e.themes) for e in liste] == [("2026-01-14", frozenset({"livres"}))]
+    # le doute de date reste : « existe » ne porte que sur l'existence
+    assert _types(doutes, "2026-01-14") == ["jour inhabituel"]
+
+
+def test_entre_existe_et_n_existe_pas_le_plus_recent_l_emporte() -> None:
+    mage = _mage_du_kremlin()
+    existe = _existence(mage, existe=True, jour=date(2026, 11, 11))
+    inexistante = _existence(mage, existe=False)
+
+    liste, _doutes = construire_liste([mage], [existe, inexistante])
+    assert [e.id for e in liste] == ["2026-01-14"]
+
+    liste, _doutes = construire_liste(
+        [mage], [replace(existe, date=datetime(2026, 11, 9)), inexistante]
+    )
+    assert liste == []
+
+
+def test_un_arbitrage_existe_garde_le_theme_arbitre() -> None:
+    avignon = _avignon()
+    theme = _theme("radiofrance", "festival-d-avignon-5488789", {"livres", "théâtre"})
+    existe = _existence(avignon[1], existe=True, jour=date(2026, 11, 11))
+
+    liste, _doutes = construire_liste(avignon, [theme, existe])
+
+    assert [(e.id, e.themes) for e in liste] == [
+        ("2010-07-11", frozenset({"livres", "théâtre"}))
+    ]
+    assert liste[0].arbitrage == theme
+    assert liste[0].arbitrage_existence == existe
+
+
+def test_un_arbitrage_existe_annule_n_existe_pas_et_rend_le_theme_arbitre() -> None:
+    avignon = _avignon()
+    theme = _theme(
+        "radiofrance", "festival-d-avignon-5488789", {"livres"}, date(2026, 11, 9)
+    )
+    inexistante = _existence(avignon[1], existe=False, jour=date(2026, 11, 10))
+    existe = _existence(avignon[1], existe=True, jour=date(2026, 11, 11))
+
+    liste, _doutes = construire_liste(avignon, [theme, inexistante, existe])
+
+    assert [(e.id, e.themes) for e in liste] == [("2010-07-11", frozenset({"livres"}))]
+    assert liste[0].arbitrage == theme
+
+
+def test_un_arbitrage_existe_sur_une_attestation_introuvable_est_orphelin() -> None:
+    orphelin = replace(_existence(_mage_du_kremlin(), existe=True), source_id="x-1")
+
+    _liste, doutes = construire_liste([_mage_du_kremlin()], [orphelin])
+
+    assert [(d.type, d.source_id) for d in doutes if "orphelin" in d.type] == [
+        ("arbitrage orphelin", "x-1")
+    ]
+
+
 def test_entre_deux_arbitrages_d_une_attestation_le_plus_recent_l_emporte() -> None:
     recent = _theme("radiofrance", "festival-d-avignon-5488789", {"livres", "théâtre"})
     ancien = _theme(

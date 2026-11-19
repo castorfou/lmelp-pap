@@ -271,3 +271,41 @@ def test_un_arbitrage_qui_combine_hommage_avec_un_autre_theme_est_refuse(
 
     with pytest.raises(ValueError, match="ligne 2 : le thème hommage"):
         main(["emissions", "--cache", str(cache), "--sortie", str(sortie)])
+
+
+def test_un_arbitrage_existe_leve_l_attestation_fragile_sans_toucher_au_reste(
+    tmp_path: Path,
+) -> None:
+    cache, sortie = tmp_path / "cache", tmp_path / "sortie"
+    _cache_rempli(cache)
+    sortie.mkdir()
+    (sortie / "arbitrages.csv").write_text(
+        "source,source_id,sorte,valeur,justification,date\n"
+        # 1967-01-01, attesté par le seul MP3 Wayback, au thème inconnu
+        "wayback_podcast,ITEMA_23820437,existence,existe,titre explicite,"
+        "2026-11-12\n",
+        encoding="utf-8",
+    )
+
+    main(["emissions", "--cache", str(cache), "--sortie", str(sortie)])
+
+    assert [
+        d["type"]
+        for d in _doutes(sortie / "doutes.csv")
+        if d["emission_id"] == "1967-01-01"
+    ] == ["thème inconnu"]
+    assert "1967-01-01" in _ids(sortie / "emissions.csv")
+
+
+def test_une_valeur_d_existence_inconnue_est_refusee(tmp_path: Path) -> None:
+    cache, sortie = tmp_path / "cache", tmp_path / "sortie"
+    _cache_rempli(cache)
+    sortie.mkdir()
+    (sortie / "arbitrages.csv").write_text(
+        "source,source_id,sorte,valeur,justification,date\n"
+        "wayback_podcast,ITEMA_23820437,existence,peut-être,,2026-11-12\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="ligne 2 : sorte « existence »"):
+        main(["emissions", "--cache", str(cache), "--sortie", str(sortie)])

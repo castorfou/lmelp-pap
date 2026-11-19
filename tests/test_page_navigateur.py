@@ -376,6 +376,39 @@ def test_en_mode_arbitrage_a_ecouter_renvoie_l_emission(
     page.locator("#arb-statut", has_text="renvoyée à l'écoute").wait_for()
 
 
+def test_en_mode_arbitrage_existe_leve_les_doutes_d_existence(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    emissions = donnees_page(dossier)
+    arbitree = [
+        {**e, "arbitrage_existence": {"justification": "titre explicite"}}
+        if e["id"] == "2015-01-18"
+        else e
+        for e in emissions
+    ]
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api={"emissions": emissions, "arbitrages": []},
+        decision={"emissions": arbitree, "arbitrages": []},
+    )
+    page.locator("#arb-nombre", has_text="0").wait_for()
+    page.locator('.ligne[data-id="2015-01-18"]').click()
+
+    with page.expect_request("**/api/arbitrages") as requete:
+        page.get_by_role("button", name="Existe", exact=True).click()
+
+    assert requete.value.post_data_json == {
+        "emission_id": "2015-01-18",
+        "sorte": "existence",
+        "valeur": "existe",
+        "justification": "",
+    }
+    page.locator("#arb-statut", has_text="arbitrée existante").wait_for()
+    page.locator(".detail", has_text="Existence arbitrée · titre explicite").wait_for()
+    assert page.get_by_role("button", name="Annuler l'arbitrage").count() == 1
+
+
 def test_une_emission_renvoyee_sans_doute_n_est_pas_a_ecouter(
     navigateur: sync_api.Browser, dossier: Path
 ) -> None:
