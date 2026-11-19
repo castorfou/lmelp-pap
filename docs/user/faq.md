@@ -118,7 +118,9 @@ Une paire `X` / `X-b` qui subsiste n'a pas d'archive commune : ce sont deux émi
 
 ### Comment trancher un « thème inconnu » au titre générique ?
 
-Les notices INA des années 1980-2000 portent pour la plupart un titre générique (« Le masque et la plume du 13 janvier 1985 ») sans description. Rien ne permet de trancher leur thème sur pièces, ni d'un coup d'œil, ni par une règle sur le titre. Le **renvoi à l'écoute** les range sous « À écouter », pour que la file « À trancher » ne garde que ce qui peut l'être.
+Les notices INA des années 1980-2000 portent pour la plupart un titre générique (« Le masque et la plume du 13 janvier 1985 »). Leur **fiche détaillée** donne souvent le thème : descripteurs, chapeau, résumé producteur (« LITTERAIRE : avec la participation de… »), à défaut résumé documentaire. La collecte INA les met en cache et la construction en tire le thème (voir [Les fiches détaillées INA](liste-des-emissions.md#les-fiches-detaillees-ina)) : un thème inconnu qui subsiste n'a rien dans sa fiche non plus. Le lien de la notice, dans les attestations de l'émission, ouvre cette fiche pour vérifier.
+
+Quand ni le titre ni la fiche ne donnent le thème, rien ne permet de le trancher sur pièces. Le **renvoi à l'écoute** range l'émission sous « À écouter », pour que la file « À trancher » ne garde que ce qui peut l'être.
 
 Un thème inconnu au titre explicite (« Hommage à Jean-Louis Bory ») se tranche directement : justification « titre explicite ».
 
