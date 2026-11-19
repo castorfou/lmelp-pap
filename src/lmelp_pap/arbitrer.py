@@ -12,9 +12,10 @@ API :
   (``emission_id``, ``sorte`` : ``thème``, ``existence``, ``date``,
   ``rapprochement`` ou ``écoute`` pour un renvoi à l'écoute, ``themes``,
   ``date``, ``justification``) ; un arbitrage d'existence porte en plus
-  ``valeur`` : ``existe``, ou ``n'existe pas`` (par défaut) ; un arbitrage de rapprochement porte en plus
-  l'attestation ambiguë (``source``, ``source_id``) et ``vers``, l'identifiant
-  de l'émission rivale où la déplacer, ou ``null`` pour la garder ici ;
+  ``valeur`` : ``existe``, ou ``n'existe pas`` (par défaut) ; un arbitrage de
+  rapprochement porte en plus l'attestation ambiguë (``source``,
+  ``source_id``) et ``vers``, l'identifiant de l'émission rivale où la
+  déplacer, ou ``null`` pour la garder ici ;
 - ``POST /api/annulations`` : annule les arbitrages d'une émission
   (``emission_id``) ou d'une attestation (``source`` et ``source_id``).
 

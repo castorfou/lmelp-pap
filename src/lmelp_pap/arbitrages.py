@@ -76,9 +76,10 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
         raise ValueError(
             f"arbitrages.csv, ligne {numero} : sorte « {sorte} » et valeur "
             f"« {valeur} » invalides (attendu : thème et des thèmes séparés par "
-            f"« ; », existence et « {EXISTANTE} » ou « {INEXISTANTE} », date et une date "
-            f"AAAA-MM-JJ, écoute et « {A_ECOUTER} », ou rapprochement et "
-            f"« {GARDER_ICI} » ou une attestation source:source_id)"
+            f"« ; », existence et « {EXISTANTE} » ou « {INEXISTANTE} », date "
+            f"et une date AAAA-MM-JJ, écoute et « {A_ECOUTER} », ou "
+            f"rapprochement et « {GARDER_ICI} » ou une attestation "
+            f"source:source_id)"
         )
     return Arbitrage(
         source=ligne["source"].strip(),
@@ -153,7 +154,8 @@ def retirer_arbitrages(chemin: Path, cles: set[CleAttestation]) -> int:
 
 def valeur(arbitrage: Arbitrage) -> str:
     """La colonne ``valeur`` : les thèmes séparés par ``;``, ``existe`` ou
-    ``n'existe pas``, la date retenue, ``à écouter``, ``garder ici`` ou l'attestation cible."""
+    ``n'existe pas``, la date retenue, ``à écouter``, ``garder ici`` ou
+    l'attestation cible."""
     if arbitrage.sorte == "existence":
         return EXISTANTE if arbitrage.existe else INEXISTANTE
     if arbitrage.sorte == "écoute":

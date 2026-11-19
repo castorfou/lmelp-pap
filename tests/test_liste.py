@@ -886,6 +886,41 @@ def test_une_fiche_dont_l_archive_est_celle_d_une_autre_emission_la_rejoint() ->
     assert _types(doutes, "1964-11-15") == []
 
 
+def test_une_emission_dont_toutes_les_attestations_partiraient_reste_distincte() -> (
+    None
+):
+    # la fiche Conchon seule : partir viderait l'émission du 16/11/1961
+    fiche, _cau, _ina, wayback, ina_1964 = _conchon()
+
+    liste, doutes = construire_liste([fiche, wayback, ina_1964])
+
+    assert {i: sorted(ids) for i, ids in _attestations_par_emission(liste).items()} == {
+        "1961-11-16": ["georges-conchon-l-etat-sauvage-1624736"],
+        "1964-11-15": ["ITEMA_23788885", "PH_PHD90000820"],
+    }
+    assert "republication" in _types(doutes, "1961-11-16")
+
+
+@pytest.mark.parametrize(
+    "cible", [None, ("ina", "PH_PHD88021067")], ids=["garder ici", "cible"]
+)
+def test_un_arbitrage_de_rapprochement_l_emporte_sur_l_archive_d_une_autre_emission(
+    cible: tuple[str, str] | None,
+) -> None:
+    fiche = "georges-conchon-l-etat-sauvage-1624736"
+
+    liste, _doutes = construire_liste(
+        _conchon(), [_rapprochement("radiofrance", fiche, cible)]
+    )
+
+    (emission,) = [
+        e for e in liste if any(a.source_id == fiche for a in e.attestations)
+    ]
+    assert emission.id == "1961-11-16"
+    (attestation,) = [a for a in emission.attestations if a.source_id == fiche]
+    assert attestation.nature_date == "première diffusion"
+
+
 def test_une_archive_remise_en_ligne_hors_du_jour_d_une_emission_reste_ou_elle_est() -> (
     None
 ):
