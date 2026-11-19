@@ -174,7 +174,7 @@ def construire_liste(
             else:
                 _rapprocher(a, groupes, index)
     _reunir_archives_partagees(groupes)
-    _rejoindre_les_archives(groupes)
+    _rattacher_aux_emissions_des_archives(groupes)
 
     deplacements = _deplacer(groupes, _familles(arbitrages).rapprochements)
     emissions, retirees = _arbitrer([_fusionner(g) for g in groupes], arbitrages)
@@ -608,32 +608,26 @@ def _doutes(
             if divergence:
                 ajouter("thèmes divergents", divergence)
         # Un arbitrage « existe » lève les doutes d'existence.
-        if emission.arbitrage_existence is not None:
-            continue
-        for a in emission.attestations:
-            # une date de publication ne date pas l'émission : son fichier se
-            # compare à la date de l'émission
-            reference = (
-                a.date if a.nature_date == "première diffusion" else (emission.date)
-            )
-            dates_des_fichiers = sorted(
-                {
-                    f.date
-                    for e in a.enregistrements
-                    if (f := lire_nom_fichier(e.url))
-                    and abs((f.date - reference).days) > ECART_REPUBLICATION_JOURS
-                }
-            )
-            if dates_des_fichiers:
-                ajouter(
-                    "republication",
-                    f"daté du {a.date}, enregistrement du "
-                    + ", ".join(str(jour) for jour in dates_des_fichiers),
-                    a,
+        if emission.arbitrage_existence is None:
+            for a in emission.attestations:
+                # une date de publication ne date pas l'émission : son fichier
+                # se compare à la date de l'émission
+                reference = (
+                    a.date if a.nature_date == "première diffusion" else emission.date
                 )
-        fragilite = _fragilite(emission.attestations)
-        if fragilite:
-            ajouter("attestation fragile", fragilite)
+                dates_des_fichiers = sorted(
+                    {jour for jour, _url in _fichiers_eloignes(a, reference)}
+                )
+                if dates_des_fichiers:
+                    ajouter(
+                        "republication",
+                        f"daté du {a.date}, enregistrement du "
+                        + ", ".join(str(jour) for jour in dates_des_fichiers),
+                        a,
+                    )
+            fragilite = _fragilite(emission.attestations)
+            if fragilite:
+                ajouter("attestation fragile", fragilite)
     return doutes
 
 
@@ -1015,12 +1009,9 @@ def _reunir_archives_partagees(groupes: list[list[Attestation]]) -> None:
     premier: dict[tuple[date, str], int] = {}
     for i, groupe in enumerate(groupes):
         for jour in _dates_de_diffusion(groupe):
-            for a in groupe:
-                for e in a.enregistrements:
-                    if (itema := _itema(e.url)) is None:
-                        continue
-                    j = premier.setdefault((jour, itema), i)
-                    parent[max(racine(i), racine(j))] = min(racine(i), racine(j))
+            for itema in _itemas(groupe):
+                j = premier.setdefault((jour, itema), i)
+                parent[max(racine(i), racine(j))] = min(racine(i), racine(j))
     for i in range(len(groupes)):
         if (r := racine(i)) != i:
             groupes[r].extend(groupes[i])
@@ -1028,7 +1019,29 @@ def _reunir_archives_partagees(groupes: list[list[Attestation]]) -> None:
     groupes[:] = [g for g in groupes if g]
 
 
-def _rejoindre_les_archives(groupes: list[list[Attestation]]) -> None:
+def _itemas(groupe: list[Attestation]) -> set[str]:
+    """Les archives (ITEMA) des enregistrements du groupe."""
+    return {
+        itema
+        for a in groupe
+        for e in a.enregistrements
+        if (itema := _itema(e.url)) is not None
+    }
+
+
+def _fichiers_eloignes(a: Attestation, reference: date) -> list[tuple[date, str]]:
+    """La date et l'URL de chaque enregistrement de l'attestation dont le nom de
+    fichier est daté à plus de ECART_REPUBLICATION_JOURS jours de
+    ``reference``."""
+    return [
+        (f.date, e.url)
+        for e in a.enregistrements
+        if (f := lire_nom_fichier(e.url))
+        and abs((f.date - reference).days) > ECART_REPUBLICATION_JOURS
+    ]
+
+
+def _rattacher_aux_emissions_des_archives(groupes: list[list[Attestation]]) -> None:
     """Déplace vers son émission une attestation dont l'enregistrement est
     l'archive (ITEMA) d'une autre émission, datée du jour de ce fichier.
 
@@ -1040,27 +1053,23 @@ def _rejoindre_les_archives(groupes: list[list[Attestation]]) -> None:
     Une fiche qu'une source vérifiée rattache à son émission y reste (ADR
     0003). Une émission dont toutes les attestations partiraient n'est pas
     fusionnée avec une autre : une émission qui republie l'archive d'une autre
-    reste distincte (voir ``_reunir_archives_partagees``).
+    reste distincte (voir ``_reunir_archives_partagees``). Une archive qui désigne plusieurs émissions candidates ne déplace rien.
     """
     jours = [_valeur("date", groupe) for groupe in groupes]
     par_archive: defaultdict[str, set[int]] = defaultdict(set)
     for i, groupe in enumerate(groupes):
-        for a in groupe:
-            for e in a.enregistrements:
-                if (itema := _itema(e.url)) is not None:
-                    par_archive[itema].add(i)
+        for itema in _itemas(groupe):
+            par_archive[itema].add(i)
 
     def cibles(a: Attestation, i: int) -> set[int]:
         if any(_meme_fiche(b, a) for b in groupes[i] if b.source in SOURCES_VERIFIEES):
             return set()
         return {
             j
-            for e in a.enregistrements
-            if (f := lire_nom_fichier(e.url))
-            and abs((f.date - a.date).days) > ECART_REPUBLICATION_JOURS
-            and (itema := _itema(e.url)) is not None
+            for jour, url in _fichiers_eloignes(a, a.date)
+            if (itema := _itema(url)) is not None
             for j in par_archive[itema]
-            if j != i and jours[j] == f.date
+            if j != i and jours[j] == jour
         }
 
     departs: list[tuple[int, Attestation, int]] = []
