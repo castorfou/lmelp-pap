@@ -11,7 +11,7 @@ Celui qui reconstitue la liste des émissions et déniche leurs enregistrements 
 _Avoid_ : chercheur, collecteur, administrateur
 
 **Exploitant lmelp** :
-Celui qui élargit la base de lmelp pour proposer plus de livres et plus d'avis de critiques : il écoute et qualifie les enregistrements rapatriés, puis envoie les valides à lmelp, où la suite se déroule. Il ne travaille que sur des enregistrements rapatriés.
+Celui qui élargit la base de lmelp pour proposer plus de livres et plus d'avis de critiques : il écoute et qualifie les enregistrements rapatriés, puis met à disposition de lmelp ceux qu'il retient, qui deviennent valides ; lmelp les prend à son rythme et la suite s'y déroule. Il ne travaille que sur des enregistrements rapatriés.
 _Avoid_ : utilisateur, opérateur, intégrateur
 
 ### Émissions et diffusions
@@ -57,8 +57,8 @@ Un fichier audio d'une émission, intégral ou extrait, fourni par une source : 
 _Avoid_ : audio, podcast, MP3
 
 **Maturité d'un enregistrement** :
-Le niveau atteint par un enregistrement intégral sur le chemin qui le mène à lmelp : localisé (une source le détient, mais on ne peut pas l'obtenir en ligne), téléchargeable (une URL répond), rapatrié (le fichier est sur le NAS, donc écoutable), qualifié (écouté, et sa qualification est favorable), valide (envoyé à lmelp par une action manuelle). Chaque source fait entrer ses enregistrements à un niveau différent : radiofrance à téléchargeable, l'INA à localisé, une cassette de passionné à rapatrié.
-_Avoid_ : statut, état d'avancement, étape
+Le niveau atteint par un enregistrement intégral sur le chemin qui le mène à lmelp : localisé (une source le détient et une démarche humaine peut le rapatrier, mais on ne peut pas l'obtenir en ligne), téléchargeable (une URL répond ; un téléchargement suffit à le rapatrier), rapatrié (le fichier est sur le NAS, donc écoutable), qualifié (écouté, et sa qualification est favorable), valide (mis à disposition de lmelp par une action manuelle ; lmelp le prend ensuite à son rythme, et l'émission entre alors dans lmelp, sans autre niveau de maturité). Chaque source fait entrer ses enregistrements à un niveau différent : radiofrance à téléchargeable, l'INA à localisé, une cassette de passionné à rapatrié. Un fonds qu'aucune démarche ne permet de rapatrier (consultation sur place seulement, comme l'InaTHÈQUE) atteste l'émission sans lui fournir d'enregistrement. La maturité ne recule que dans un cas : un enregistrement téléchargeable dont l'URL ne répond plus redevient localisé ; une fois rapatrié, la perte de l'URL ne change plus rien. La manière d'obtenir le fichier se lit dans la source, pas dans la maturité.
+_Avoid_ : statut, état d'avancement, étape, voie d'obtention, trouvé, hors NAS
 
 **Qualification** :
 Le jugement porté à l'écoute sur un enregistrement : correspond-il à cette émission, est-ce une émission littéraire, est-il complet, le retient-on ? Elle porte sur l'enregistrement, pas sur l'émission : un enregistrement non littéraire n'est peut-être pas celui de cette émission, et ne change pas le thème de l'émission. C'est elle qui départage plusieurs intégraux d'une même émission.
