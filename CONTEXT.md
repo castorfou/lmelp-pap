@@ -46,6 +46,14 @@ _Avoid_ : type, catégorie, genre
 Un fichier audio d'une émission, intégral ou extrait, fourni par une source : publié en ligne, ou confié par le fonds privé d'un passionné (cassette numérisée). Une émission peut avoir plusieurs enregistrements. Un enregistrement intégral couvre toute l'émission ; plusieurs extraits mis bout à bout n'en font pas un.
 _Avoid_ : audio, podcast, MP3
 
+**Maturité d'un enregistrement** :
+Le niveau atteint par un enregistrement intégral sur le chemin qui le mène à lmelp : localisé (une source le détient, mais on ne peut pas l'obtenir en ligne), téléchargeable (une URL répond), rapatrié (le fichier est sur le NAS, donc écoutable), qualifié (écouté, et sa qualification est favorable), valide (envoyé à lmelp par une action manuelle). Chaque source fait entrer ses enregistrements à un niveau différent : radiofrance à téléchargeable, l'INA à localisé, une cassette de passionné à rapatrié.
+_Avoid_ : statut, état d'avancement, étape
+
+**Qualification** :
+Le jugement porté à l'écoute sur un enregistrement : correspond-il à cette émission, est-ce une émission littéraire, est-il complet, le retient-on ? Elle porte sur l'enregistrement, pas sur l'émission : un enregistrement non littéraire n'est peut-être pas celui de cette émission, et ne change pas le thème de l'émission. C'est elle qui départage plusieurs intégraux d'une même émission.
+_Avoid_ : validation, arbitrage (réservé à l'émission), contrôle
+
 **Animateur** :
 La personne qui présente l'émission à une date donnée (Michel Polac et François-Régis Bastide, puis Pierre Bouteiller, Jérôme Garcin…). Il se déduit de la date, sauf si une source précise un remplaçant.
 _Avoid_ : présentateur, producteur
@@ -77,7 +85,7 @@ Un point d'une émission que les sources ne permettent pas d'affirmer avec certi
 _Avoid_ : signalement, anomalie, alerte
 
 **Arbitrage** :
-Une décision humaine qui lève un doute : le thème d'une émission, sa date de première diffusion, l'émission à laquelle se rattache une attestation, ou le fait qu'elle n'existe pas. Il s'attache à une attestation de l'émission et s'applique à chaque construction de la liste. Ce n'est pas une source : il n'atteste aucune émission, il tranche entre ce que disent les sources. Il se décide dans lmelp-pap, émission par émission, alors qu'une source vérifiée apporte des vérifications faites ailleurs.
+Une décision humaine qui lève un doute : le thème d'une émission, sa date de première diffusion, l'émission à laquelle se rattache une attestation, ou le fait qu'elle n'existe pas. Il s'attache à une attestation de l'émission et s'applique à chaque construction de la liste. Ce n'est pas une source : il n'atteste aucune émission, il tranche entre ce que disent les sources. Il se décide dans lmelp-pap, émission par émission, alors qu'une source vérifiée apporte des vérifications faites ailleurs. Il porte sur l'émission et ses attestations, jamais sur un enregistrement : c'est le rôle de la qualification.
 _Avoid_ : correction manuelle, saisie, override
 
 **Renvoi à l'écoute** :
