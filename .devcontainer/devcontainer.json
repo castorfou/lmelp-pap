@@ -97,6 +97,9 @@
             "nodeGypDependencies": true,
             "version": "lts",
             "installYarnUsingApt": false
+        },
+        "ghcr.io/devcontainers/features/docker-in-docker:4": {
+            "moby": false
         }
     },
     // Montages : HOME persistant propre au projet (survit aux rebuilds), cache pre-commit,
