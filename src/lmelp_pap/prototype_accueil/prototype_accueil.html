@@ -82,8 +82,16 @@
   #bulle { position: fixed; display: none; background: #24292f; color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 40; max-width: 300px; box-shadow: 0 4px 14px #0004; }
   #bulle .doux { color: #c9ccd1; }
   .b-chip input { margin: 0 2px 0 0; }
-  .b-haut { position: sticky; top: 0; background: var(--fond); z-index: 5; padding-bottom: 6px; }
-  .b-an { margin-top: 10px; background: #fff; border: 1px solid var(--trait); border-radius: 8px; padding: 6px 10px; transition: box-shadow .2s; }
+  .b-ecran { display: flex; flex-direction: column; min-height: 400px; }
+  .b-haut { flex: none; padding-bottom: 8px; border-bottom: 2px solid var(--trait); }
+  .b-haut .a-pipeline { margin-top: 10px; }
+  .b-haut .a-compteur { padding: 6px 10px; } .b-haut .a-compteur .n { font-size: 20px; }
+  .b-liste { flex: 1; overflow: auto; position: relative; padding: 0 2px 8px; }
+  th.triable { cursor: pointer; user-select: none; } th.triable:hover { color: var(--texte); }
+  .journal { background: #f3f1ea; border-radius: 6px; padding: 6px 8px; margin: 6px 0; font-size: 12px; }
+  .voies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; font-size: 12px; }
+  .voies > div { border: 1px solid var(--trait); border-radius: 6px; padding: 6px; } .voies button { margin-top: 4px; }
+  .b-an { margin-top: 0; margin-bottom: 10px; background: #fff; border: 1px solid var(--trait); border-radius: 8px; padding: 6px 10px; transition: box-shadow .2s; }
   .b-an.vise { box-shadow: 0 0 0 3px #24292f; }
   .b-an-titre { font-weight: 700; display: flex; gap: 8px; align-items: center; }
   .b-barre { display: flex; flex: 1; height: 6px; border-radius: 3px; overflow: hidden; max-width: 260px; }
@@ -105,17 +113,23 @@
 // ---------- Modèle partagé (données + maturité + actions simulées) ----------
 const EMISSIONS = JSON.parse(document.getElementById("donnees").textContent);
 const ETATS = [
-  { cle: "sans", nom: "sans enregistrement", role: "archeologue", action: "Téléverser un fichier", suite: "rapatrie" },
-  { cle: "localise", nom: "localisé", role: "archeologue", action: "Marquer reçu", suite: "rapatrie" },
+  { cle: "sans", nom: "sans enregistrement", role: "archeologue", action: "URL, piste ou fichier", suite: "rapatrie" },
+  { cle: "localise", nom: "localisé", role: "archeologue", action: "Suivre la piste", suite: "rapatrie" },
   { cle: "telechargeable", nom: "téléchargeable", role: "archeologue", action: "Télécharger", suite: "rapatrie", lot: true },
   { cle: "rapatrie", nom: "rapatrié", role: "exploitant", action: "Écouter et qualifier", suite: "qualifie" },
   { cle: "qualifie", nom: "qualifié", role: "exploitant", action: "Mettre à disposition de lmelp", suite: "valide", lot: true },
-  { cle: "valide", nom: "valide (attend lmelp)", role: "exploitant", action: null, suite: "lmelp" },
+  { cle: "valide", nom: "valide (attend lmelp)", role: "exploitant", action: null, suite: "lmelp" },  // pas d'action : le titre mène à l'import du back-office
   { cle: "lmelp", nom: "dans lmelp", role: "exploitant", action: null, suite: null },
 ];
 const ETAT = Object.fromEntries(ETATS.map(e => [e.cle, e]));
 const couleur = c => `var(--${c})`;
 const ANNEES = []; for (let a = 1955; a <= 2026; a++) ANNEES.push(a);
+// Liens vers lmelp : même hôte que celui qui sert pap (nas923 par VPN, nom AdGuard à
+// la maison), port de l'appli visée. Ports et chemins PROVISOIRES, à préciser.
+const HOTE = location.hostname;
+const LMELP_EMISSION = e => `http://${HOTE}:LMELP_PORT/emissions/${e.id}`;
+const BACKOFFICE_IMPORT = e => `http://${HOTE}:BACKOFFICE_PORT/import/${e.id}`;
+const journal = {};     // id -> [{date, texte}]  (pistes et échanges, localisé)
 const demarches = {};   // id -> "demandé"  (suivi de démarche, localisé)
 const ecartes = {};     // id -> motif     (qualification défavorable)
 
@@ -129,9 +143,9 @@ function parAnnee(liste) {
   liste.forEach(e => m[e.annee][e.etat]++);
   return m;
 }
-function avancer(ids, message) {
+function avancer(ids, message, vers) {
   const avant = compter(EMISSIONS);
-  ids.forEach(id => { const e = EMISSIONS.find(x => x.id === id); e.etat = ETAT[e.etat].suite; e.simule = true; });
+  ids.forEach(id => { const e = EMISSIONS.find(x => x.id === id); e.etat = vers || ETAT[e.etat].suite; e.simule = true; e.depuis = 0; });
   const apres = compter(EMISSIONS);
   const delta = ETATS.filter(s => apres[s.cle] !== avant[s.cle]).map(s => `${s.nom} ${avant[s.cle]}→${apres[s.cle]}`).join(" · ");
   toast((message || `${ids.length} émission(s) avancée(s)`) + (delta ? " — " + delta : ""));
@@ -173,16 +187,22 @@ function legende() { return `<div class="doux" style="margin-top:4px">` + ETATS.
 // Panneau d'action d'une émission (partagé : l'action, pas la mise en page).
 function panneauAction(e, fini) {
   const s = ETAT[e.etat], div = document.createElement("div");
-  if (e.etat === "sans") {
-    div.innerHTML = `<p class="doux">Fichier d'un passionné, numérisation… (brouillard « Rapatriement manuel » : provenance, date, intégralité)</p>
-      <input type="file"> <input placeholder="provenance (ex. cassette de M. X)" style="width:60%"> <button class="primaire">Téléverser</button>`;
-    div.querySelector("button").onclick = () => { avancer([e.id], `${e.date} téléversé`); fini && fini(); };
-  } else if (e.etat === "localise") {
-    div.innerHTML = `<p class="doux">Sources : ${e.sources.join(", ")}. Démarche : INA mediapro (devis) ou archives Radio France.</p>
-      <label><input type="checkbox" ${demarches[e.id] ? "checked" : ""}> demande envoyée</label>
-      <button class="primaire" style="margin-left:8px">Fichier reçu → rapatrié</button>`;
-    div.querySelector("input").onchange = ev => { ev.target.checked ? demarches[e.id] = "demandé" : delete demarches[e.id]; toast("Démarche notée (le compteur ne bouge pas)"); };
-    div.querySelector("button").onclick = () => { avancer([e.id], `${e.date} reçu`); fini && fini(); };
+  if (e.etat === "sans" || e.etat === "localise") {
+    const j = journal[e.id] || [];
+    div.innerHTML = `${e.etat === "localise" ? `<div class="doux">Sources : ${e.sources.join(", ")}</div>` : ""}
+      ${j.length ? `<div class="journal">${j.map(x => `<div><b>${x.date}</b> ${esc(x.texte)}</div>`).join("")}</div>` : ""}
+      <div class="voies">
+        <div><b>${e.etat === "sans" ? "Une piste" : "Un échange"}</b> <span class="doux">${e.etat === "sans" ? "(passionné, archives… → localisé)" : "(reste localisé)"}</span><br>
+          <input class="piste" placeholder="ex. M. X a la cassette de cette date, contacté via DVDClassik" style="width:100%"><button class="b-piste">${e.etat === "sans" ? "Noter la piste" : "Noter l'échange"}</button></div>
+        <div><b>Une URL</b> <span class="doux">(→ téléchargeable)</span><br><input class="url" placeholder="https://…" style="width:100%"><button class="b-url">Enregistrer l'URL</button></div>
+        <div><b>Un fichier</b> <span class="doux">(→ rapatrié)</span><br><input type="file"><input class="prov" placeholder="provenance" style="width:100%"><button class="b-fic">Téléverser</button></div>
+      </div>`;
+    div.querySelector(".b-piste").onclick = () => { const t = div.querySelector(".piste").value.trim() || "piste sans détail";
+      (journal[e.id] ??= []).push({ date: "2026-11-20", texte: t });
+      if (e.etat === "sans") { e.sources = [...e.sources, "piste"]; avancer([e.id], `${e.date} : piste notée`, "localise"); } else { toast("Échange noté"); rendre(); }
+      fini && fini(); };
+    div.querySelector(".b-url").onclick = () => { e.integral = div.querySelector(".url").value || "https://…"; avancer([e.id], `${e.date} : URL enregistrée`, "telechargeable"); fini && fini(); };
+    div.querySelector(".b-fic").onclick = () => { avancer([e.id], `${e.date} téléversé`, "rapatrie"); fini && fini(); };
   } else if (e.etat === "telechargeable") {
     div.innerHTML = `<p class="doux">${esc(e.integral)}</p><button class="primaire">Télécharger sur le NAS</button>`;
     div.querySelector("button").onclick = ev => { ev.target.disabled = true; ev.target.textContent = "Téléchargement…"; setTimeout(() => { avancer([e.id], `${e.date} rapatrié`); fini && fini(); }, 700); };
@@ -208,30 +228,46 @@ function panneauAction(e, fini) {
   }
   return div;
 }
-const marques = e => (e.simule ? `<span class="simule">simulé</span>` : "") + (demarches[e.id] ? `<span class="simule">demandé</span>` : "") + (ecartes[e.id] ? `<span class="simule">écarté</span>` : "");
+const marques = e => (journal[e.id] ? `<span class="simule">${journal[e.id].length} échange(s)</span>` : "") + (e.simule ? `<span class="simule">simulé</span>` : "") + (demarches[e.id] ? `<span class="simule">demandé</span>` : "") + (ecartes[e.id] ? `<span class="simule">écarté</span>` : "");
 
-// ---------- Page de travail d'un état (retenue au premier tour, commune aux trois variantes) ----------
-const P = { page: null, choix: new Set(), annee: null };
-function ouvrirPage(cle) { P.page = cle; P.choix.clear(); P.annee = null; rendre(); scrollTo(0, 0); }
+// ---------- Page de travail d'un état : colonnes selon l'état, triables ----------
+const P = { page: null, choix: new Set(), annee: null, tri: "depuis", sens: -1 };
+function ouvrirPage(cle, annee) { P.page = cle; P.choix.clear(); P.annee = annee || null; P.tri = ETAT[cle].action ? "depuis" : "date"; P.sens = -1; rendre(); scrollTo(0, 0); }
+const titreLien = e => e.etat === "lmelp" ? `<a href="${LMELP_EMISSION(e)}" target="_blank" title="ouvrir dans lmelp (URL provisoire)">${esc(e.titre)}</a>`
+  : e.etat === "valide" ? `<a href="${BACKOFFICE_IMPORT(e)}" target="_blank" title="importer dans le back-office lmelp (URL provisoire)">${esc(e.titre)}</a>` : esc(e.titre);
+function colonnes(cle) {
+  const c = [
+    { k: "date", t: "Date", v: e => e.date, h: e => e.date + marques(e) },
+    { k: "titre", t: "Titre", v: e => e.titre, h: titreLien },
+    { k: "themes", t: "Thèmes", v: e => e.themes.join(","), h: e => `<span class="doux">${e.themes.join(", ")}</span>` },
+  ];
+  if (cle !== "lmelp") c.push({ k: "sources", t: "Sources", v: e => e.sources.join(","), h: e => `<span class="doux">${e.sources.join(", ")}</span>` });
+  if (cle !== "lmelp") c.push({ k: "depuis", t: "Depuis", v: e => e.depuis, h: depuis });
+  return c;
+}
 function pageEtat(racine) {
-  const s = ETAT[P.page], tous = EMISSIONS.filter(e => e.etat === P.page).sort((a, b) => b.depuis - a.depuis), liste = tous.filter(e => !P.annee || e.annee === P.annee);
+  const s = ETAT[P.page], cols = colonnes(P.page), avecAction = !!s.action;
+  const col = cols.find(c => c.k === P.tri) || cols[0];
+  const tous = EMISSIONS.filter(e => e.etat === P.page), liste = tous.filter(e => !P.annee || e.annee === P.annee)
+    .sort((a, b) => { const x = col.v(a), y = col.v(b); return (x < y ? -1 : x > y ? 1 : 0) * P.sens; });
   racine.innerHTML = `<button class="a-retour">← Accueil</button>
-    <div class="carte"><h2 style="margin-top:0"><span class="pastille" style="background:${couleur(s.cle)}"></span>${s.nom} : ${tous.length} émission(s) ${P.annee ? `· filtre ${P.annee} <button id="tout">×</button>` : ""}</h2><div id="h"></div>
-    <div class="doux">Cliquer une année filtre la liste. Tri : depuis le plus longtemps dans l'état.</div></div>
-    <div class="a-lot">${s.lot ? `<button class="primaire" id="lot">${s.action} : sélection (<span id="nsel">0</span>)</button><button id="lottout">${s.action} : tout l'état (${liste.length})</button>` : `<span class="doux">${s.action ? "Action une à une (pas de lot pour cet état)" : "Lecture seule"}</span>`}</div>
-    <div class="carte"><table><thead><tr>${s.lot ? "<th><input type=checkbox id=tous></th>" : ""}<th>Date</th><th>Titre</th><th>Sources</th><th>Depuis</th><th>Action</th></tr></thead><tbody></tbody></table></div>`;
+    <div class="carte"><h2 style="margin-top:0"><span class="pastille" style="background:${couleur(s.cle)}"></span>${s.nom} : ${liste.length} émission(s) ${P.annee ? `en ${P.annee} <button id="tout">× toutes les années</button>` : ""}</h2><div id="h"></div>
+    <div class="doux">Cliquer une année filtre la liste. ${s.cle === "lmelp" ? "Le titre ouvre l'émission dans lmelp." : s.cle === "valide" ? "Le titre ouvre l'import de l'émission dans le back-office lmelp." : ""}</div></div>
+    ${s.lot ? `<div class="a-lot"><button class="primaire" id="lot">${s.action} : sélection (<span id="nsel">0</span>)</button><button id="lottout">${s.action} : tout (${liste.length})</button></div>` : ""}
+    <div class="carte" style="margin-top:8px"><table><thead><tr>${s.lot ? "<th><input type=checkbox id=tous></th>" : ""}${cols.map(c => `<th class="triable" data-k="${c.k}">${c.t}${P.tri === c.k ? (P.sens > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}${avecAction ? "<th>Action</th>" : ""}</tr></thead><tbody></tbody></table></div>`;
   racine.querySelector(".a-retour").onclick = () => { P.page = null; rendre(); };
   racine.querySelector("#tout")?.addEventListener("click", () => { P.annee = null; rendre(); });
+  racine.querySelectorAll("th.triable").forEach(th => th.onclick = () => { P.sens = P.tri === th.dataset.k ? -P.sens : (th.dataset.k === "depuis" ? -1 : 1); P.tri = th.dataset.k; rendre(); });
   racine.querySelector("#h").append(histogramme({ liste: tous, empile: false, surligne: P.page, annees: P.annee ? new Set([P.annee]) : null, hauteur: 90, clicAnnee: a => { P.annee = P.annee === a ? null : a; rendre(); } }));
   const tb = racine.querySelector("tbody");
   liste.slice(0, 200).forEach(e => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `${s.lot ? `<td><input type=checkbox ${P.choix.has(e.id) ? "checked" : ""}></td>` : ""}<td>${e.date}${marques(e)}</td><td>${esc(e.titre)}</td><td class="doux">${e.sources.join(", ")}</td><td>${depuis(e)}</td><td></td>`;
+    tr.innerHTML = `${s.lot ? `<td><input type=checkbox ${P.choix.has(e.id) ? "checked" : ""}></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${avecAction ? "<td></td>" : ""}`;
     if (s.lot) tr.querySelector("input").onchange = ev => { ev.target.checked ? P.choix.add(e.id) : P.choix.delete(e.id); racine.querySelector("#nsel").textContent = P.choix.size; };
-    boutonAction(e, tr.lastElementChild);
+    if (avecAction) boutonAction(e, tr.lastElementChild);
     tb.append(tr);
   });
-  if (liste.length > 200) tb.insertAdjacentHTML("beforeend", `<tr><td colspan=6 class=doux>… ${liste.length - 200} de plus</td></tr>`);
+  if (liste.length > 200) tb.insertAdjacentHTML("beforeend", `<tr><td colspan=8 class=doux>… ${liste.length - 200} de plus</td></tr>`);
   if (s.lot) {
     racine.querySelector("#nsel").textContent = P.choix.size;
     racine.querySelector("#tous").onchange = ev => { liste.forEach(e => ev.target.checked ? P.choix.add(e.id) : P.choix.delete(e.id)); rendre(); };
@@ -246,14 +282,15 @@ function boutonAction(e, td) {
   const s = ETAT[e.etat];
   if (!s.action && s.cle !== "valide") return;
   const b = document.createElement("button"); b.textContent = s.action || "détail";
-  b.onclick = () => { td.innerHTML = ""; td.append(panneauAction(e)); }; td.append(b);
+  const cible = td.classList.contains("b-act") ? td.parentNode : td;   // dans la frise, le panneau s'ouvre sous la ligne
+  b.onclick = () => { b.remove(); const p = panneauAction(e); p.style.margin = "6px 0 8px 18px"; cible.append(p); }; td.append(b);
 }
-function compteurs(n, survol) {
-  const html = `<div class="a-roles"><div style="border-color:var(--localise)">Archéologue — jusqu'à rapatrié</div><div style="border-color:var(--qualifie)">Exploitant lmelp — de rapatrié à lmelp</div></div>
+function compteurs(n, survol, annee, sansRoles) {
+  const html = `${sansRoles ? "" : `<div class="a-roles"><div style="border-color:var(--localise)">Archéologue — jusqu'à rapatrié</div><div style="border-color:var(--qualifie)">Exploitant lmelp — de rapatrié à lmelp</div></div>`}
     <div class="a-pipeline">${ETATS.map(e => `<button class="a-compteur" data-e="${e.cle}" style="border-top-color:${couleur(e.cle)}"><span class="n">${n[e.cle]}</span>${e.nom}<br><span class="action">${e.action ? "→ " + e.action : "lecture seule"}</span></button>`).join("")}</div>`;
   const div = document.createElement("div"); div.innerHTML = html;
   div.querySelectorAll(".a-compteur").forEach(b => {
-    b.onclick = () => ouvrirPage(b.dataset.e);
+    b.onclick = () => ouvrirPage(b.dataset.e, annee);
     if (survol) { b.onmouseenter = () => survol(b.dataset.e); b.onmouseleave = () => survol(null); }
   });
   return div;
@@ -313,29 +350,35 @@ A.rendre = function (racine) {
   remplir();
 };
 
-// ---------- Variante B : survol synchronisé graphique ⇄ liste chronologique groupée par année ----------
-const B = { nom: "Survol synchronisé, frise chronologique", etat: null };
+// ---------- Variante B : écran fixe (graphique + états) et liste qui défile dessous ----------
+const B = { nom: "Survol synchronisé, frise chronologique", etat: null, annee: null };
 B.rendre = function (racine) {
-  const n = compter(EMISSIONS);
-  racine.innerHTML = `<div class="b-haut"><div class="carte"><h2 style="margin-top:0">Émissions par année <span id="lecture" class="doux" style="font-weight:400">— survoler une année ou un compteur</span></h2><div id="h"></div>${legende()}</div><div id="cpt"></div></div>
-    <div id="frise"></div>`;
-  const dessiner = () => { const h = racine.querySelector("#h"); h.innerHTML = ""; h.append(histoSurvol({ liste: EMISSIONS, surligne: B.etat, hauteur: 120,
+  const vues = EMISSIONS.filter(e => !B.annee || e.annee === B.annee), n = compter(vues);
+  racine.innerHTML = `<div class="b-ecran"><div class="b-haut"><div class="carte"><h2 style="margin-top:0">Émissions par année ${B.annee ? `<button id="xa">${B.annee} ×</button>` : ""}<span id="lecture" class="doux" style="font-weight:400"></span></h2><div id="h"></div>${legende()}</div><div id="cpt"></div></div>
+    <div class="b-liste" id="frise"></div></div>`;
+  const ecran = racine.querySelector(".b-ecran"), frise = racine.querySelector("#frise");
+  ecran.style.height = (innerHeight - ecran.getBoundingClientRect().top - 72) + "px";
+  racine.querySelector("#xa")?.addEventListener("click", () => { B.annee = null; rendre(); });
+  const repos = () => B.annee ? ` — ${vues.length} émission(s) en ${B.annee}` : " — survoler une année pour s'y rendre, cliquer pour filtrer";
+  const dessiner = () => { const h = racine.querySelector("#h"); h.innerHTML = ""; h.append(histoSurvol({ liste: EMISSIONS, surligne: B.etat, hauteur: 120, annees: B.annee ? new Set([B.annee]) : null,
+    clic: a => { B.annee = B.annee === a ? null : a; rendre(); },
     survol: a => { const lec = racine.querySelector("#lecture");
-      racine.querySelectorAll(".b-an.vise").forEach(x => x.classList.remove("vise"));
-      if (!a) { lec.textContent = "— survoler une année ou un compteur"; return; }
+      frise.querySelectorAll(".b-an.vise").forEach(x => x.classList.remove("vise"));
+      if (!a) { lec.textContent = repos(); return; }
       const l = EMISSIONS.filter(e => e.annee === a);
-      lec.innerHTML = `— <b>${a}</b> : ${l.length} · ` + ETATS.filter(s => l.some(e => e.etat === s.cle)).map(s => `<span class="pastille" style="background:${couleur(s.cle)}"></span>${l.filter(e => e.etat === s.cle).length} ${s.nom}`).join(" · ");
-      const cible = racine.querySelector(`.b-an[data-a="${a}"]`); if (cible) { cible.classList.add("vise"); cible.scrollIntoView({ block: "nearest", behavior: "smooth" }); } } })); };
-  dessiner();
-  racine.querySelector("#cpt").append(compteurs(n, cle => { B.etat = cle; dessiner(); racine.querySelectorAll(".b-emi").forEach(x => x.style.opacity = !cle || x.dataset.e === cle ? 1 : .2); }));
-  const frise = racine.querySelector("#frise"), groupes = {};
-  EMISSIONS.forEach(e => (groupes[e.annee] ??= []).push(e));
+      lec.innerHTML = ` — <b>${a}</b> : ${l.length} · ` + ETATS.filter(s => l.some(e => e.etat === s.cle)).map(s => `<span class="pastille" style="background:${couleur(s.cle)}"></span>${l.filter(e => e.etat === s.cle).length} ${s.nom}`).join(" · ");
+      const cible = frise.querySelector(`.b-an[data-a="${a}"]`);
+      if (cible) { cible.classList.add("vise"); frise.scrollTop = cible.offsetTop; } } })); };
+  dessiner(); racine.querySelector("#lecture").textContent = repos();
+  racine.querySelector("#cpt").append(compteurs(n, cle => { B.etat = cle; dessiner(); frise.querySelectorAll(".b-emi").forEach(x => x.style.opacity = !cle || x.dataset.e === cle ? 1 : .2); }, B.annee, true));
+  const groupes = {};
+  vues.forEach(e => (groupes[e.annee] ??= []).push(e));
   Object.keys(groupes).sort((a, b) => b - a).forEach(a => {
     const l = groupes[a].sort((x, y) => y.date.localeCompare(x.date));
     const bloc = document.createElement("div"); bloc.className = "b-an"; bloc.dataset.a = a;
     bloc.innerHTML = `<div class="b-an-titre">${a} <span class="doux">${l.length}</span> <span class="b-barre">${ETATS.map(s => { const k = l.filter(e => e.etat === s.cle).length; return k ? `<i style="flex:${k};background:${couleur(s.cle)}"></i>` : ""; }).join("")}</span></div>`;
     l.forEach(e => { const r = document.createElement("div"); r.className = "b-emi"; r.dataset.e = e.etat;
-      r.innerHTML = `<span class="pastille" style="background:${couleur(e.etat)}"></span><span class="doux" style="width:44px;display:inline-block">${e.date.slice(5)}</span> ${esc(e.titre)} <span class="doux">· ${ETAT[e.etat].nom}${ETAT[e.etat].action ? " · " + depuis(e) : ""}</span>${marques(e)}<span class="b-act"></span>`;
+      r.innerHTML = `<span class="pastille" style="background:${couleur(e.etat)}"></span><span class="doux" style="width:44px;display:inline-block">${e.date.slice(5)}</span> ${titreLien(e)} <span class="doux">· ${ETAT[e.etat].nom}${ETAT[e.etat].action ? " · " + depuis(e) : ""}</span>${marques(e)}<span class="b-act"></span>`;
       boutonAction(e, r.querySelector(".b-act")); bloc.append(r); });
     frise.append(bloc);
   });
@@ -367,8 +410,8 @@ C.rendre = function (racine) {
 
 // ---------- Bascule de variantes ----------
 const VARIANTES = { A, B, C }, CLES = Object.keys(VARIANTES);
-let variante = new URLSearchParams(location.search).get("variant") || "A";
-if (!VARIANTES[variante]) variante = "A";
+let variante = new URLSearchParams(location.search).get("variant") || "B";
+if (!VARIANTES[variante]) variante = "B";
 function rendre(flash) {
   const n = compter(EMISSIONS);
   document.getElementById("resume").textContent = `${EMISSIONS.length} émissions · ${n.lmelp} dans lmelp · ${n.valide} valides · PROTOTYPE : rapatrié/qualifié/valide simulés`;
@@ -384,6 +427,7 @@ function aller(d) {
 }
 document.getElementById("prec").onclick = () => aller(-1);
 document.getElementById("suiv").onclick = () => aller(1);
+addEventListener("resize", () => { if (variante === "B" && !P.page) rendre(); });
 addEventListener("keydown", ev => {
   if (ev.target.closest("input, textarea, [contenteditable]")) return;
   if (ev.key === "ArrowLeft") aller(-1); if (ev.key === "ArrowRight") aller(1);
