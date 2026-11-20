@@ -4,6 +4,16 @@ Reconstitution de la liste des émissions littéraires du Masque et la Plume dep
 
 ## Language
 
+### Rôles
+
+**Archéologue** :
+Celui qui reconstitue la liste des émissions et déniche leurs enregistrements : il atteste les émissions, lève les doutes par des arbitrages, cherche les sources et fait monter les enregistrements jusqu'à rapatrié. Son travail vaut pour lui-même, que l'émission entre un jour dans lmelp ou non.
+_Avoid_ : chercheur, collecteur, administrateur
+
+**Exploitant lmelp** :
+Celui qui élargit la base de lmelp pour proposer plus de livres et plus d'avis de critiques : il écoute et qualifie les enregistrements rapatriés, puis envoie les valides à lmelp, où la suite se déroule. Il ne travaille que sur des enregistrements rapatriés.
+_Avoid_ : utilisateur, opérateur, intégrateur
+
 ### Émissions et diffusions
 
 **Émission** :
