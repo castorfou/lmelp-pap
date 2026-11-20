@@ -1,6 +1,7 @@
 nav:
   - Contenu: README.md
   - Architecture: architecture.md
+  - Image Docker: image-docker.md
   - Référence du code: reference.md
   - Héritage PyFoundry: pyfoundry.md
   - Bloc notes : bloc_notes.md
