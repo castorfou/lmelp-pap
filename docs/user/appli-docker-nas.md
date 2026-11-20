@@ -67,7 +67,11 @@ Le dossier `pap/` est frère des autres dossiers de la stack, sous `/volume1/doc
 
 ### Service
 
-Le service `pap` se déclare dans le `docker-compose.yml` de docker-lmelp : image `ghcr.io/castorfou/lmelp-pap:latest`, montage `/volume1/docker/lmelp/pap:/data`, `PAP_PORT`, et `PUID`/`PGID` à `1027`, comme le backend (`.env.nas.example`). Les fichiers de `pap/` appartiennent alors à `1027:1027`. Watchtower met l'image à jour après chaque publication sur `main`.
+Le service `pap` se déclare dans le `docker-compose.yml` de docker-lmelp : image `ghcr.io/castorfou/lmelp-pap:latest`, montage `/volume1/docker/lmelp/pap:/data`, et `PUID`/`PGID` à `1027`, comme le backend (`.env.nas.example`). Les fichiers de `pap/` appartiennent alors à `1027:1027`.
+
+Dans docker-lmelp, `PAP_PORT` est le port publié sur le NAS (`8085` dans `.env.nas.example`). Le conteneur, lui, écoute toujours sur `8090` (`"${PAP_PORT}:8090"`). L'appli est donc servie sur `http://<NAS>:8085/`.
+
+Watchtower met le conteneur à jour après chaque publication de l'image sur `main`.
 
 ### Reverse proxy
 
@@ -83,6 +87,6 @@ L'appli s'ouvre par un nom d'hôte, via le reverse proxy natif de DSM : **Portai
 - Destination
     - Protocol : HTTP
     - Hostname : `localhost`
-    - Port : `8090` (valeur de `PAP_PORT`)
+    - Port : `8085` (port publié sur le NAS, `PAP_PORT` de docker-lmelp)
 
-L'appli est alors servie sur `https://pap.lmelp.ascot63.synology.me`, depuis le réseau local.
+L'appli est alors servie sur `https://pap.lmelp.ascot63.synology.me`, depuis le réseau local. Ce nom se résout vers le NAS par la réécriture DNS d'AdGuard sur le réseau de la maison. Depuis un autre réseau relié par VPN, dont les DNS ne sont pas ceux d'AdGuard, le nom tombe sur la page « introuvable » de DSM. On passe alors par le nom de machine du NAS : `http://<NAS>:8085/`.
