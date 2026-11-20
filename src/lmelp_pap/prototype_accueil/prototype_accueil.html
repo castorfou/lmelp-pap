@@ -87,6 +87,8 @@
   .b-haut .a-pipeline { margin-top: 10px; }
   .b-haut .a-compteur { padding: 6px 10px; } .b-haut .a-compteur .n { font-size: 20px; }
   .b-liste { flex: 1; overflow: auto; position: relative; padding: 0 2px 8px; }
+  a.lien { color: inherit; text-decoration: none; } a.lien:hover { text-decoration: underline; text-decoration-color: var(--doux); }
+  a.lien::after { content: " ↗"; font-size: 11px; color: var(--doux); }
   th.triable { cursor: pointer; user-select: none; } th.triable:hover { color: var(--texte); }
   .journal { background: #f3f1ea; border-radius: 6px; padding: 6px 8px; margin: 6px 0; font-size: 12px; }
   .voies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; font-size: 12px; }
@@ -233,8 +235,8 @@ const marques = e => (journal[e.id] ? `<span class="simule">${journal[e.id].leng
 // ---------- Page de travail d'un état : colonnes selon l'état, triables ----------
 const P = { page: null, choix: new Set(), annee: null, tri: "depuis", sens: -1 };
 function ouvrirPage(cle, annee) { P.page = cle; P.choix.clear(); P.annee = annee || null; P.tri = ETAT[cle].action ? "depuis" : "date"; P.sens = -1; rendre(); scrollTo(0, 0); }
-const titreLien = e => e.etat === "lmelp" ? `<a href="${LMELP_EMISSION(e)}" target="_blank" title="ouvrir dans lmelp (URL provisoire)">${esc(e.titre)}</a>`
-  : e.etat === "valide" ? `<a href="${BACKOFFICE_IMPORT(e)}" target="_blank" title="importer dans le back-office lmelp (URL provisoire)">${esc(e.titre)}</a>` : esc(e.titre);
+const titreLien = e => e.etat === "lmelp" ? `<a class="lien" href="${LMELP_EMISSION(e)}" target="_blank" title="ouvrir dans lmelp (URL provisoire)">${esc(e.titre)}</a>`
+  : e.etat === "valide" ? `<a class="lien" href="${BACKOFFICE_IMPORT(e)}" target="_blank" title="importer dans le back-office lmelp (URL provisoire)">${esc(e.titre)}</a>` : esc(e.titre);
 function colonnes(cle) {
   const c = [
     { k: "date", t: "Date", v: e => e.date, h: e => e.date + marques(e) },
