@@ -323,8 +323,10 @@ def creer_serveur(
         """Les routes de la page et de l'API JSON."""
 
         def do_GET(self) -> None:
-            """La page, ou les données courantes."""
-            if self.path in ("/", "/index.html"):
+            """La page, les données courantes, ou l'état du service."""
+            if self.path == "/health":
+                self._json({"status": "ok"})
+            elif self.path in ("/", "/index.html"):
                 self._repondre(atelier.page().encode(), "text/html; charset=utf-8")
             elif self.path == "/api/donnees":
                 self._json(atelier.donnees())

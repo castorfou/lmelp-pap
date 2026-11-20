@@ -1,6 +1,7 @@
 """Commande ``lmelp-pap``."""
 
 import argparse
+import os
 import sys
 import webbrowser
 from collections import Counter
@@ -15,9 +16,18 @@ from lmelp_pap.liste import construire_liste
 from lmelp_pap.page import construire_page
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page`` et
-    ``arbitrer``. Rend le code de sortie."""
+def _chemin(variable: str, defaut: str | None) -> Path | None:
+    """Le chemin donné par une variable d'environnement, sinon le défaut."""
+    valeur = os.environ.get(variable) or defaut
+    return Path(valeur) if valeur else None
+
+
+def _parser() -> argparse.ArgumentParser:
+    """Le parseur des commandes. Les variables ``PAP_*`` (image Docker) fixent
+    les défauts des options ; une option explicite l'emporte."""
+    cache = _chemin("PAP_CACHE", "data/raw/cache")
+    donnees = _chemin("PAP_DONNEES", "data/processed")
+    arbitrages = _chemin("PAP_ARBITRAGES", None)
     parser = argparse.ArgumentParser(prog="lmelp-pap")
     commandes = parser.add_subparsers(dest="commande", required=True)
     emissions = commandes.add_parser(
@@ -34,36 +44,51 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="re-collecte les sources choisies même si leur cache est complet",
     )
-    emissions.add_argument("--cache", type=Path, default=Path("data/raw/cache"))
-    emissions.add_argument("--sortie", type=Path, default=Path("data/processed"))
+    emissions.add_argument("--cache", type=Path, default=cache)
+    emissions.add_argument("--sortie", type=Path, default=donnees)
     emissions.add_argument(
         "--arbitrages",
         type=Path,
+        default=arbitrages,
         help="fichier des arbitrages (par défaut : arbitrages.csv dans --sortie)",
     )
     page = commandes.add_parser(
         "page", help="génère la page HTML de la liste des émissions"
     )
-    page.add_argument("--donnees", type=Path, default=Path("data/processed"))
+    page.add_argument("--donnees", type=Path, default=donnees)
     page.add_argument("--sortie", type=Path, default=Path("docs/emissions/index.html"))
     arbitrer = commandes.add_parser(
         "arbitrer",
         help="ouvre la liste en mode arbitrage dans un serveur local",
     )
-    arbitrer.add_argument("--cache", type=Path, default=Path("data/raw/cache"))
-    arbitrer.add_argument("--sortie", type=Path, default=Path("data/processed"))
+    arbitrer.add_argument("--cache", type=Path, default=cache)
+    arbitrer.add_argument("--sortie", type=Path, default=donnees)
     arbitrer.add_argument(
         "--arbitrages",
         type=Path,
+        default=arbitrages,
         help="fichier des arbitrages (par défaut : arbitrages.csv dans --sortie)",
     )
-    arbitrer.add_argument("--port", type=int, default=8765)
+    arbitrer.add_argument(
+        "--port", type=int, default=int(os.environ.get("PAP_PORT") or 8765)
+    )
+    arbitrer.add_argument(
+        "--hote",
+        default=os.environ.get("PAP_HOTE") or "127.0.0.1",
+        help="adresse d'écoute (0.0.0.0 dans un conteneur)",
+    )
     arbitrer.add_argument(
         "--sans-navigateur",
         action="store_true",
         help="n'ouvre pas la page dans le navigateur",
     )
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page`` et
+    ``arbitrer``. Rend le code de sortie."""
+    args = _parser().parse_args(argv)
 
     if args.commande == "arbitrer":
         return _arbitrer(args)
@@ -103,7 +128,11 @@ def _arbitrer(args: argparse.Namespace) -> int:
     """Sert la page en mode arbitrage jusqu'à Ctrl+C."""
     print("Lecture du cache et construction de la liste…", file=sys.stderr)
     serveur = creer_serveur(
-        args.cache, args.sortie, port=args.port, arbitrages=args.arbitrages
+        args.cache,
+        args.sortie,
+        port=args.port,
+        hote=args.hote,
+        arbitrages=args.arbitrages,
     )
     # VS Code redirige le port vers la machine hôte et y ouvre l'adresse.
     url = f"http://localhost:{serveur.server_address[1]}/"

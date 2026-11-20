@@ -198,6 +198,10 @@ def test_une_emission_mixte_arbitree_s_annule_depuis_l_emission(
     assert _lignes(sortie / "arbitrages.csv") == []
 
 
+def test_la_route_health_repond_sans_construire_la_page(url: str) -> None:
+    assert _get(f"{url}/health") == {"status": "ok"}
+
+
 def test_n_existe_pas_retire_l_emission_et_ses_doutes(url: str, sortie: Path) -> None:
     donnees = _post(
         f"{url}/api/arbitrages",
