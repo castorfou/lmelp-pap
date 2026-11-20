@@ -9,7 +9,7 @@ L'image `ghcr.io/castorfou/lmelp-pap` sert l'appli web (`lmelp-pap arbitrer`). S
 | `Dockerfile` | image en deux étapes : `builder` installe le paquet et ses dépendances (sans celles de dev) dans `/app/.venv` avec `uv sync --frozen --no-dev --no-editable` ; l'étape finale copie ce venv, installe Chromium de Playwright et `gosu`, fixe les variables `PAP_*` |
 | `docker/entrypoint.sh` | remap d'`appuser` sur `PUID`/`PGID`, `chown -R /data`, puis `gosu appuser` |
 | `.dockerignore` | exclut données, docs, tests, notebooks et caches du contexte de build |
-| `.github/workflows/docker.yml` | construit l'image à chaque PR touchant le code ou l'image ; la pousse sur ghcr (`latest`, `sha-…`) à chaque push sur `main` |
+| `.github/workflows/docker.yml` | construit l'image à chaque PR touchant le code ou l'image ; à chaque push sur `main`, la pousse sur ghcr (`latest`, `sha-…`) puis déclenche sa mise à jour sur le NAS |
 
 Le paquet est installé hors mode éditable : les gabarits `page.html` et `arbitrage.html` (déclarés en `package-data`) sont dans le venv, et l'image ne contient pas `src/`.
 
@@ -24,6 +24,12 @@ Le paquet est installé hors mode éditable : les gabarits `page.html` et `arbit
 ## Propriétaire des fichiers
 
 L'image publiée sert sur des machines où l'utilisateur n'a pas le même UID (1000 sur un poste, 1027 sur le NAS). Le conteneur démarre donc en root ; `docker/entrypoint.sh` remappe `appuser` sur `PUID`/`PGID` (défaut 1000), reprend la propriété de `/data` à chaque démarrage, puis exécute la commande sous `appuser` avec `gosu`. C'est le même modèle que le backend de back-office-lmelp.
+
+## Mise à jour sur le NAS
+
+Sur `main`, après le push de l'image, l'étape « Mise à jour sur le NAS (Watchtower) » de `docker.yml` appelle l'API HTTP du Watchtower de la stack (`POST https://watchtower.ascot63.synology.me/v1/update?image=ghcr.io/castorfou/lmelp-pap`). L'appel s'authentifie par `Authorization: Bearer` avec le secret de dépôt `WATCHTOWER_TOKEN`, de même valeur que `WATCHTOWER_HTTP_API_TOKEN` du conteneur Watchtower. Watchtower tire alors l'image et redémarre le conteneur `pap`, qui porte le label `com.centurylinklabs.watchtower.enable=true`.
+
+L'étape échoue si Watchtower ne trouve aucun conteneur pour cette image (`summary.scanned = 0`) ou si la mise à jour échoue (`summary.failed > 0`). Si l'appel n'aboutit pas, le contrôle périodique de Watchtower (hebdomadaire) finit par appliquer la nouvelle image.
 
 ## Construire et tester en local
 
