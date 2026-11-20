@@ -339,7 +339,7 @@ Le déplacement a lieu après la réunion des archives partagées et avant les a
 - les champs de l'émission viennent d'abord d'une attestation de l'émission entière (fiche longue, notice INA), et seulement à défaut d'un extrait ; une émission ancienne prend ainsi le titre de sa notice INA (« Littérature »), le titre de l'extrait restant dans les attestations ;
 - la durée ne vient jamais d'un extrait ;
 - les thèmes se cumulent : ceux de toutes les attestations, extraits compris, sauf quand lmelp atteste l'émission ;
-- une archive dont la durée atteint 90 % de la durée de diffusion INA est l'émission entière, pas un extrait.
+- une archive dont la durée atteint 90 % de la durée de diffusion INA, ou au moins 45 minutes quand cette durée est inconnue, est l'émission entière, pas un extrait. Ses fichiers deviennent des intégraux dans tous leurs encodages et toutes leurs sources ; les autres segments de la même archive (ITEMA), qui peuvent être de vrais extraits, gardent leur type.
 
 **Fusion.** Chaque champ de l'émission vient de la source la plus prioritaire qui le renseigne, parmi les attestations de l'émission entière d'abord (voir ci-dessus) :
 
