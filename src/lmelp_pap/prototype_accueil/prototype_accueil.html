@@ -31,7 +31,7 @@
   .simule { font-size: 10px; color: var(--doux); border: 1px dashed var(--doux); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
   .toast { position: fixed; top: 60px; right: 20px; background: #24292f; color: #fff; padding: 10px 14px; border-radius: 8px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 30; }
   .toast.vu { opacity: 1; }
-  .flash { animation: flash 1s; } @keyframes flash { 0% { background: #fff3b0; } 100% { background: inherit; } }
+  .flash { animation: flash 1.2s; } @keyframes flash { 0% { box-shadow: 0 0 0 4px #f5c518; } 100% { box-shadow: 0 0 0 0 transparent; } }
   svg text { font-size: 10px; fill: var(--doux); }
   svg rect.barre { cursor: pointer; }
   .qualif label { display: block; margin: 4px 0; }
@@ -132,7 +132,7 @@ const etiquette = cle => `<span class="etiquette" style="background:${couleur(cl
 function histogramme({ liste, empile = true, surligne = null, annees = null, clicAnnee = null, hauteur = 150 }) {
   const m = parAnnee(liste), L = 1100, H = hauteur, pas = L / ANNEES.length;
   const max = Math.max(1, ...ANNEES.map(a => ETATS.reduce((s, e) => s + m[a][e.cle], 0)));
-  let svg = `<svg viewBox="0 0 ${L} ${H + 18}" width="100%" style="display:block">`;
+  let svg = `<svg viewBox="-14 0 ${L + 28} ${H + 18}" width="100%" style="display:block">`;
   ANNEES.forEach((a, i) => {
     let y = H; const x = i * pas + 1, w = pas - 2;
     const total = ETATS.reduce((s, e) => s + m[a][e.cle], 0);
