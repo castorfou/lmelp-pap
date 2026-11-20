@@ -10,7 +10,7 @@
       "python_version": "3.12",
       "github_username": "castorfou",
       "use_node": "y",
-      "docker_in_docker": "n",
+      "docker_in_docker": "y",
       "_copy_without_render": [
         ".devcontainer/resources/.p10k.zsh",
         ".devcontainer/scripts/check_mounts.sh",
