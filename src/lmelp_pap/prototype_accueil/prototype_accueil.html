@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PROTOTYPE accueil pap</title>
-<!-- PROTOTYPE jetable (#82) : trois variantes de la page d'accueil de l'appli
-     pap, ?variant=A|B|C. Actions simulées en mémoire, rien n'est écrit. -->
+<!-- PROTOTYPE jetable (#85, second tour de #82) : trois variantes de l'accueil
+     retenu (A : tableau de bord + page par état), graphique au survol et liste
+     globale sous les compteurs, ?variant=A|B|C. Actions simulées en mémoire, rien n'est écrit. -->
 <style>
   :root {
     --fond: #f6f5f1; --carte: #fff; --texte: #1f2328; --doux: #6b6f76; --trait: #dedcd5;
@@ -76,6 +77,18 @@
   .c-fiche h3 { margin: 0 0 4px; }
   .c-histo-maturite { display: flex; gap: 2px; margin: 10px 0; }
   .c-histo-maturite div { flex: 1; height: 8px; border-radius: 2px; background: #eee; }
+
+  /* Second tour (#85) */
+  #bulle { position: fixed; display: none; background: #24292f; color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 40; max-width: 300px; box-shadow: 0 4px 14px #0004; }
+  #bulle .doux { color: #c9ccd1; }
+  .b-chip input { margin: 0 2px 0 0; }
+  .b-haut { position: sticky; top: 0; background: var(--fond); z-index: 5; padding-bottom: 6px; }
+  .b-an { margin-top: 10px; background: #fff; border: 1px solid var(--trait); border-radius: 8px; padding: 6px 10px; transition: box-shadow .2s; }
+  .b-an.vise { box-shadow: 0 0 0 3px #24292f; }
+  .b-an-titre { font-weight: 700; display: flex; gap: 8px; align-items: center; }
+  .b-barre { display: flex; flex: 1; height: 6px; border-radius: 3px; overflow: hidden; max-width: 260px; }
+  .b-emi { padding: 2px 0; font-size: 13px; border-top: 1px solid #f0eee8; }
+  .b-act { float: right; } .b-act button { padding: 0 8px; font-size: 12px; }
 
   /* Barre de bascule du prototype */
   #bascule { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #b3261e; color: #fff; border-radius: 999px; padding: 6px 8px; display: flex; gap: 10px; align-items: center; box-shadow: 0 4px 14px #0005; z-index: 50; font-weight: 600; }
@@ -197,132 +210,160 @@ function panneauAction(e, fini) {
 }
 const marques = e => (e.simule ? `<span class="simule">simulé</span>` : "") + (demarches[e.id] ? `<span class="simule">demandé</span>` : "") + (ecartes[e.id] ? `<span class="simule">écarté</span>` : "");
 
-// ---------- Variante A : tableau de bord, une page de travail par état, actions en lot ----------
-const A = { nom: "Tableau de bord + page par état", page: null, choix: new Set(), annee: null };
-A.rendre = function (racine) {
-  if (A.page) return A.pageEtat(racine);
-  const n = compter(EMISSIONS);
-  racine.innerHTML = `<div class="carte"><h2 style="margin-top:0">Émissions par année, par état de leur meilleur enregistrement</h2><div id="h"></div>${legende()}</div>
-    <div class="a-roles"><div style="border-color:var(--localise)">Archéologue — jusqu'à rapatrié</div><div style="border-color:var(--qualifie)">Exploitant lmelp — de rapatrié à lmelp</div></div>
-    <div class="a-pipeline">${ETATS.map(e => `<button class="a-compteur" data-e="${e.cle}" style="border-top-color:${couleur(e.cle)}"><span class="n">${n[e.cle]}</span>${e.nom}<br><span class="action">${e.action ? "→ " + e.action : "lecture seule"}</span></button>`).join("")}</div>`;
-  racine.querySelector("#h").append(histogramme({ liste: EMISSIONS, hauteur: 170, clicAnnee: a => toast(`Variante A : l'histogramme n'est pas cliquable sur l'accueil (${a})`) }));
-  racine.querySelectorAll(".a-compteur").forEach(b => b.onclick = () => { A.page = b.dataset.e; A.choix.clear(); A.annee = null; rendre(); scrollTo(0, 0); });
-};
-A.pageEtat = function (racine) {
-  const s = ETAT[A.page], tous = EMISSIONS.filter(e => e.etat === A.page), liste = tous.filter(e => !A.annee || e.annee === A.annee);
+// ---------- Page de travail d'un état (retenue au premier tour, commune aux trois variantes) ----------
+const P = { page: null, choix: new Set(), annee: null };
+function ouvrirPage(cle) { P.page = cle; P.choix.clear(); P.annee = null; rendre(); scrollTo(0, 0); }
+function pageEtat(racine) {
+  const s = ETAT[P.page], tous = EMISSIONS.filter(e => e.etat === P.page).sort((a, b) => b.depuis - a.depuis), liste = tous.filter(e => !P.annee || e.annee === P.annee);
   racine.innerHTML = `<button class="a-retour">← Accueil</button>
-    <div class="carte"><h2 style="margin-top:0"><span class="pastille" style="background:${couleur(s.cle)}"></span>${s.nom} : ${tous.length} émission(s) ${A.annee ? `· filtre ${A.annee} <button id="tout">×</button>` : ""}</h2><div id="h"></div>
-    <div class="doux">Cliquer une année filtre la liste.</div></div>
+    <div class="carte"><h2 style="margin-top:0"><span class="pastille" style="background:${couleur(s.cle)}"></span>${s.nom} : ${tous.length} émission(s) ${P.annee ? `· filtre ${P.annee} <button id="tout">×</button>` : ""}</h2><div id="h"></div>
+    <div class="doux">Cliquer une année filtre la liste. Tri : depuis le plus longtemps dans l'état.</div></div>
     <div class="a-lot">${s.lot ? `<button class="primaire" id="lot">${s.action} : sélection (<span id="nsel">0</span>)</button><button id="lottout">${s.action} : tout l'état (${liste.length})</button>` : `<span class="doux">${s.action ? "Action une à une (pas de lot pour cet état)" : "Lecture seule"}</span>`}</div>
-    <div class="carte"><table><thead><tr>${s.lot ? "<th><input type=checkbox id=tous></th>" : ""}<th>Date</th><th>Titre</th><th>Sources</th><th>Action</th></tr></thead><tbody></tbody></table></div>`;
-  racine.querySelector(".a-retour").onclick = () => { A.page = null; rendre(); };
-  racine.querySelector("#tout")?.addEventListener("click", () => { A.annee = null; rendre(); });
-  racine.querySelector("#h").append(histogramme({ liste: tous, empile: false, surligne: A.page, annees: A.annee ? new Set([A.annee]) : null, hauteur: 90, clicAnnee: a => { A.annee = A.annee === a ? null : a; rendre(); } }));
+    <div class="carte"><table><thead><tr>${s.lot ? "<th><input type=checkbox id=tous></th>" : ""}<th>Date</th><th>Titre</th><th>Sources</th><th>Depuis</th><th>Action</th></tr></thead><tbody></tbody></table></div>`;
+  racine.querySelector(".a-retour").onclick = () => { P.page = null; rendre(); };
+  racine.querySelector("#tout")?.addEventListener("click", () => { P.annee = null; rendre(); });
+  racine.querySelector("#h").append(histogramme({ liste: tous, empile: false, surligne: P.page, annees: P.annee ? new Set([P.annee]) : null, hauteur: 90, clicAnnee: a => { P.annee = P.annee === a ? null : a; rendre(); } }));
   const tb = racine.querySelector("tbody");
   liste.slice(0, 200).forEach(e => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `${s.lot ? `<td><input type=checkbox ${A.choix.has(e.id) ? "checked" : ""}></td>` : ""}<td>${e.date}${marques(e)}</td><td>${esc(e.titre)}</td><td class="doux">${e.sources.join(", ")}</td><td></td>`;
-    if (s.lot) tr.querySelector("input").onchange = ev => { ev.target.checked ? A.choix.add(e.id) : A.choix.delete(e.id); racine.querySelector("#nsel").textContent = A.choix.size; };
-    const td = tr.lastElementChild;
-    if (s.action || s.cle === "valide") { const b = document.createElement("button"); b.textContent = s.action || "détail"; b.onclick = () => { td.innerHTML = ""; td.append(panneauAction(e)); }; td.append(b); }
+    tr.innerHTML = `${s.lot ? `<td><input type=checkbox ${P.choix.has(e.id) ? "checked" : ""}></td>` : ""}<td>${e.date}${marques(e)}</td><td>${esc(e.titre)}</td><td class="doux">${e.sources.join(", ")}</td><td>${depuis(e)}</td><td></td>`;
+    if (s.lot) tr.querySelector("input").onchange = ev => { ev.target.checked ? P.choix.add(e.id) : P.choix.delete(e.id); racine.querySelector("#nsel").textContent = P.choix.size; };
+    boutonAction(e, tr.lastElementChild);
     tb.append(tr);
   });
-  if (liste.length > 200) tb.insertAdjacentHTML("beforeend", `<tr><td colspan=5 class=doux>… ${liste.length - 200} de plus</td></tr>`);
+  if (liste.length > 200) tb.insertAdjacentHTML("beforeend", `<tr><td colspan=6 class=doux>… ${liste.length - 200} de plus</td></tr>`);
   if (s.lot) {
-    racine.querySelector("#nsel").textContent = A.choix.size;
-    racine.querySelector("#tous").onchange = ev => { liste.forEach(e => ev.target.checked ? A.choix.add(e.id) : A.choix.delete(e.id)); rendre(); };
-    racine.querySelector("#lot").onclick = () => { const ids = [...A.choix]; A.choix.clear(); if (ids.length) avancer(ids, `${s.action} : ${ids.length} en lot`); };
+    racine.querySelector("#nsel").textContent = P.choix.size;
+    racine.querySelector("#tous").onchange = ev => { liste.forEach(e => ev.target.checked ? P.choix.add(e.id) : P.choix.delete(e.id)); rendre(); };
+    racine.querySelector("#lot").onclick = () => { const ids = [...P.choix]; P.choix.clear(); if (ids.length) avancer(ids, `${s.action} : ${ids.length} en lot`); };
     racine.querySelector("#lottout").onclick = () => { if (confirm(`${s.action} : les ${liste.length} émissions ?`)) avancer(liste.map(e => e.id), `${s.action} : ${liste.length} en lot`); };
   }
-};
-
-// ---------- Variante B : liste unique, filtre croisé compteurs ⇄ histogramme, action en ligne ----------
-const B = { nom: "Liste unique, filtre croisé, action en ligne", etats: new Set(), annees: new Set(), ouverte: null };
-B.rendre = function (racine) {
-  const dansAnnees = EMISSIONS.filter(e => !B.annees.size || B.annees.has(e.annee));
-  const dansEtats = EMISSIONS.filter(e => !B.etats.size || B.etats.has(e.etat));
-  const liste = dansAnnees.filter(e => !B.etats.size || B.etats.has(e.etat));
-  const n = compter(dansAnnees), surligne = B.etats.size === 1 ? [...B.etats][0] : null;
-  racine.innerHTML = `<div class="b-grille"><aside>
-      <div class="doux" style="margin-bottom:6px">États (clic = filtre, cumulable). Comptes ${B.annees.size ? "pour les années choisies" : "toutes années"}.</div>
-      <div class="doux">Archéologue</div>${ETATS.filter(e => e.role === "archeologue").map(btn).join("")}
-      <div class="doux" style="margin-top:8px">Exploitant lmelp</div>${ETATS.filter(e => e.role === "exploitant").map(btn).join("")}
-    </aside><section>
-      <div class="carte"><div id="h"></div><div class="doux">Barre grise : toutes les émissions ; couleur : l'état filtré. Clic sur une année = filtre (Maj+clic : plusieurs).</div></div>
-      <div class="b-chips">${[...B.etats].map(c => `<span class="b-chip">${ETAT[c].nom}</span>`).join("")}${[...B.annees].sort().map(a => `<span class="b-chip">${a}</span>`).join("")}
-        ${B.etats.size || B.annees.size ? `<button id="raz">tout effacer</button>` : ""}<span class="doux">${liste.length} émission(s)</span></div>
-      <div class="carte"><table><thead><tr><th>Date</th><th>Titre</th><th>État</th><th></th></tr></thead><tbody></tbody></table></div>
-    </section></div>`;
-  function btn(e) { return `<button class="b-filtre ${B.etats.has(e.cle) ? "actif" : ""} ${n[e.cle] ? "" : "vide"}" data-e="${e.cle}" style="border-left-color:${couleur(e.cle)}"><span>${e.nom}</span><span class="n">${n[e.cle]}</span></button>`; }
-  racine.querySelectorAll(".b-filtre").forEach(b => b.onclick = () => { const c = b.dataset.e; B.etats.has(c) ? B.etats.delete(c) : B.etats.add(c); rendre(); });
-  racine.querySelector("#raz")?.addEventListener("click", () => { B.etats.clear(); B.annees.clear(); rendre(); });
-  racine.querySelector("#h").append(histogramme({ liste: dansEtats.length === EMISSIONS.length ? EMISSIONS : EMISSIONS, empile: false, surligne, annees: B.annees.size ? B.annees : null, hauteur: 120,
-    clicAnnee: (a, ev) => { if (ev.shiftKey) { B.annees.has(a) ? B.annees.delete(a) : B.annees.add(a); } else { const seule = B.annees.size === 1 && B.annees.has(a); B.annees.clear(); if (!seule) B.annees.add(a); } rendre(); } }));
-  if (!surligne && B.etats.size > 1) toast("Plusieurs états : l'histogramme montre le total (limite de la variante B)");
-  const tb = racine.querySelector("tbody");
-  liste.slice(0, 150).forEach(e => {
-    const s = ETAT[e.etat], tr = document.createElement("tr");
-    tr.innerHTML = `<td>${e.date}${marques(e)}</td><td>${esc(e.titre)}<div class="doux">${esc(e.animateur)}</div></td><td>${etiquette(e.etat)}</td><td></td>`;
-    if (s.action) { const b = document.createElement("button"); b.textContent = s.action; b.onclick = () => { B.ouverte = B.ouverte === e.id ? null : e.id; rendre(true); }; tr.lastElementChild.append(b); }
-    tb.append(tr);
-    if (B.ouverte === e.id) { const tr2 = document.createElement("tr"); tr2.className = "b-ligne-ouverte"; const td = document.createElement("td"); td.colSpan = 4; td.append(panneauAction(e, () => B.ouverte = null)); tr2.append(td); tb.append(tr2); }
-  });
-  if (liste.length > 150) tb.insertAdjacentHTML("beforeend", `<tr><td colspan=4 class=doux>… ${liste.length - 150} de plus (affiner le filtre)</td></tr>`);
-};
-
-// ---------- Variante C : deux espaces par rôle, entonnoir + carte de chaleur, fiche d'émission ----------
-const C = { nom: "Deux rôles, carte de chaleur, fiche d'émission", onglet: "archeologue", etat: null, annee: null, fiche: null };
-C.rendre = function (racine) {
-  const etats = C.onglet === "ensemble" ? ETATS : ETATS.filter(e => e.role === C.onglet);
-  if (C.etat && !etats.some(e => e.cle === C.etat)) C.etat = null;
-  const n = compter(EMISSIONS);
-  const liste = EMISSIONS.filter(e => (C.etat ? e.etat === C.etat : etats.some(s => s.cle === e.etat)) && (!C.annee || e.annee === C.annee));
-  racine.innerHTML = `<div class="c-onglets">
-      <button data-o="archeologue">Archéologue <span class="doux">${n.sans + n.localise + n.telechargeable}</span></button>
-      <button data-o="exploitant">Exploitant lmelp <span class="doux">${n.rapatrie + n.qualifie}</span> à traiter</button>
-      <button data-o="ensemble">Vue d'ensemble</button></div>
-    <div class="c-entonnoir">${etats.map(e => `<button class="c-etape ${C.etat === e.cle ? "actif" : ""}" data-e="${e.cle}" style="border-top:5px solid ${couleur(e.cle)}"><span class="n">${n[e.cle]}</span>${e.nom}</button>`).join("")}</div>
-    <div class="carte"><div id="chaleur"></div><div class="doux">Une ligne par état, une colonne par année ; clic sur une case = cet état et cette année.</div></div>
-    <h2>${liste.length} émission(s) ${C.etat ? "· " + ETAT[C.etat].nom : ""} ${C.annee ? "· " + C.annee : ""} ${C.etat || C.annee ? '<button id="raz">×</button>' : ""}</h2>
-    <div id="liste"></div>`;
-  racine.querySelectorAll(".c-onglets button").forEach(b => { b.classList.toggle("actif", b.dataset.o === C.onglet); b.onclick = () => { C.onglet = b.dataset.o; C.annee = null; rendre(); }; });
-  racine.querySelectorAll(".c-etape").forEach(b => b.onclick = () => { C.etat = C.etat === b.dataset.e ? null : b.dataset.e; rendre(); });
-  racine.querySelector("#raz")?.addEventListener("click", () => { C.etat = null; C.annee = null; rendre(); });
-  // carte de chaleur
-  const m = parAnnee(EMISSIONS), L = 1100, pas = L / ANNEES.length, hl = 18, max = Math.max(1, ...ANNEES.flatMap(a => etats.map(e => m[a][e.cle])));
-  let svg = `<svg viewBox="-120 0 ${L + 120} ${etats.length * hl + 16}" width="100%">`;
-  etats.forEach((e, j) => {
-    svg += `<text x="-6" y="${j * hl + 13}" text-anchor="end">${e.nom}</text>`;
-    ANNEES.forEach((a, i) => { const v = m[a][e.cle]; const choisi = (!C.etat || C.etat === e.cle) && (!C.annee || C.annee === a);
-      svg += `<rect class="barre" data-a="${a}" data-e="${e.cle}" x="${i * pas + 1}" y="${j * hl + 1}" width="${pas - 2}" height="${hl - 2}" rx="2" fill="${v ? couleur(e.cle) : "#eee"}" opacity="${v ? (0.25 + 0.75 * v / max) * (choisi ? 1 : .25) : 1}"><title>${a} — ${e.nom} : ${v}</title></rect>`; });
-  });
-  ANNEES.forEach((a, i) => { if (a % 5 === 0) svg += `<text x="${i * pas + pas / 2}" y="${etats.length * hl + 12}" text-anchor="middle">${a}</text>`; });
-  racine.querySelector("#chaleur").innerHTML = svg + "</svg>";
-  racine.querySelectorAll("#chaleur rect").forEach(r => r.onclick = () => { const a = +r.dataset.a, e = r.dataset.e; const meme = C.annee === a && C.etat === e; C.annee = meme ? null : a; C.etat = meme ? null : e; rendre(); });
-  // liste groupée par année, du plus récent au plus ancien
-  const zone = racine.querySelector("#liste"), groupes = {};
-  liste.forEach(e => (groupes[e.annee] ??= []).push(e));
-  Object.keys(groupes).sort((a, b) => b - a).forEach(a => {
-    zone.insertAdjacentHTML("beforeend", `<div class="c-annee">${a} <span class="doux">${groupes[a].length}</span></div>`);
-    const p = document.createElement("div");
-    groupes[a].forEach(e => { const s = document.createElement("span"); s.className = "c-emi"; s.style.borderLeft = `4px solid ${couleur(e.etat)}`; s.innerHTML = `${e.date.slice(5)} ${esc(e.titre).slice(0, 40)}${marques(e)}`; s.onclick = () => { C.fiche = e.id; ouvrirFiche(); }; p.append(s); });
-    zone.append(p);
-  });
-  ouvrirFiche();
-};
-function ouvrirFiche() {
-  let f = document.querySelector(".c-fiche");
-  if (!f) { f = document.createElement("aside"); f.className = "c-fiche"; document.body.append(f); }
-  const e = C.fiche && EMISSIONS.find(x => x.id === C.fiche);
-  if (!e || variante !== "C") { f.classList.remove("ouverte"); return; }
-  const rang = ETATS.findIndex(s => s.cle === e.etat);
-  f.innerHTML = `<button style="float:right">✕</button><h3>${e.date}</h3><div>${esc(e.titre)}</div><div class="doux">${esc(e.animateur)} · ${e.themes.join(", ")} · ${esc(e.duree)}</div>
-    <div class="c-histo-maturite">${ETATS.map((s, i) => `<div title="${s.nom}" style="background:${i <= rang ? couleur(s.cle) : "#eee"}"></div>`).join("")}</div>
-    <div>${etiquette(e.etat)} ${marques(e)}</div><p class="doux">Attestée par : ${e.sources.join(", ") || "—"}</p><h2>Prochaine étape</h2>`;
-  f.append(panneauAction(e, () => {}));
-  f.querySelector("button").onclick = () => { C.fiche = null; f.classList.remove("ouverte"); };
-  f.classList.add("ouverte");
 }
+
+// ---------- Éléments communs de l'accueil ----------
+const depuis = e => { const d = e.depuis; const c = d >= 45 ? "#b3261e" : d >= 21 ? "#9a6700" : "var(--doux)"; return `<span style="color:${c};white-space:nowrap">${d} j</span>`; };
+function boutonAction(e, td) {
+  const s = ETAT[e.etat];
+  if (!s.action && s.cle !== "valide") return;
+  const b = document.createElement("button"); b.textContent = s.action || "détail";
+  b.onclick = () => { td.innerHTML = ""; td.append(panneauAction(e)); }; td.append(b);
+}
+function compteurs(n, survol) {
+  const html = `<div class="a-roles"><div style="border-color:var(--localise)">Archéologue — jusqu'à rapatrié</div><div style="border-color:var(--qualifie)">Exploitant lmelp — de rapatrié à lmelp</div></div>
+    <div class="a-pipeline">${ETATS.map(e => `<button class="a-compteur" data-e="${e.cle}" style="border-top-color:${couleur(e.cle)}"><span class="n">${n[e.cle]}</span>${e.nom}<br><span class="action">${e.action ? "→ " + e.action : "lecture seule"}</span></button>`).join("")}</div>`;
+  const div = document.createElement("div"); div.innerHTML = html;
+  div.querySelectorAll(".a-compteur").forEach(b => {
+    b.onclick = () => ouvrirPage(b.dataset.e);
+    if (survol) { b.onmouseenter = () => survol(b.dataset.e); b.onmouseleave = () => survol(null); }
+  });
+  return div;
+}
+// Histogramme empilé avec zones de survol par année (une colonne transparente pleine hauteur).
+function histoSurvol({ liste, hauteur = 170, surligne = null, annees = null, survol, clic }) {
+  const div = histogramme({ liste, hauteur, surligne, annees });
+  const svg = div.querySelector("svg"), pas = 1100 / ANNEES.length;
+  ANNEES.forEach((a, i) => {
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    Object.entries({ x: i * pas, y: 0, width: pas, height: hauteur, fill: "transparent", class: "zone" }).forEach(([k, v]) => r.setAttribute(k, v));
+    r.style.cursor = clic ? "pointer" : "default";
+    r.addEventListener("mouseenter", ev => survol && survol(a, ev));
+    r.addEventListener("mousemove", ev => survol && survol(a, ev));
+    r.addEventListener("mouseleave", () => survol && survol(null));
+    if (clic) r.addEventListener("click", ev => clic(a, ev));
+    svg.append(r);
+  });
+  svg.querySelectorAll("title").forEach(t => t.remove());   // l'infobulle remplace les title natifs
+  return div;
+}
+function bulle() { let b = document.getElementById("bulle"); if (!b) { b = document.createElement("div"); b.id = "bulle"; document.body.append(b); } return b; }
+function cacherBulle() { bulle().style.display = "none"; }
+function montrerBulle(html, ev) { const b = bulle(); b.innerHTML = html; b.style.display = "block"; const x = Math.min(ev.clientX + 14, innerWidth - b.offsetWidth - 8); b.style.left = x + "px"; b.style.top = (ev.clientY + 14) + "px"; }
+const parEtat = l => ETATS.filter(s => l.some(e => e.etat === s.cle)).map(s => `<div><span class="pastille" style="background:${couleur(s.cle)}"></span>${s.nom} <b style="float:right;margin-left:12px">${l.filter(e => e.etat === s.cle).length}</b></div>`).join("");
+
+// ---------- Variante A : infobulle détaillée, le clic sur une année filtre la liste globale ----------
+const A = { nom: "Infobulle détaillée + catalogue filtrable", annee: null, etats: new Set(), q: "", page: 0 };
+A.rendre = function (racine) {
+  const n = compter(EMISSIONS);
+  racine.innerHTML = `<div class="carte"><h2 style="margin-top:0">Émissions par année, par état de leur meilleur enregistrement</h2><div id="h"></div>${legende()}
+      <div class="doux">Survol : le détail de l'année. Clic : filtre la liste en bas.</div></div><div id="cpt"></div>
+    <h2>Toutes les émissions</h2>
+    <div class="a-lot" id="filtres"></div><div class="carte"><table><thead><tr><th>Date</th><th>Titre</th><th>Thèmes</th><th>État</th><th>Depuis</th><th>Action</th></tr></thead><tbody></tbody></table><div id="pages" class="a-lot"></div></div>`;
+  racine.querySelector("#h").append(histoSurvol({ liste: EMISSIONS, annees: A.annee ? new Set([A.annee]) : null,
+    survol: (a, ev) => { if (!a) return cacherBulle(); const l = EMISSIONS.filter(e => e.annee === a);
+      montrerBulle(`<b>${a}</b> — ${l.length} émission(s)<div style="margin:6px 0">${parEtat(l)}</div><div class="doux">${l.slice(0, 8).map(e => `${e.date.slice(5)} ${esc(e.titre).slice(0, 34)}`).join("<br>")}${l.length > 8 ? `<br>… ${l.length - 8} de plus` : ""}</div>`, ev); },
+    clic: a => { A.annee = A.annee === a ? null : a; A.page = 0; cacherBulle(); rendre(); } }));
+  racine.querySelector("#cpt").append(compteurs(n));
+  const f = racine.querySelector("#filtres");
+  f.innerHTML = `${ETATS.map(s => `<label class="b-chip" style="border-left:4px solid ${couleur(s.cle)}"><input type=checkbox data-e="${s.cle}" ${A.etats.has(s.cle) ? "checked" : ""}> ${s.nom}</label>`).join("")}
+    ${A.annee ? `<span class="b-chip">année ${A.annee} <button id="xa">×</button></span>` : ""}<input id="q" placeholder="titre, date…" value="${esc(A.q)}" style="margin-left:auto">`;
+  f.querySelectorAll("input[data-e]").forEach(c => c.onchange = () => { c.checked ? A.etats.add(c.dataset.e) : A.etats.delete(c.dataset.e); A.page = 0; rendre(); });
+  f.querySelector("#xa")?.addEventListener("click", () => { A.annee = null; rendre(); });
+  const q = f.querySelector("#q"); q.oninput = () => { A.q = q.value; A.page = 0; remplir(); };
+  const tb = racine.querySelector("tbody");
+  function remplir() {
+    const l = EMISSIONS.filter(e => (!A.annee || e.annee === A.annee) && (!A.etats.size || A.etats.has(e.etat)) && (!A.q || (e.date + " " + e.titre).toLowerCase().includes(A.q.toLowerCase()))).sort((a, b) => b.date.localeCompare(a.date));
+    tb.innerHTML = ""; const t = 50, debut = A.page * t;
+    l.slice(debut, debut + t).forEach(e => { const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${e.date}${marques(e)}</td><td>${esc(e.titre)}<div class="doux">${esc(e.animateur)}</div></td><td class="doux">${e.themes.join(", ")}</td><td>${etiquette(e.etat)}</td><td>${depuis(e)}</td><td></td>`;
+      boutonAction(e, tr.lastElementChild); tb.append(tr); });
+    const pg = racine.querySelector("#pages"); const np = Math.ceil(l.length / t);
+    pg.innerHTML = `<span class="doux">${l.length} émission(s) · page ${A.page + 1}/${Math.max(np, 1)}</span><button id="pp" ${A.page ? "" : "disabled"}>◀</button><button id="ps" ${A.page + 1 < np ? "" : "disabled"}>▶</button>`;
+    pg.querySelector("#pp").onclick = () => { A.page--; remplir(); }; pg.querySelector("#ps").onclick = () => { A.page++; remplir(); };
+  }
+  remplir();
+};
+
+// ---------- Variante B : survol synchronisé graphique ⇄ liste chronologique groupée par année ----------
+const B = { nom: "Survol synchronisé, frise chronologique", etat: null };
+B.rendre = function (racine) {
+  const n = compter(EMISSIONS);
+  racine.innerHTML = `<div class="b-haut"><div class="carte"><h2 style="margin-top:0">Émissions par année <span id="lecture" class="doux" style="font-weight:400">— survoler une année ou un compteur</span></h2><div id="h"></div>${legende()}</div><div id="cpt"></div></div>
+    <div id="frise"></div>`;
+  const dessiner = () => { const h = racine.querySelector("#h"); h.innerHTML = ""; h.append(histoSurvol({ liste: EMISSIONS, surligne: B.etat, hauteur: 120,
+    survol: a => { const lec = racine.querySelector("#lecture");
+      racine.querySelectorAll(".b-an.vise").forEach(x => x.classList.remove("vise"));
+      if (!a) { lec.textContent = "— survoler une année ou un compteur"; return; }
+      const l = EMISSIONS.filter(e => e.annee === a);
+      lec.innerHTML = `— <b>${a}</b> : ${l.length} · ` + ETATS.filter(s => l.some(e => e.etat === s.cle)).map(s => `<span class="pastille" style="background:${couleur(s.cle)}"></span>${l.filter(e => e.etat === s.cle).length} ${s.nom}`).join(" · ");
+      const cible = racine.querySelector(`.b-an[data-a="${a}"]`); if (cible) { cible.classList.add("vise"); cible.scrollIntoView({ block: "nearest", behavior: "smooth" }); } } })); };
+  dessiner();
+  racine.querySelector("#cpt").append(compteurs(n, cle => { B.etat = cle; dessiner(); racine.querySelectorAll(".b-emi").forEach(x => x.style.opacity = !cle || x.dataset.e === cle ? 1 : .2); }));
+  const frise = racine.querySelector("#frise"), groupes = {};
+  EMISSIONS.forEach(e => (groupes[e.annee] ??= []).push(e));
+  Object.keys(groupes).sort((a, b) => b - a).forEach(a => {
+    const l = groupes[a].sort((x, y) => y.date.localeCompare(x.date));
+    const bloc = document.createElement("div"); bloc.className = "b-an"; bloc.dataset.a = a;
+    bloc.innerHTML = `<div class="b-an-titre">${a} <span class="doux">${l.length}</span> <span class="b-barre">${ETATS.map(s => { const k = l.filter(e => e.etat === s.cle).length; return k ? `<i style="flex:${k};background:${couleur(s.cle)}"></i>` : ""; }).join("")}</span></div>`;
+    l.forEach(e => { const r = document.createElement("div"); r.className = "b-emi"; r.dataset.e = e.etat;
+      r.innerHTML = `<span class="pastille" style="background:${couleur(e.etat)}"></span><span class="doux" style="width:44px;display:inline-block">${e.date.slice(5)}</span> ${esc(e.titre)} <span class="doux">· ${ETAT[e.etat].nom}${ETAT[e.etat].action ? " · " + depuis(e) : ""}</span>${marques(e)}<span class="b-act"></span>`;
+      boutonAction(e, r.querySelector(".b-act")); bloc.append(r); });
+    frise.append(bloc);
+  });
+};
+
+// ---------- Variante C : infobulle compacte, la liste est une file « à traiter » triée par ancienneté ----------
+const C = { nom: "File à traiter, du plus ancien au plus récent", role: "tout", annee: null, catalogue: false };
+C.rendre = function (racine) {
+  const n = compter(EMISSIONS);
+  racine.innerHTML = `<div class="carte"><h2 style="margin-top:0">Émissions par année, par état</h2><div id="h"></div>${legende()}<div class="doux">Survol : chiffres de l'année. Clic : limite la file à cette année.</div></div><div id="cpt"></div>
+    <div class="c-onglets" style="margin-top:18px">${[["tout", "Tout ce qui attend une action"], ["archeologue", "Archéologue"], ["exploitant", "Exploitant lmelp"], ["catalogue", "Catalogue complet"]].map(([k, t]) => `<button data-o="${k}" class="${(C.catalogue ? "catalogue" : C.role) === k ? "actif" : ""}">${t}</button>`).join("")}
+      ${C.annee ? `<span class="b-chip" style="align-self:center;margin-left:auto">${C.annee} <button id="xa">×</button></span>` : ""}</div>
+    <div class="carte"><table><thead><tr><th>Depuis</th><th>État</th><th>Date</th><th>Titre</th><th>Action</th></tr></thead><tbody></tbody></table></div>`;
+  racine.querySelector("#h").append(histoSurvol({ liste: EMISSIONS, annees: C.annee ? new Set([C.annee]) : null,
+    survol: (a, ev) => { if (!a) return cacherBulle(); const l = EMISSIONS.filter(e => e.annee === a); montrerBulle(`<b>${a}</b> — ${l.length}<div style="margin-top:4px">${parEtat(l)}</div>`, ev); },
+    clic: a => { C.annee = C.annee === a ? null : a; cacherBulle(); rendre(); } }));
+  racine.querySelector("#cpt").append(compteurs(n));
+  racine.querySelectorAll(".c-onglets button[data-o]").forEach(b => b.onclick = () => { C.catalogue = b.dataset.o === "catalogue"; if (!C.catalogue) C.role = b.dataset.o; rendre(); });
+  racine.querySelector("#xa")?.addEventListener("click", () => { C.annee = null; rendre(); });
+  let l = EMISSIONS.filter(e => !C.annee || e.annee === C.annee);
+  if (C.catalogue) l.sort((a, b) => b.date.localeCompare(a.date));
+  else l = l.filter(e => ETAT[e.etat].action && (C.role === "tout" || ETAT[e.etat].role === C.role)).sort((a, b) => b.depuis - a.depuis);
+  const tb = racine.querySelector("tbody");
+  l.slice(0, 100).forEach(e => { const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${ETAT[e.etat].action ? depuis(e) : ""}</td><td>${etiquette(e.etat)}</td><td>${e.date}${marques(e)}</td><td>${esc(e.titre)}</td><td></td>`;
+    boutonAction(e, tr.lastElementChild); tb.append(tr); });
+  if (l.length > 100) tb.insertAdjacentHTML("beforeend", `<tr><td colspan=5 class=doux>… ${l.length - 100} de plus</td></tr>`);
+};
 
 // ---------- Bascule de variantes ----------
 const VARIANTES = { A, B, C }, CLES = Object.keys(VARIANTES);
@@ -332,9 +373,9 @@ function rendre(flash) {
   const n = compter(EMISSIONS);
   document.getElementById("resume").textContent = `${EMISSIONS.length} émissions · ${n.lmelp} dans lmelp · ${n.valide} valides · PROTOTYPE : rapatrié/qualifié/valide simulés`;
   document.getElementById("nom").textContent = `${variante} (${VARIANTES[variante].nom})`;
-  const r = document.getElementById("racine"); VARIANTES[variante].rendre(r);
-  if (flash) r.querySelectorAll(".a-compteur, .b-filtre, .c-etape").forEach(x => x.classList.add("flash"));
-  ouvrirFiche();
+  const r = document.getElementById("racine"); cacherBulle();
+  P.page ? pageEtat(r) : VARIANTES[variante].rendre(r);
+  if (flash) r.querySelectorAll(".a-compteur").forEach(x => x.classList.add("flash"));
 }
 function aller(d) {
   variante = CLES[(CLES.indexOf(variante) + d + CLES.length) % CLES.length];

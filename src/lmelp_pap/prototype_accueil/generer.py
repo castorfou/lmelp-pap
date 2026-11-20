@@ -1,7 +1,12 @@
-"""PROTOTYPE jetable (ticket #82) : la page d'accueil de l'appli pap.
+"""PROTOTYPE jetable (ticket #85, second tour de #82) : la page d'accueil de
+l'appli pap, variante A retenue (tableau de bord + une page par état), avec
+graphique au survol et liste globale sous les compteurs.
 
-Trois variantes de la page d'accueil, basculables par ``?variant=A|B|C`` et la
-barre flottante en bas. Les données viennent des vrais CSV de
+Trois variantes de cette page, basculables par ``?variant=A|B|C`` et la
+barre flottante en bas. Localisé suit la décision #84 : seule une notice INA
+des Archives Radio Pro (identifiant ``PH_``) localise un enregistrement ; une
+notice du dépôt légal (``RD_``, InaTHÈQUE) laisse l'émission sans
+enregistrement. L'ancienneté dans l'état (date d'entrée) est simulée. Les données viennent des vrais CSV de
 ``data/processed/`` ; les niveaux rapatrié, qualifié et valide n'existent pas
 encore dans ces CSV : quelques émissions y sont placées par simulation, et
 toutes les actions sont simulées en mémoire (rien n'est écrit, rien n'est
@@ -19,6 +24,7 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+
 ICI = Path(__file__).parent
 DONNEES = ICI.parents[2] / "data" / "processed"
 PORT = 8092
@@ -31,8 +37,11 @@ def lire(nom: str) -> list[dict[str, str]]:
 
 def emissions() -> list[dict]:
     sources = defaultdict(set)
+    radio_pro = set()
     for a in lire("attestations.csv"):
         sources[a["emission_id"]].add(a["source"])
+        if a["source"] == "ina" and a["source_id"].startswith("PH_"):
+            radio_pro.add(a["emission_id"])
     integraux = defaultdict(list)
     for e in lire("enregistrements.csv"):
         if e["type"] == "intégral":
@@ -44,7 +53,7 @@ def emissions() -> list[dict]:
             etat = "lmelp"
         elif integraux[i]:
             etat = "telechargeable"
-        elif "ina" in sources[i]:
+        elif i in radio_pro:
             etat = "localise"
         else:
             etat = "sans"
@@ -67,10 +76,14 @@ def emissions() -> list[dict]:
     # rapatrié / qualifié / valide (absents des CSV aujourd'hui).
     hasard = random.Random(82)
     tele = [e for e in sortie if e["etat"] == "telechargeable"]
-    for e, etat in zip(
+    for em, etat in zip(
         hasard.sample(tele, 22), ["rapatrie"] * 12 + ["qualifie"] * 6 + ["valide"] * 4
     ):
-        e["etat"], e["simule"] = etat, True
+        em["etat"], em["simule"] = etat, True
+    # Simulation de la date d'entrée dans l'état (décision #84 : chaque passage
+    # est daté) : collecte en octobre-novembre 2026, avancées plus récentes.
+    for em in sortie:
+        em["depuis"] = hasard.randint(0, 25) if em["simule"] else hasard.randint(20, 60)
     return sortie
 
 
