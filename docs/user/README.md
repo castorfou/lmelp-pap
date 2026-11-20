@@ -7,6 +7,7 @@
 ## Guides
 
 - [Liste des émissions](liste-des-emissions.md) : construire et mettre à jour la liste avec `lmelp-pap emissions`, la consulter avec `lmelp-pap page`, sources, fichiers produits.
+- [L'appli pap en conteneur et sur le NAS](appli-docker-nas.md) : image `ghcr.io/castorfou/lmelp-pap`, volume `/data`, variables `PAP_*` et `PUID`/`PGID`, service sur le NAS et reverse proxy.
 - [FAQ : lever les doutes](faq.md) : questions fréquentes pendant l'arbitrage avec `lmelp-pap arbitrer` (cache en retard, dates de mise en ligne, rapprochements, thèmes inconnus).
 
 ## Contenu suggéré
