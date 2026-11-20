@@ -544,6 +544,95 @@ def test_la_regle_des_90_pourcent_ne_vaut_que_pour_les_archives_e() -> None:
     assert [e.type for e in liste[0].enregistrements] == ["extrait"]
 
 
+URL_AOUT_2007 = "https://media.radiofrance-podcast.net/podcast09/14007-05.08.2007-ITEMA_20081152-2007F4007E0027"
+
+
+def _archive_aout_2007(duree: str, avec_ina: bool = True) -> list[Attestation]:
+    """L'émission du 5 août 2007 : archive E, notice INA sans durée."""
+    ina = Attestation(
+        source="ina",
+        source_id="RD_3189906.001",
+        date=date(2007, 8, 5),
+        themes=frozenset({"livres"}),
+        titre="Le masque et la plume du 05 août 2007",
+    )
+    fiche = Attestation(
+        source="radiofrance",
+        source_id="livres-8849810",
+        date=date(2007, 8, 5),
+        themes=frozenset({"livres"}),
+        titre="Livres",
+        duree=duree,
+        enregistrements=(
+            Enregistrement(url=f"{URL_AOUT_2007}-27.m4a", type="extrait", duree=duree),
+        ),
+        extrait=True,
+    )
+    wayback = Attestation(
+        source="wayback_podcast",
+        source_id="ITEMA_20081152",
+        date=date(2007, 8, 5),
+        enregistrements=(
+            Enregistrement(url=f"{URL_AOUT_2007}-22.mp3", type="extrait"),
+        ),
+        extrait=True,
+    )
+    return [ina, fiche, wayback] if avec_ina else [fiche, wayback]
+
+
+def test_une_archive_longue_comme_une_emission_est_entiere_sans_duree_ina() -> None:
+    liste, _doutes = construire_liste(_archive_aout_2007(duree="00:50:41"))
+
+    emission = liste[0]
+    assert [e.type for e in emission.enregistrements] == ["intégral", "intégral"]
+    assert emission.titre == "Livres"
+    assert emission.duree == "00:50:41"
+
+
+def test_une_archive_courte_reste_un_extrait_sans_duree_ina() -> None:
+    liste, _doutes = construire_liste(_archive_aout_2007(duree="00:30:15"))
+
+    emission = liste[0]
+    assert [e.type for e in emission.enregistrements] == ["extrait", "extrait"]
+    assert emission.duree is None
+
+
+def test_un_extrait_court_de_la_meme_archive_reste_un_extrait() -> None:
+    # 17 septembre 2006 : l'archive ITEMA_20038434 porte l'émission entière et,
+    # dans un autre segment, un extrait de 6 minutes
+    court = f"{URL_AOUT_2007[:-4]}E0051"
+    extrait = Attestation(
+        source="radiofrance",
+        source_id="un-livre-1",
+        date=date(2007, 8, 5),
+        themes=frozenset({"livres"}),
+        titre="Un livre",
+        duree="00:05:58",
+        enregistrements=(
+            Enregistrement(url=f"{court}-27.m4a", type="extrait", duree="00:05:58"),
+        ),
+        extrait=True,
+    )
+
+    liste, _doutes = construire_liste([*_archive_aout_2007(duree="00:50:41"), extrait])
+
+    types = {e.url: e.type for e in liste[0].enregistrements}
+    assert types == {
+        f"{URL_AOUT_2007}-27.m4a": "intégral",
+        f"{URL_AOUT_2007}-22.mp3": "intégral",
+        f"{court}-27.m4a": "extrait",
+    }
+    assert liste[0].titre == "Livres"
+
+
+def test_une_archive_longue_est_entiere_sans_notice_ina() -> None:
+    liste, _doutes = construire_liste(
+        _archive_aout_2007(duree="00:50:41", avec_ina=False)
+    )
+
+    assert [e.type for e in liste[0].enregistrements] == ["intégral", "intégral"]
+
+
 def test_les_themes_se_cumulent_entre_sources_et_extraits() -> None:
     # 70 ans du Masque : la fiche entière ne dit que « cinéma » ; un extrait
     # et la notice INA, rapprochés par ce thème commun, apportent les autres

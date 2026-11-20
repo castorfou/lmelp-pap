@@ -778,6 +778,10 @@ _JAMAIS_D_UN_EXTRAIT = {"duree"}
 # Une archive au moins aussi longue que 90 % de la diffusion (durée INA) est
 # l'émission entière, pas un extrait.
 _PART_MIN_ENTIERE = 0.9
+# Sans durée INA, une archive d'au moins 45 minutes est l'émission entière : les
+# extraits d'archives durent au plus une demi-heure, les émissions de 2006 à 2011
+# republiées en archives de 48 à 57 minutes (#57).
+_DUREE_MIN_ENTIERE = 45 * 60
 
 
 def _valeur(champ: str, groupe: list[Attestation]) -> Any:
@@ -838,21 +842,22 @@ def _secondes(duree: str) -> int:
 
 
 def _archives_entieres(groupe: list[Attestation]) -> list[Attestation]:
-    """Les extraits d'archive qui couvrent en fait toute la diffusion INA.
+    """Les extraits d'archive qui couvrent en fait toute l'émission.
 
-    Ils redeviennent des attestations de l'émission entière, et leurs
-    enregistrements des intégraux : la règle de type par archive (ITEMA)
-    étend ce changement aux fichiers des autres sources.
+    Une archive couvre l'émission quand elle atteint 90 % de la diffusion INA,
+    ou, sans durée INA, quand elle dure au moins 45 minutes. Ces extraits
+    redeviennent des attestations de l'émission entière, et leurs
+    enregistrements des intégraux. Le changement s'étend aux fichiers du même
+    segment d'archive (autres encodages, autres sources), jamais aux autres
+    segments de l'archive (ITEMA), qui peuvent être de vrais extraits.
     """
     diffusion = max(
         (_secondes(a.duree) for a in groupe if a.source == "ina" and a.duree),
         default=None,
     )
-    if diffusion is None:
-        return groupe
-    seuil = _PART_MIN_ENTIERE * diffusion
+    seuil = _DUREE_MIN_ENTIERE if diffusion is None else _PART_MIN_ENTIERE * diffusion
     entieres = {
-        _itema(e.url)
+        _segment(e.url)
         for a in groupe
         if a.extrait and a.duree and _secondes(a.duree) >= seuil
         for e in a.enregistrements
@@ -862,13 +867,13 @@ def _archives_entieres(groupe: list[Attestation]) -> list[Attestation]:
         return groupe
 
     def entiere(a: Attestation) -> Attestation:
-        if not any(_itema(e.url) in entieres for e in a.enregistrements):
+        if not any(_segment(e.url) in entieres for e in a.enregistrements):
             return a
         return replace(
             a,
             extrait=False,
             enregistrements=tuple(
-                replace(e, type="intégral") if _itema(e.url) in entieres else e
+                replace(e, type="intégral") if _segment(e.url) in entieres else e
                 for e in a.enregistrements
             ),
         )
