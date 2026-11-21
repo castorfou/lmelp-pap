@@ -60,7 +60,6 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 
 import json
 import mimetypes
-import os
 import sys
 import threading
 import time
@@ -73,8 +72,6 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
-
-import requests
 
 from lmelp_pap.arbitrages import (
     EXISTANTE,
@@ -119,8 +116,13 @@ from lmelp_pap.maturite import (
     verifier,
 )
 from lmelp_pap.page import construire_page, donnees_page
-from lmelp_pap.radiofrance_api import ApiRadioFranceError, lire_diffusion
-from lmelp_pap.remise import RemiseError, lire_api, mettre_a_disposition
+from lmelp_pap.radiofrance_api import (
+    ApiRadioFranceError,
+    Diffusion,
+    LecteurDiffusions,
+    jeton,
+)
+from lmelp_pap.remise import RemiseError, mettre_a_disposition
 
 
 # Les doutes qu'un arbitrage de date lève.
@@ -267,6 +269,9 @@ class Atelier:
         self.audios = audios or Path("data/raw/audios")
         self.audios_lmelp = audios_lmelp or Path("data/raw/audios-lmelp")
         self._verrou_remise = threading.Lock()  # une mise à disposition à la fois
+        # l'API Radio France, avec son cache en mémoire partagé par l'écoute
+        # et la mise à disposition
+        self._radiofrance = LecteurDiffusions(session)
         self.intervalle = intervalle  # entre deux vérifications complètes
         self.planification = False
         self._verification = Tache()
@@ -551,33 +556,49 @@ class Atelier:
         return self.donnees()
 
     def diffusion_radiofrance(self, emission_id: str) -> dict[str, Any]:
-        """La diffusion de l'émission dans l'Open API Radio France, lue à
-        l'instant et jamais conservée (CGU) ; le journal dit l'appel, sa
-        durée et son résultat, sans rien du contenu reçu."""
+        """La diffusion de l'émission dans l'Open API Radio France, pour
+        l'écoute : ``statut`` (``trouvee``, ``introuvable``, ``sans_cle``,
+        ``erreur`` avec son ``detail``) et ``diffusion``."""
         with self._verrou:
             emission = self._emissions.get(emission_id)
         if emission is None:
             journal(f"api radiofrance {emission_id} : émission inconnue")
             raise DemandeInvalideError(f"{emission_id} : émission inconnue")
-        reponse: dict[str, Any] = {"emission_id": emission_id, "diffusion": None}
-        jeton = os.environ.get("RADIOFRANCE_API_TOKEN")
-        if not jeton:
-            journal(f"api radiofrance {emission_id} : pas de clé")
-            return {**reponse, "statut": "sans_cle"}
-        pages = _pages_radiofrance(emission)
+        statut, diffusion, detail = self._diffusion(emission)
+        reponse: dict[str, Any] = {
+            "emission_id": emission_id,
+            "statut": statut,
+            "diffusion": asdict(diffusion) if diffusion else None,
+        }
+        return {**reponse, "detail": detail} if detail else reponse
+
+    def _diffusion(
+        self, emission: Emission, contexte: str = ""
+    ) -> tuple[str, Diffusion | None, str | None]:
+        """La diffusion de l'émission dans l'API Radio France (cache en
+        mémoire d'une heure, partagé par l'écoute et la mise à disposition) :
+        statut, diffusion, détail de l'erreur. Le journal dit l'appel, sa
+        durée ou « cache », et son résultat, sans rien du contenu reçu (CGU)."""
+        prefixe = f"api radiofrance {emission.id}{contexte} :"
+        cle = jeton()
+        if not cle:
+            journal(f"{prefixe} pas de clé")
+            return "sans_cle", None, None
         debut = time.monotonic()
         try:
-            diffusion = lire_diffusion(emission.date, pages, jeton, self._session)
+            diffusion, du_cache = self._radiofrance.lire(
+                emission.id, emission.date, emission.pages_radiofrance, cle
+            )
         except ApiRadioFranceError as erreur:
             duree = _duree(time.monotonic() - debut)
-            journal(f"api radiofrance {emission_id} : erreur {erreur} ({duree})")
-            return {**reponse, "statut": "erreur", "detail": str(erreur)}
-        duree = _duree(time.monotonic() - debut)
+            journal(f"{prefixe} erreur {erreur} ({duree})")
+            return "erreur", None, str(erreur)
+        quand = "cache" if du_cache else _duree(time.monotonic() - debut)
         if diffusion is None:
-            journal(f"api radiofrance {emission_id} : introuvable ({duree})")
-            return {**reponse, "statut": "introuvable"}
-        journal(f"api radiofrance {emission_id} : trouvée ({duree})")
-        return {**reponse, "statut": "trouvee", "diffusion": asdict(diffusion)}
+            journal(f"{prefixe} introuvable ({quand})")
+            return "introuvable", None, None
+        journal(f"{prefixe} trouvée ({quand})")
+        return "trouvee", diffusion, None
 
     @staticmethod
     def _rapatrie(depot: Depot, emission_id: str, url: object) -> Enregistrement:
@@ -602,15 +623,14 @@ class Atelier:
         émission demandée (``emissions``), une par une : copie de son fichier
         dans le dossier audio de lmelp, fiche dans ``pap_remises``, passage à
         valide. Une émission déjà dans lmelp, sans enregistrement qualifié, ou
-        dont le fichier existe déjà chez lmelp est refusée sans rien écrire.
-        Rend les données à jour et le bilan (``remise`` : ``mises``,
-        ``refus``). L'API Radio France n'est lue qu'avec
-        ``RADIOFRANCE_API_TOKEN``."""
+        dont le fichier existe déjà chez lmelp avec une autre empreinte est
+        refusée sans rien écrire. Rend les données à jour et le bilan
+        (``remise`` : ``mises``, ``refus``). L'API Radio France n'est lue
+        qu'avec ``RADIOFRANCE_API_TOKEN`` ; son échec n'empêche rien."""
         depot = self._depot()
         ids = demande.get("emissions")
         if not isinstance(ids, list) or not ids:
             raise DemandeInvalideError("« emissions » : une liste non vide attendue")
-        jeton = os.environ.get("RADIOFRANCE_API_TOKEN")
         mises: list[dict[str, str]] = []
         refus: list[dict[str, str]] = []
         with self._verrou_remise:
@@ -638,7 +658,7 @@ class Atelier:
                         raise RemiseError(
                             f"{emission_id} : aucun enregistrement qualifié"
                         )
-                    api = self._api_pour_remise(emission, jeton) if jeton else None
+                    _, api, _ = self._diffusion(emission, " (mise à disposition)")
                     fait, fiche, reprise = mettre_a_disposition(
                         choisi,
                         emission,
@@ -669,22 +689,6 @@ class Atelier:
             f"{len(refus)} refus"
         )
         return {**self.donnees(), "remise": {"mises": mises, "refus": refus}}
-
-    def _api_pour_remise(self, emission: Emission, jeton: str) -> dict[str, str] | None:
-        """Les morceaux de description de l'API Radio France pour la remise,
-        l'appel journalisé (durée, résultat) sans rien du contenu reçu."""
-        debut = time.monotonic()
-        api = lire_api(
-            self._session or requests.Session(),
-            jeton,
-            emission.date,
-            _pages_radiofrance(emission),
-        )
-        journal(
-            f"api radiofrance {emission.id} (mise à disposition) : "
-            f"{'trouvée' if api else 'rien'} ({_duree(time.monotonic() - debut)})"
-        )
-        return api
 
     def _depot(self) -> Depot:
         if self.depot is None:
@@ -991,11 +995,6 @@ def type_audio(chemin: Path) -> str:
     return TYPES_AUDIO.get(chemin.suffix.lower()) or (
         mimetypes.guess_type(chemin.name)[0] or "application/octet-stream"
     )
-
-
-def _pages_radiofrance(emission: Emission) -> list[str]:
-    """Les pages radiofrance.fr connues de l'émission (ses attestations)."""
-    return [a.url for a in emission.attestations if a.source == "radiofrance" and a.url]
 
 
 def _ressource(nom: str) -> str:

@@ -827,6 +827,7 @@ class SessionAvecApi(SessionComplete):
     def __init__(self, reponses: dict[str, Any]):
         super().__init__(reponses)
         self.api: list[dict[str, Any]] = []
+        self.statut_api = 200
 
     def post(self, adresse: str, **options: Any) -> Any:
         self.api.append(options)
@@ -843,8 +844,10 @@ class SessionAvecApi(SessionComplete):
         }
         donnees = {"data": {"diffusions": {"edges": [{"cursor": "a", "node": noeud}]}}}
 
+        statut = self.statut_api
+
         class R:
-            status_code = 200
+            status_code = statut
 
             def json(self) -> Any:
                 return donnees
@@ -891,3 +894,59 @@ def test_sans_jeton_l_api_n_est_pas_lue(
 
     assert session.api == []
     assert _emissions(donnees)["2014-09-28"]["maturite"] == "valide"
+
+
+def test_une_api_en_erreur_ne_bloque_pas_la_mise_a_disposition(
+    tmp_path: Path,
+    depot: Depot,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "jeton-secret")
+    session = SessionAvecApi(REPONSES)
+    session.statut_api = 403
+    for adresse in _demarrer(
+        tmp_path,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        audios_lmelp=tmp_path / "audios-lmelp",
+    ):
+        _qualifier_2014(adresse)
+        capfd.readouterr()
+        donnees = _remettre(adresse, "2014-09-28")
+
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "valide"
+    (fiche,) = depot.base["pap_remises"].find()
+    assert "api_radiofrance" not in fiche["sources_description"].values()
+    logs = capfd.readouterr().err
+    assert "api radiofrance 2014-09-28 (mise à disposition) : erreur HTTP 403" in logs
+
+
+def test_l_ecoute_puis_la_remise_ne_lisent_l_api_qu_une_fois(
+    tmp_path: Path,
+    depot: Depot,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "jeton-secret")
+    session = SessionAvecApi(REPONSES)
+    for adresse in _demarrer(
+        tmp_path,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        audios_lmelp=tmp_path / "audios-lmelp",
+    ):
+        _qualifier_2014(adresse)
+        capfd.readouterr()
+        ecoute = _get(f"{adresse}/api/radiofrance/2014-09-28")
+        _remettre(adresse, "2014-09-28")
+
+    assert ecoute["statut"] == "trouvee"
+    assert len(session.api) == 1
+    (fiche,) = depot.base["pap_remises"].find()
+    assert "invités : Arnaud Viviant" in fiche["description"]
+    logs = capfd.readouterr().err
+    assert "api radiofrance 2014-09-28 : trouvée (" in logs
+    assert "api radiofrance 2014-09-28 (mise à disposition) : trouvée (cache)" in logs
