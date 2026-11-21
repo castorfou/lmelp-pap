@@ -317,9 +317,11 @@ L'appli écrit sur la sortie d'erreur (dans le conteneur : `docker logs lmelp-pa
 2026-11-21 11:04:46 rapatriement : 1 émission demandée
 2026-11-21 11:04:53 rapatrié 2006-04-23 : 2006/14007-23.04.2006-ITEMA_20025254-2006F4007E0016-27.m4a, 71 Mo en 7 s
 2026-11-21 11:04:53 rapatriement terminé en 7 s : 1 rapatrié, 0 déjà là, 0 échec
+2026-11-21 11:20:12 écarté 2006-04-23 (2006/14007-23.04.2006-ITEMA_20025254-2006F4007E0016-27.m4a) : « coupé à 40 min »
+2026-11-21 11:31:40 qualifié 2014-09-28 (2014/14007-28.09.2014-ITEMA_20674220-2014F4007S0271-27.m4a) : favorable
 ```
 
-Une vérification lancée par le bouton est « manuelle ». La raison d'une vérification automatique est indiquée : jamais vérifiée, base vide, date de la précédente, nouvelles URL. Un rapatriement trace aussi chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot.
+Une vérification lancée par le bouton est « manuelle ». La raison d'une vérification automatique est indiquée : jamais vérifiée, base vide, date de la précédente, nouvelles URL. Un rapatriement trace aussi chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »), comme une demande de fichier audio introuvable (« audio introuvable : /audios/… »).
 
 #### API
 
@@ -328,11 +330,13 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | Requête | Effet |
 |---|---|
 | `GET /` | L'accueil. `GET /liste` : la liste en mode arbitrage. |
-| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. |
+| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. Avec une base Mongo, chaque émission porte aussi `maturite`, `maturite_depuis`, `echec_rapatriement`, `fichier_audio` (le fichier écoutable, relatif au dossier audio, ou `null`) et `ecart` (`date` et `motif` de l'écart, ou `null`). |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
 | `POST /api/rapatriements` | Lance en fond le rapatriement des émissions `{"emissions": ["2007-01-14", …]}`, l'une après l'autre. Erreurs : 400 (liste vide, émission sans intégral téléchargeable), 409 (un lot tourne déjà), 503 (sans base Mongo). |
 | `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `rapatriees` (dates des émissions rapatriées), `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
 | `POST /api/rapatriements/arret` | Arrête le lot en cours. |
+| `POST /api/qualifications` | Qualifie l'enregistrement rapatrié d'une émission : `{"emission_id": "2014-09-28", "verdict": "favorable"}`, ou `"verdict": "ecarte"` avec `"motif": "…"` ; `"enregistrement"` (son URL) choisit l'enregistrement quand l'émission en a plusieurs. Renvoie les données à jour. Erreurs : 400 (verdict inconnu, écart sans motif, aucun enregistrement rapatrié pour cette émission), 503 (sans base Mongo). |
+| `GET /audios/<fichier>` | Un fichier du dossier audio (`fichier_audio` d'une émission), entier ou par plage (`Range: bytes=…`, réponse 206 ; 416 hors du fichier). Rien n'est servi hors du dossier audio (404). |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
 | `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, `bilan` (`ok`, `net`, `passager`) une fois finie, `derniere` et `prochaine` (dates de la dernière vérification complète et de la suivante). |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
@@ -367,6 +371,29 @@ Un **panneau flottant**, en haut à droite, suit le lot sur toutes les pages, et
 - déplié : les Mo reçus, le temps restant estimé, l'émission en cours avec son pourcentage, son débit et sa barre ;
 - **Arrêter** coupe aussitôt le fichier en cours (le `.part` est supprimé) ; les fichiers finis restent rapatriés ;
 - à la fin, le bilan (rapatriés, échecs et leurs erreurs) reste affiché jusqu'à ✕ ; survoler « N rapatriés » liste les dates des émissions rapatriées pendant le lot.
+
+### Écouter et qualifier un enregistrement rapatrié
+
+La page **rapatrié** propose, sur chaque ligne, **Écouter et qualifier** : un lecteur s'ouvre sous la ligne, sur le fichier rapatrié. On s'y déplace librement (barre du lecteur, boutons **−30 s** et **+30 s**) : le fichier se lit par morceaux, sans être téléchargé en entier. Un second clic sur le bouton referme le lecteur.
+
+La **qualification** juge l'enregistrement, pas l'émission : elle ne change ni l'émission ni son thème.
+
+- **Favorable** : l'enregistrement devient **qualifié** (date d'entrée notée) et l'émission quitte la page rapatrié.
+- **Écarter**, avec un motif libre obligatoire (« pas la bonne émission », « coupé à 40 min »…) : l'enregistrement reste **rapatrié**, et la ligne de l'émission affiche « écarté : motif ». Un enregistrement écarté peut être réécouté et qualifié favorable plus tard.
+
+Après chaque qualification, les données sont rechargées et une notification donne les compteurs qui ont changé (« 1987-10-04 qualifié — rapatrié 7→6 · qualifié 0→1 »).
+
+Chaque qualification est conservée dans la collection `pap_qualifications` (enregistrement, émission, verdict, motif, date) et exportée dans `data/processed/qualifications.csv` :
+
+| Colonne | Contenu |
+|---|---|
+| `emission_id` | Identifiant de l'émission. |
+| `enregistrement` | URL de l'enregistrement qualifié. |
+| `verdict` | `favorable` ou `ecarte`. |
+| `motif` | Le motif d'un écart, vide pour un verdict favorable. |
+| `date` | Date et heure de la qualification (ISO 8601, UTC). |
+
+Une ligne par qualification, de la plus ancienne à la plus récente : un enregistrement écarté puis retenu a deux lignes.
 
 ### Maturité des enregistrements
 
