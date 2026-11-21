@@ -32,10 +32,10 @@
   html, body { margin: 0; }
   body { font: 14px/1.4 system-ui, sans-serif; background: var(--fond); color: var(--texte); }
   header.app { display: flex; gap: 16px; align-items: baseline; padding: 12px 20px; background: var(--entete); color: var(--entete-texte); }
-  header.app b { font-size: 16px; }
+  header.app .logo { font-size: 16px; font-weight: 700; color: var(--entete-texte); text-decoration: none; }
   header.app span { color: var(--entete-doux); font-size: 12px; }
-  header.app a { margin-left: auto; color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid #fff4; border-radius: 6px; padding: 3px 10px; }
-  header.app a:hover { background: #fff2; }
+  header.app a.vers-liste { margin-left: auto; color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid #fff4; border-radius: 6px; padding: 3px 10px; }
+  header.app a.vers-liste:hover { background: #fff2; }
   main { max-width: 1180px; margin: 0 auto; padding: 16px 16px 0; }
   h2 { font-size: 15px; margin: 18px 0 8px; }
   .carte { background: var(--carte); border: 1px solid var(--trait); border-radius: 8px; padding: 12px; }
@@ -49,7 +49,7 @@
   th.triable:hover { color: var(--texte); }
   .pastille { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   svg text { font-size: 10px; fill: var(--doux); }
-  .toast { position: fixed; top: 60px; right: 20px; background: var(--entete); color: var(--entete-texte); padding: 10px 14px; border-radius: 8px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 30; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--entete); color: var(--entete-texte); padding: 10px 14px; border-radius: 8px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 30; }
   .toast.vu { opacity: 1; }
 
   /* Accueil : haut fixe, frise qui défile seule */
@@ -70,10 +70,16 @@
 
   /* Page d'un état */
   .retour { margin-bottom: 8px; }
-  #bandeau { background: var(--carte); border-bottom: 2px solid var(--telechargeable); padding: 8px 20px; display: grid; gap: 4px; }
-  .ligne-bandeau { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
-  .ligne-bandeau button { margin-left: auto; }
-  .barre { height: 8px; background: var(--ligne); border-radius: 4px; overflow: hidden; }
+  /* Tâches en arrière-plan : panneau flottant en haut à droite (façon DSM) */
+  #bandeau { position: fixed; top: 58px; right: 16px; width: 360px; max-width: calc(100vw - 32px); z-index: 25; background: var(--carte); color: var(--texte); border: 1px solid var(--trait); border-radius: 10px; box-shadow: 0 8px 28px #0004; padding: 10px 12px; display: grid; gap: 6px; font-size: 13px; }
+  #bandeau .tete { display: flex; gap: 8px; align-items: center; }
+  #bandeau .tete b { flex: 1; }
+  #bandeau .icone { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--telechargeable); color: #fff; font-size: 12px; font-weight: 700; }
+  #bandeau .tete button { padding: 2px 8px; font-size: 12px; }
+  #bandeau .plier { border: 0; background: none; color: var(--doux); }
+  #bandeau .corps { display: grid; gap: 4px; }
+  #bandeau .fichier { display: flex; justify-content: space-between; gap: 8px; }
+  .barre { height: 6px; background: var(--ligne); border-radius: 3px; overflow: hidden; }
   .barre i { display: block; height: 100%; background: var(--telechargeable); transition: width .5s; }
   .barre.fine { height: 4px; } .barre.fine i { background: var(--rapatrie); }
   .erreurs { margin: 4px 0 0; padding-left: 18px; color: #b3261e; font-size: 13px; }
@@ -84,7 +90,7 @@
 </style>
 </head>
 <body>
-<header class="app"><b>pap</b><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><a href="/liste">Liste et arbitrages</a></header>
+<header class="app"><a class="logo" href="/" id="logo">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><a class="vers-liste" href="/liste">Liste et arbitrages</a></header>
 <main id="accueil"></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
@@ -110,7 +116,7 @@ const ACTIONS = {
 // L'état vient de GET /api/rapatriements : le bandeau se retrouve après un
 // rechargement ou depuis un autre poste. Un lot fini garde son bilan et ses
 // erreurs jusqu'à « Fermer » (mémorisé par lot, dans ce navigateur).
-const SUIVI = { etat: null, precedent: null, avant: null, minuterie: null, arret: false };
+const SUIVI = { etat: null, precedent: null, avant: null, minuterie: null, arret: false, replie: false };
 const CLE_FERME = "pap-bandeau-ferme";
 function lireFerme() { try { return localStorage.getItem(CLE_FERME); } catch { return null; } }
 function ecrireFerme(v) { try { localStorage.setItem(CLE_FERME, v); } catch { /* sans stockage */ } }
@@ -156,8 +162,9 @@ function afficherBandeau() {
   const t = SUIVI.etat;
   let b = $("bandeau");
   const visible = t && t.total && (t.en_cours || (t.bilan && lireFerme() !== t.debut));
-  if (!visible) { if (b) { b.remove(); ajusterEcran(); } return; }
-  if (!b) { b = document.createElement("section"); b.id = "bandeau"; b.setAttribute("aria-live", "polite"); document.querySelector("header.app").after(b); }
+  if (!visible) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement("section"); b.id = "bandeau"; b.setAttribute("aria-live", "polite"); b.setAttribute("aria-label", "Tâches en arrière-plan"); document.body.append(b); }
+  const plier = `<button class="plier" aria-label="${SUIVI.replie ? "Déplier" : "Replier"}" title="${SUIVI.replie ? "Déplier" : "Replier"}">${SUIVI.replie ? "▸" : "▾"}</button>`;
   if (t.en_cours) {
     const fraction = t.fichier_total ? t.fichier_octets / t.fichier_total : 0;
     const pct = t.fichier_total ? Math.round(fraction * 100) : null;
@@ -165,19 +172,24 @@ function afficherBandeau() {
     const debit = p && t.quand > p.quand ? Math.max(0, (t.octets - p.octets) / ((t.quand - p.quand) / 1000)) : null;
     const ecoule = (Date.now() - Date.parse(t.debut)) / 1000, faits = t.faites + fraction;
     const reste = faits > 0 ? ecoule / faits * (t.total - faits) : NaN;
-    b.innerHTML = `<div class="ligne-bandeau"><b>Téléchargement : ${t.faites} / ${t.total} émissions</b><span class="doux">${mo(t.octets)} reçus · reste ~${duree(reste)}</span>` +
+    const global = Math.round(faits / t.total * 100);
+    b.innerHTML = `<div class="tete"><span class="icone" aria-hidden="true">⇣</span><b>Téléchargement ${t.faites} / ${t.total}</b>${plier}` +
       `<button id="arreter" ${SUIVI.arret ? "disabled" : ""}>${SUIVI.arret ? "arrêt demandé…" : "Arrêter"}</button></div>` +
-      `<div class="barre"><i style="width:${Math.round(faits / t.total * 100)}%"></i></div>` +
-      `<div class="ligne-bandeau doux">En cours : ${esc(t.en_cours_sur || "…")}${pct !== null ? ` · ${pct} %` : ` · ${mo(t.fichier_octets)}`}${debit !== null ? ` · ${(debit / 1e6).toFixed(1).replace(".", ",")} Mo/s` : ""}</div>` +
-      `<div class="barre fine"><i style="width:${pct ?? 0}%"></i></div>`;
+      `<div class="barre"><i style="width:${global}%"></i></div>` +
+      (SUIVI.replie ? "" :
+        `<div class="corps"><div class="doux">${mo(t.octets)} reçus · reste ~${duree(reste)}</div>` +
+        `<div class="fichier"><span>${esc(t.en_cours_sur || "…")}</span><span class="doux">${pct !== null ? `${pct} %` : mo(t.fichier_octets)}${debit !== null ? ` · ${(debit / 1e6).toFixed(1).replace(".", ",")} Mo/s` : ""}</span></div>` +
+        `<div class="barre fine"><i style="width:${pct ?? 0}%"></i></div></div>`);
     $("arreter").addEventListener("click", arreter);
   } else {
     const bl = t.bilan, n = bl.rapatries + bl.deja_la;
-    b.innerHTML = `<div class="ligne-bandeau"><b>Téléchargement terminé : ${n} rapatrié${n > 1 ? "s" : ""}${bl.echecs ? `, ${bl.echecs} échec(s)` : ""}${t.arrete ? " — arrêté" : ""}</b><span class="doux">${mo(t.octets)} reçus</span><button id="fermer-bandeau" aria-label="Fermer">Fermer</button></div>` +
-      (t.erreurs && t.erreurs.length ? `<ul class="erreurs">${t.erreurs.map(e => `<li><b>${esc(e.emission)}</b> : ${esc(e.detail)}</li>`).join("")}</ul>` : "");
+    b.innerHTML = `<div class="tete"><span class="icone" aria-hidden="true">${bl.echecs ? "!" : "✓"}</span><b>Téléchargement terminé${t.arrete ? " (arrêté)" : ""}</b>${plier}<button id="fermer-bandeau" aria-label="Fermer" title="Fermer">✕</button></div>` +
+      (SUIVI.replie ? "" :
+        `<div class="corps"><div>${n} rapatrié${n > 1 ? "s" : ""}${bl.echecs ? `, ${bl.echecs} échec(s)` : ""} <span class="doux">· ${mo(t.octets)} reçus</span></div>` +
+        (t.erreurs && t.erreurs.length ? `<ul class="erreurs">${t.erreurs.map(e => `<li><b>${esc(e.emission)}</b> : ${esc(e.detail)}</li>`).join("")}</ul>` : "") + `</div>`);
     $("fermer-bandeau").addEventListener("click", () => { ecrireFerme(t.debut); afficherBandeau(); });
   }
-  ajusterEcran();
+  b.querySelector(".plier").addEventListener("click", () => { SUIVI.replie = !SUIVI.replie; afficherBandeau(); });
 }
 async function arreter() {
   SUIVI.arret = true; afficherBandeau();
@@ -388,6 +400,8 @@ function rendre() {
   ecrireAdresse();
   (vue.etat ? pageEtat : accueil)($("accueil"));
 }
+// « pap » ramène à l'accueil, sans filtre ni page d'état.
+$("logo").addEventListener("click", ev => { ev.preventDefault(); vue.etat = null; vue.annee = null; vue.choix.clear(); rendre(); scrollTo(0, 0); });
 addEventListener("resize", () => { if (!vue.etat) rendre(); });
 addEventListener("hashchange", () => { lireAdresse(); rendre(); });
 

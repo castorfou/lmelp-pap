@@ -430,3 +430,36 @@ def test_pendant_un_lot_la_selection_est_videe(navigateur: Any) -> None:
         timeout=3000
     )
     assert page.locator("tbody input[type=checkbox]:checked").count() == 0
+
+
+def test_le_suivi_flotte_en_haut_a_droite_sans_decaler_la_page(
+    navigateur: Any,
+) -> None:
+    sans = _ouvrir(navigateur)
+    haut_sans = sans.locator(".compteurs").bounding_box()["y"]
+    page = _ouvrir(navigateur, api={"/api/rapatriements": lambda r: EN_COURS})
+    panneau = page.locator("#bandeau")
+    panneau.wait_for()
+
+    assert panneau.evaluate("b => getComputedStyle(b).position") == "fixed"
+    boite = panneau.bounding_box()
+    assert boite["x"] + boite["width"] >= 1280 - 40
+    assert boite["width"] <= 420
+    assert boite["y"] < 120
+    assert page.locator(".compteurs").bounding_box()["y"] == haut_sans
+
+    page.get_by_role("button", name="Replier").click()
+    assert "50 %" not in panneau.inner_text()
+    assert "3 / 12" in panneau.inner_text()
+    page.get_by_role("button", name="Déplier").click()
+    assert "50 %" in panneau.inner_text()
+
+
+def test_pap_en_haut_a_gauche_ramene_a_l_accueil(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('#histo rect.zone[data-annee="1987"]').click()
+    page.locator('.compteur[data-etat="localise"]').click()
+    page.get_by_role("link", name="pap").click()
+    page.locator("#frise").wait_for()
+    assert page.locator("#frise .annee").count() == 2026 - 1955 + 1
+    assert "etat=" not in page.url
