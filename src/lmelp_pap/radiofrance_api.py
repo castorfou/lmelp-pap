@@ -8,12 +8,18 @@ connue de l'émission, sinon la première du Masque et la Plume. Les URL rendues
 par l'API sont sous ``www.franceinter.fr``, les pages connues de pap sous
 ``www.radiofrance.fr`` : seuls les chemins sont comparés.
 
-Les CGU de l'API (art. 5.3) interdisent de stocker ou de mettre en cache ses
-données : ce module ne garde rien, ni sur disque ni en mémoire, et ses erreurs
-ne disent que leur nature (statut HTTP, exception), jamais le contenu reçu.
+Les CGU de l'API (art. 5.3) interdisent de stocker ses données : rien n'en
+est écrit sur disque, en base ni dans les logs. Pour ménager le quota (1 000
+requêtes par jour), ``LecteurDiffusions`` garde au plus une heure, dans la
+mémoire du processus seulement, la diffusion lue pour une émission ; l'écoute
+et la mise à disposition le partagent. Les erreurs ne disent que leur nature
+(statut HTTP, exception), jamais le contenu reçu.
 """
 
-from collections.abc import Iterable
+import os
+import threading
+import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -32,6 +38,10 @@ PAR_PAGE = 100
 PAGES_MAX = 3
 DELAI = 15  # secondes
 PARIS = ZoneInfo("Europe/Paris")
+# La durée de vie d'une diffusion dans le cache en mémoire, en secondes.
+CACHE = 3600.0
+# La variable d'environnement de la clé de l'API.
+CLE = "RADIOFRANCE_API_TOKEN"
 
 # Les relations de ``personalitiesConnection`` : ``producer`` (l'animateur),
 # ``staff`` (l'équipe : critiques…), ``guest`` (les invités) ; ``tag``
@@ -53,6 +63,11 @@ REQUETE = """query ($start: Int, $end: Int, $first: Int, $after: String) {
     }
   }
 }"""
+
+
+def jeton() -> str | None:
+    """La clé de l'API (``RADIOFRANCE_API_TOKEN``), ou ``None``."""
+    return os.environ.get(CLE) or None
 
 
 class ApiRadioFranceError(RuntimeError):
@@ -77,6 +92,43 @@ class Diffusion:
     animateurs: tuple[Personnalite, ...]
     equipe: tuple[Personnalite, ...]
     invites: tuple[Personnalite, ...]
+
+
+class LecteurDiffusions:
+    """Lit la diffusion d'une émission, gardée ``duree`` secondes dans la
+    mémoire du processus (jamais ailleurs) ; une erreur n'est pas gardée."""
+
+    def __init__(
+        self,
+        session: Any = None,
+        *,
+        duree: float = CACHE,
+        horloge: Callable[[], float] = time.monotonic,
+    ):
+        self._session = session
+        self._duree = duree
+        self._horloge = horloge
+        self._memoire: dict[str, tuple[float, Diffusion | None]] = {}
+        self._verrou = threading.Lock()
+
+    def lire(
+        self, cle: str, jour: date, pages: Iterable[str], jeton: str
+    ) -> tuple[Diffusion | None, bool]:
+        """La diffusion du Masque du ``jour`` pour l'émission ``cle`` (voir
+        ``lire_diffusion``), et vrai si elle vient du cache."""
+        with self._verrou:
+            maintenant = self._horloge()
+            self._memoire = {
+                c: v
+                for c, v in self._memoire.items()
+                if maintenant - v[0] < self._duree
+            }
+            if cle in self._memoire:
+                return self._memoire[cle][1], True
+        diffusion = lire_diffusion(jour, pages, jeton, self._session)
+        with self._verrou:
+            self._memoire[cle] = (self._horloge(), diffusion)
+        return diffusion, False
 
 
 def lire_diffusion(

@@ -13,7 +13,9 @@ import requests
 from lmelp_pap.radiofrance_api import (
     ApiRadioFranceError,
     Diffusion,
+    LecteurDiffusions,
     Personnalite,
+    jeton,
     lire_diffusion,
 )
 
@@ -170,3 +172,45 @@ def test_une_erreur_de_l_api_ne_rapporte_que_sa_nature(
         lire_diffusion(JOUR, [PAGE], "cle", SessionApi(reponse))
     assert detail in str(erreur.value)
     assert "Unauthorized" not in str(erreur.value)
+
+
+class Horloge:
+    def __init__(self) -> None:
+        self.t = 1000.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def test_le_lecteur_garde_la_diffusion_en_memoire_une_heure() -> None:
+    horloge = Horloge()
+    session = SessionApi(_page(_noeud(PAGE_API)), _page(_noeud(PAGE_API)))
+    lecteur = LecteurDiffusions(session, horloge=horloge)
+
+    premiere, du_cache_1 = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    horloge.t += 3599
+    seconde, du_cache_2 = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    horloge.t += 2
+    _, du_cache_3 = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+
+    assert premiere == seconde and premiere is not None
+    assert (du_cache_1, du_cache_2, du_cache_3) == (False, True, False)
+    assert len(session.demandes) == 2
+
+
+def test_le_lecteur_ne_garde_pas_une_erreur() -> None:
+    session = SessionApi(ReponseGraphQL(500, {}), _page(_noeud(PAGE_API)))
+    lecteur = LecteurDiffusions(session)
+
+    with pytest.raises(ApiRadioFranceError):
+        lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    diffusion, du_cache = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+
+    assert diffusion is not None and du_cache is False
+
+
+def test_la_cle_se_lit_dans_l_environnement(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "cle")
+    assert jeton() == "cle"
+    monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "")
+    assert jeton() is None
