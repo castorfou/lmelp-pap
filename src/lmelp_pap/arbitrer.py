@@ -23,12 +23,21 @@ API :
 - ``POST /api/verifications`` : lance, en fond, la vérification des URL
   d'intégral (maturité des enregistrements, module ``maturite``) ;
 - ``GET /api/verifications`` : son avancement (``en_cours``, ``faites``,
-  ``total``) et son ``bilan`` une fois finie.
+  ``total``) et son ``bilan`` une fois finie ;
+- ``POST /api/rapatriements`` / ``GET /api/rapatriements`` /
+  ``POST /api/rapatriements/arret`` : le rapatriement des intégraux ;
+- ``POST /api/qualifications`` : qualifie l'enregistrement rapatrié d'une
+  émission (``emission_id``, ``verdict`` : ``favorable`` ou ``ecarte``,
+  ``motif``, obligatoire pour un écart) ;
+- ``GET /audios/<fichier>`` : un fichier du dossier audio, avec les requêtes
+  ``Range`` (206) pour le saut ; rien hors du dossier audio.
 
 Avec un dépôt Mongo, chaque émission des données porte sa ``maturite`` (le
 niveau de son enregistrement le plus avancé, ou ``null``), ``maturite_depuis``
-(la date d'entrée dans ce niveau) et les données
-``maturite_active`` ; sans dépôt, la vérification répond 503.
+(la date d'entrée dans ce niveau), ``fichier_audio`` (le fichier écoutable,
+relatif au dossier audio), ``ecart`` (``date``, ``motif``) et les données
+``maturite_active`` ; sans dépôt, la vérification, le rapatriement et la
+qualification répondent 503.
 
 Chaque requête d'écriture renvoie les données à jour, comme ``GET /api/donnees``.
 Une émission y porte en plus, pour l'arbitrage de date, ses ``dates_candidates``
@@ -39,6 +48,7 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 """
 
 import json
+import mimetypes
 import sys
 import threading
 import time
@@ -50,6 +60,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 from lmelp_pap.arbitrages import (
     EXISTANTE,
@@ -76,14 +87,18 @@ from lmelp_pap.liste import (
 )
 from lmelp_pap.maturite import (
     ESSAIS,
+    MORCEAU,
     Depot,
     Enregistrement,
+    QualificationError,
     RapatriementError,
     RapatriementInterrompuError,
     Resultat,
     Verification,
+    ecrire_qualifications,
     integraux,
     meilleur,
+    qualifier,
     rapatrier,
     retenu,
     verification_due,
@@ -471,6 +486,56 @@ class Atelier:
         ceux qui sont finis restent rapatriés."""
         return self._rapatriement.arreter()
 
+    def qualifier(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Qualifie l'enregistrement rapatrié d'une émission (``emission_id``,
+        ``verdict`` : ``favorable`` ou ``ecarte``, ``motif`` obligatoire pour
+        un écart ; ``enregistrement`` : son URL, s'il y en a plusieurs) ;
+        conserve la qualification et réécrit ``qualifications.csv``."""
+        depot = self._depot()
+        emission_id = str(demande.get("emission_id") or "")
+        try:
+            with self._verrou:
+                choisi = self._rapatrie(
+                    depot, emission_id, demande.get("enregistrement")
+                )
+                fait, qualification = qualifier(
+                    choisi,
+                    str(demande.get("verdict") or ""),
+                    str(demande.get("motif") or ""),
+                    datetime.now(UTC),
+                )
+                depot.enregistrer(fait)
+                depot.ajouter_qualification(qualification)
+                ecrire_qualifications(depot.qualifications(), self.sortie)
+        except (DemandeInvalideError, QualificationError) as erreur:
+            journal(f"qualification refusée {emission_id or '?'} : {erreur}")
+            raise DemandeInvalideError(str(erreur)) from erreur
+        if qualification.verdict == "favorable":
+            journal(f"qualifié {emission_id} ({fait.fichier}) : favorable")
+        else:
+            journal(
+                f"écarté {emission_id} ({fait.fichier}) : « {qualification.motif} »"
+            )
+        return self.donnees()
+
+    @staticmethod
+    def _rapatrie(depot: Depot, emission_id: str, url: object) -> Enregistrement:
+        """L'enregistrement rapatrié de l'émission à qualifier (celui de
+        l'URL donnée, sinon le premier)."""
+        candidats = [
+            e
+            for e in depot.tous()
+            if e.emission_id == emission_id
+            and e.niveau == "rapatrie"
+            and (url is None or e.url == url)
+        ]
+        if not candidats:
+            raise DemandeInvalideError(
+                f"{emission_id or 'émission absente'} : aucun enregistrement "
+                "rapatrié à qualifier"
+            )
+        return candidats[0]
+
     def _depot(self) -> Depot:
         if self.depot is None:
             raise MaturiteIndisponibleError("MONGO_URI absent")
@@ -647,6 +712,13 @@ class Atelier:
                     if dernier
                     else None
                 )
+                e["fichier_audio"] = plus_avance.fichier if plus_avance else None
+                ecart = plus_avance.ecart if plus_avance else None
+                e["ecart"] = (
+                    {"date": ecart.date.isoformat(), "motif": ecart.motif}
+                    if ecart
+                    else None
+                )
                 e["maturite_depuis"] = (
                     plus_avance.entrees[plus_avance.niveau].isoformat()
                     if plus_avance and plus_avance.niveau in plus_avance.entrees
@@ -720,6 +792,48 @@ class Atelier:
         }
 
 
+TYPES_AUDIO = {".m4a": "audio/mp4", ".mp3": "audio/mpeg"}
+
+
+def fichier_audio(dossier: Path, chemin_url: str) -> Path | None:
+    """Le fichier que désigne ``/audios/<chemin>`` dans le dossier audio, ou
+    ``None`` s'il n'existe pas ou sort du dossier."""
+    relatif = unquote(urlsplit(chemin_url).path.removeprefix("/audios/"))
+    racine = dossier.resolve()
+    chemin = (racine / relatif).resolve()
+    if not relatif or not chemin.is_relative_to(racine) or not chemin.is_file():
+        return None
+    return chemin
+
+
+def plage(entete: str | None, taille: int) -> tuple[int, int] | None:
+    """Les bornes (incluses) d'une plage ``bytes=a-b``, ``bytes=a-`` ou
+    ``bytes=-n`` ; ``None`` sans plage lisible (tout le fichier) ;
+    ``ValueError`` pour une plage hors du fichier (416)."""
+    if not entete or not entete.startswith("bytes=") or "," in entete:
+        return None
+    debut, _, fin = entete.removeprefix("bytes=").strip().partition("-")
+    if not (debut.isdigit() or fin.isdigit()) or not (debut + fin).isdigit():
+        return None
+    if not debut:  # les n derniers octets
+        n = int(fin)
+        if n == 0 or taille == 0:
+            raise ValueError("plage vide")
+        return max(0, taille - n), taille - 1
+    a = int(debut)
+    b = min(int(fin), taille - 1) if fin else taille - 1
+    if a >= taille or a > b:
+        raise ValueError("plage hors du fichier")
+    return a, b
+
+
+def type_audio(chemin: Path) -> str:
+    """Le type MIME d'un fichier audio, d'après son extension."""
+    return TYPES_AUDIO.get(chemin.suffix.lower()) or (
+        mimetypes.guess_type(chemin.name)[0] or "application/octet-stream"
+    )
+
+
 def _ressource(nom: str) -> str:
     """Un fichier livré avec le paquet (la page d'accueil)."""
     return files("lmelp_pap").joinpath(nom).read_text(encoding="utf-8")
@@ -764,6 +878,8 @@ def creer_serveur(
                 self._json(atelier.etat_verification())
             elif self.path == "/api/rapatriements":
                 self._json(atelier.etat_rapatriement())
+            elif self.path.startswith("/audios/"):
+                self._audio()
             else:
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 
@@ -789,6 +905,14 @@ def creer_serveur(
                 except (DemandeInvalideError, json.JSONDecodeError) as e:
                     self._json({"erreur": str(e)}, HTTPStatus.BAD_REQUEST)
                 return
+            if self.path == "/api/qualifications":
+                try:
+                    self._json(atelier.qualifier(self._demande()))
+                except MaturiteIndisponibleError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                except (DemandeInvalideError, json.JSONDecodeError) as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.BAD_REQUEST)
+                return
             actions = {
                 "/api/arbitrages": atelier.arbitrer,
                 "/api/annulations": atelier.annuler,
@@ -801,6 +925,41 @@ def creer_serveur(
                 self._json(action(self._demande()))
             except (DemandeInvalideError, json.JSONDecodeError) as e:
                 self._json({"erreur": str(e)}, HTTPStatus.BAD_REQUEST)
+
+        def _audio(self) -> None:
+            """Un fichier du dossier audio, entier ou par plage (``Range``,
+            206), pour l'écoute et le saut dans le fichier."""
+            chemin = fichier_audio(atelier.audios, self.path)
+            if chemin is None:
+                journal(f"audio introuvable : {self.path}")
+                self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
+                return
+            taille = chemin.stat().st_size
+            try:
+                bornes = plage(self.headers.get("Range"), taille)
+            except ValueError:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{taille}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            debut, fin = bornes or (0, taille - 1)
+            self.send_response(HTTPStatus.PARTIAL_CONTENT if bornes else HTTPStatus.OK)
+            self.send_header("Content-Type", type_audio(chemin))
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(fin - debut + 1))
+            if bornes:
+                self.send_header("Content-Range", f"bytes {debut}-{fin}/{taille}")
+            self.end_headers()
+            reste = fin - debut + 1
+            try:
+                with chemin.open("rb") as f:
+                    f.seek(debut)
+                    while reste > 0 and (morceau := f.read(min(MORCEAU, reste))):
+                        self.wfile.write(morceau)
+                        reste -= len(morceau)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # le lecteur a sauté ailleurs : il abandonne la plage
 
         def _demande(self) -> dict[str, Any]:
             """Le corps JSON de la requête, un objet."""

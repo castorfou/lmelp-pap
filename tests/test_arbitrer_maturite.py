@@ -460,3 +460,172 @@ def test_un_echec_de_rapatriement_est_trace(
     assert "échec 2014-09-28 : " in logs
     assert "HTTP 404" in logs
     assert "0 rapatrié, 0 déjà là, 1 échec" in logs
+
+
+# --- écouter et qualifier un enregistrement rapatrié ------------------------
+
+FICHIER_2014 = f"2014/{INTEGRAL_2014.rsplit('/', 1)[1]}"
+
+
+def _rapatrier_2014(url: str) -> None:
+    _verifier(url)
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    _attendre_rapatriements(url)
+
+
+def _emissions(donnees: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {e["id"]: e for e in donnees["emissions"]}
+
+
+def test_une_emission_rapatriee_donne_son_fichier_a_ecouter(url: str) -> None:
+    _rapatrier_2014(url)
+    emissions = _emissions(_get(f"{url}/api/donnees"))
+    assert emissions["2014-09-28"]["fichier_audio"] == FICHIER_2014
+    assert emissions["2014-09-28"]["ecart"] is None
+    assert emissions["2024-02-11"]["fichier_audio"] is None
+
+
+def test_une_qualification_favorable_rend_l_emission_qualifiee(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    _rapatrier_2014(url)
+    avant = _emissions(_get(f"{url}/api/donnees"))["2014-09-28"]
+
+    donnees = _post_json(
+        f"{url}/api/qualifications",
+        {"emission_id": "2014-09-28", "verdict": "favorable"},
+    )
+
+    emission = _emissions(donnees)["2014-09-28"]
+    assert emission["maturite"] == "qualifie"
+    assert emission["themes"] == avant["themes"]
+    assert emission["fichier_audio"] == FICHIER_2014
+    (qualification,) = depot.qualifications()
+    assert qualification.verdict == "favorable"
+    assert qualification.enregistrement == INTEGRAL_2014
+    csv = (tmp_path / "sortie" / "qualifications.csv").read_text(encoding="utf-8")
+    assert f"2014-09-28,{INTEGRAL_2014},favorable,," in csv
+
+
+def test_un_ecart_laisse_l_emission_rapatriee_et_marquee(
+    url: str, depot: Depot
+) -> None:
+    _rapatrier_2014(url)
+
+    donnees = _post_json(
+        f"{url}/api/qualifications",
+        {"emission_id": "2014-09-28", "verdict": "ecarte", "motif": "pas la bonne"},
+    )
+
+    emission = _emissions(donnees)["2014-09-28"]
+    assert emission["maturite"] == "rapatrie"
+    assert emission["ecart"]["motif"] == "pas la bonne"
+    assert emission["ecart"]["date"]
+    assert [q.verdict for q in depot.qualifications()] == ["ecarte"]
+
+
+def test_une_qualification_invalide_est_refusee(url: str) -> None:
+    _rapatrier_2014(url)
+    demandes: list[dict[str, Any]] = [
+        {"emission_id": "2014-09-28", "verdict": "ecarte", "motif": " "},
+        {"emission_id": "2014-09-28", "verdict": "bof"},
+        {"emission_id": "2024-02-11", "verdict": "favorable"},  # téléchargeable
+        {"emission_id": "inconnue", "verdict": "favorable"},
+        {},
+    ]
+    for corps in demandes:
+        with pytest.raises(urllib.error.HTTPError) as erreur:
+            _post_json(f"{url}/api/qualifications", corps)
+        assert erreur.value.code == 400, corps
+
+
+def test_sans_mongo_pas_de_qualification(url_sans_mongo: str) -> None:
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post_json(
+            f"{url_sans_mongo}/api/qualifications",
+            {"emission_id": "2014-09-28", "verdict": "favorable"},
+        )
+    assert erreur.value.code == 503
+
+
+def test_les_qualifications_sont_tracees(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _rapatrier_2014(url)
+    capfd.readouterr()
+    _post_json(
+        f"{url}/api/qualifications",
+        {"emission_id": "2014-09-28", "verdict": "ecarte", "motif": "coupé"},
+    )
+    _post_json(
+        f"{url}/api/qualifications",
+        {"emission_id": "2014-09-28", "verdict": "favorable"},
+    )
+    with pytest.raises(urllib.error.HTTPError):
+        _post_json(
+            f"{url}/api/qualifications",
+            {"emission_id": "2024-02-11", "verdict": "favorable"},
+        )
+    logs = capfd.readouterr().err
+    assert f"écarté 2014-09-28 ({FICHIER_2014}) : « coupé »" in logs
+    assert f"qualifié 2014-09-28 ({FICHIER_2014}) : favorable" in logs
+    assert "qualification refusée 2024-02-11 : " in logs
+
+
+def _lire(url: str, **entetes: str) -> tuple[int, dict[str, str], bytes]:
+    requete = urllib.request.Request(url, headers=entetes)
+    with urllib.request.urlopen(requete) as r:
+        return r.status, dict(r.headers), r.read()
+
+
+def test_l_audio_rapatrie_s_ecoute(url: str) -> None:
+    _rapatrier_2014(url)
+    statut, entetes, corps = _lire(f"{url}/audios/{FICHIER_2014}")
+    assert statut == 200
+    assert corps == SON
+    assert entetes["Content-Type"] == "audio/mp4"
+    assert entetes["Accept-Ranges"] == "bytes"
+    assert entetes["Content-Length"] == str(len(SON))
+
+
+@pytest.mark.parametrize(
+    ("plage", "debut", "fin"),
+    [("bytes=10-19", 10, 19), ("bytes=100-", 100, None), ("bytes=-5", None, None)],
+)
+def test_l_audio_se_lit_par_plage_pour_le_saut(
+    url: str, plage: str, debut: int | None, fin: int | None
+) -> None:
+    _rapatrier_2014(url)
+    statut, entetes, corps = _lire(f"{url}/audios/{FICHIER_2014}", Range=plage)
+    n = len(SON)
+    a = n - 5 if debut is None else debut
+    b = n - 1 if fin is None else fin
+    assert statut == 206
+    assert corps == SON[a : b + 1]
+    assert entetes["Content-Range"] == f"bytes {a}-{b}/{n}"
+    assert entetes["Content-Length"] == str(b - a + 1)
+
+
+def test_une_plage_hors_du_fichier_est_refusee(url: str) -> None:
+    _rapatrier_2014(url)
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _lire(f"{url}/audios/{FICHIER_2014}", Range=f"bytes={len(SON)}-")
+    assert erreur.value.code == 416
+    assert erreur.value.headers["Content-Range"] == f"bytes */{len(SON)}"
+
+
+@pytest.mark.parametrize(
+    "chemin",
+    [
+        "2014/absent.m4a",
+        "../sortie/emissions.csv",
+        "%2e%2e/sortie/emissions.csv",
+        "2014/..%2f..%2fsortie/emissions.csv",
+        "",
+    ],
+)
+def test_rien_ne_se_lit_hors_du_dossier_audio(url: str, chemin: str) -> None:
+    _rapatrier_2014(url)
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _lire(f"{url}/audios/{chemin}")
+    assert erreur.value.code == 404
