@@ -85,6 +85,12 @@
   .barre.fine { height: 4px; } .barre.fine i { background: var(--rapatrie); }
   .erreurs { margin: 4px 0 0; padding-left: 18px; color: #b3261e; font-size: 13px; }
   .echec { color: #b3261e; font-size: 12px; }
+  .ecart { color: var(--localise); font-size: 12px; font-weight: 600; }
+  /* Lecteur d'un enregistrement rapatrié, sous sa ligne */
+  tr.ecoute td { background: var(--ligne); }
+  tr.ecoute .lecteur, tr.ecoute .verdict { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+  tr.ecoute audio { flex: 1; min-width: 280px; height: 36px; }
+  tr.ecoute input { flex: 1; min-width: 220px; font: inherit; padding: 4px 8px; border: 1px solid var(--trait); border-radius: 6px; background: var(--carte); color: var(--texte); }
   .lot { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
   button.primaire { background: var(--entete); color: var(--entete-texte); border-color: var(--entete); }
   button:disabled { opacity: .5; cursor: wait; }
@@ -111,7 +117,51 @@ const ETAT = Object.fromEntries(ETATS.map(e => [e.cle, e]));
 // colonne Action et les boutons de lot n'apparaissent que pour un état qui en a une.
 const ACTIONS = {
   telechargeable: { libelle: "Télécharger", lot: true, executer: ids => lancerRapatriement(ids) },
+  // ouvre (ou referme) le lecteur sous la ligne de l'émission
+  rapatrie: { libelle: "Écouter et qualifier", lot: false, executer: ids => { vue.ecoute = vue.ecoute === ids[0] ? null : ids[0]; rendre(); } },
 };
+
+// ---------- Écoute et qualification d'un enregistrement rapatrié ----------
+// Le fichier vient de GET /audios/<fichier> (requêtes Range : le lecteur saute
+// où on veut). Favorable : l'émission passe à qualifié ; Écarter (motif
+// obligatoire) : elle reste rapatriée, marquée écartée.
+const urlAudio = f => "/audios/" + f.split("/").map(encodeURIComponent).join("/");
+function lecteur(e, colonnesN) {
+  const corps = e.fichier
+    ? `<audio controls preload="metadata" src="${esc(urlAudio(e.fichier))}"></audio>
+       <button data-saut="-30">−30 s</button><button data-saut="30">+30 s</button>
+       <span class="doux">${esc(e.fichier)}</span>`
+    : `<span class="echec">aucun fichier écoutable pour cette émission</span>`;
+  return `<tr class="ecoute"><td colspan="${colonnesN}"><div class="lecteur">${corps}</div>
+    <div class="verdict"><button class="primaire" id="favorable" ${e.fichier ? "" : "disabled"}>Favorable</button>
+    <input id="motif" aria-label="Motif de l'écart" placeholder="motif de l'écart (obligatoire pour écarter)">
+    <button id="ecarter" disabled>Écarter</button></div></td></tr>`;
+}
+function brancherLecteur(id) {
+  const audio = document.querySelector("tr.ecoute audio");
+  document.querySelectorAll("tr.ecoute [data-saut]").forEach(b => b.addEventListener("click", () => {
+    audio.currentTime = Math.max(0, audio.currentTime + +b.dataset.saut);
+  }));
+  const motif = $("motif"), ecarter = $("ecarter");
+  motif.addEventListener("input", () => { ecarter.disabled = !motif.value.trim(); });
+  motif.addEventListener("keydown", ev => { if (ev.key === "Enter" && motif.value.trim()) ecarter.click(); });
+  $("favorable").addEventListener("click", () => qualifier(id, { verdict: "favorable" }));
+  ecarter.addEventListener("click", () => qualifier(id, { verdict: "ecarte", motif: motif.value.trim() }));
+}
+async function qualifier(id, demande) {
+  const avant = compter(EMISSIONS);
+  document.querySelectorAll("tr.ecoute button").forEach(b => { b.disabled = true; });
+  try {
+    const r = await fetch("/api/qualifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emission_id: id, ...demande }) });
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.erreur || r.statusText);
+    preparer(t); vue.ecoute = null; rendre();
+    notifier(`${id} ${demande.verdict === "favorable" ? "qualifié" : "écarté"}`, avant);
+  } catch (err) {
+    toast(`Échec : ${err.message}`);
+    document.querySelectorAll("tr.ecoute button").forEach(b => { b.disabled = b.id === "ecarter" && !$("motif").value.trim(); });
+  }
+}
 
 // ---------- Rapatriements : un lot tourne côté serveur, le bandeau le suit ----------
 // L'état vient de GET /api/rapatriements : le bandeau se retrouve après un
@@ -209,7 +259,7 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const JOUR_MS = 86400000;
 
 let EMISSIONS = [], ANNEES = [], maturiteActive = false;
-const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set() };
+const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set(), ecoute: null };
 
 // Une émission attestée par lmelp y est déjà : cet état l'emporte sur la maturité.
 function etatDe(e) {
@@ -223,6 +273,7 @@ function preparer(d) {
     themes: e.themes || [], sources: [...new Set(e.attestations.map(a => a.source))],
     etat: etatDe(e),
     echec: e.echec_rapatriement || null,
+    fichier: e.fichier_audio || null, ecart: e.ecart || null,
     depuis: e.maturite_depuis ? Math.max(0, Math.floor((Date.now() - Date.parse(e.maturite_depuis)) / JOUR_MS)) : null,
   }));
   const fin = Math.max(new Date().getFullYear(), ...EMISSIONS.map(e => e.annee));
@@ -332,7 +383,7 @@ function accueil(racine) {
 function colonnes(cle) {
   const c = [
     { k: "date", t: "Date", v: e => e.date, h: e => e.date },
-    { k: "titre", t: "Titre", v: e => e.titre.toLowerCase(), h: e => esc(e.titre) + (e.echec ? `<div class="echec">échec le ${new Date(e.echec.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ")} : ${esc(e.echec.detail)}</div>` : "") },
+    { k: "titre", t: "Titre", v: e => e.titre.toLowerCase(), h: e => esc(e.titre) + (e.echec ? `<div class="echec">échec le ${new Date(e.echec.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ")} : ${esc(e.echec.detail)}</div>` : "") + (e.ecart ? `<div class="ecart" title="écarté le ${esc(new Date(e.ecart.date).toLocaleDateString("fr-FR"))}">écarté : ${esc(e.ecart.motif)}</div>` : "") },
     { k: "themes", t: "Thèmes", v: e => e.themes.join(","), h: e => `<span class="doux">${esc(e.themes.join(", "))}</span>` },
   ];
   if (cle !== "lmelp") {
@@ -369,6 +420,11 @@ function pageEtat(racine) {
   const lot = action && action.lot;
   tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}">${lot ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
     (liste.length > 300 ? `<tr><td colspan="6" class="doux">… ${liste.length - 300} de plus</td></tr>` : "");
+  const ecoutee = vue.etat === "rapatrie" && liste.find(e => e.id === vue.ecoute);
+  if (ecoutee) {
+    const tr = tb.querySelector(`tr[data-id="${CSS.escape(ecoutee.id)}"]`);
+    if (tr) { tr.insertAdjacentHTML("afterend", lecteur(ecoutee, tr.children.length)); brancherLecteur(ecoutee.id); }
+  }
   if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", () => action.executer([b.closest("tr").dataset.id])));
   if (lot) tb.querySelectorAll("input[type=checkbox]").forEach(c => c.addEventListener("change", () => {
     const id = c.closest("tr").dataset.id;
@@ -379,7 +435,7 @@ function pageEtat(racine) {
 
 // ---------- Navigation : l'état ouvert et l'année filtrée vivent dans l'adresse ----------
 function ouvrir(etat) {
-  vue.etat = etat; vue.choix.clear(); vue.tri = ETAT[etat].action ? "depuis" : "date"; vue.sens = -1;
+  vue.etat = etat; vue.choix.clear(); vue.ecoute = null; vue.tri = ETAT[etat].action ? "depuis" : "date"; vue.sens = -1;
   rendre(); scrollTo(0, 0);
 }
 function lireAdresse() {

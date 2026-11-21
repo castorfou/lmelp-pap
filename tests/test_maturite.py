@@ -17,14 +17,18 @@ from lmelp_pap.maturite import (
     NIVEAUX,
     Depot,
     Enregistrement,
+    Qualification,
+    QualificationError,
     RapatriementError,
     RapatriementInterrompuError,
     Verification,
     appliquer,
     classer,
+    ecrire_qualifications,
     integraux,
     maturite_emission,
     meilleur,
+    qualifier,
     rapatrier,
     retenu,
     verification_due,
@@ -540,3 +544,78 @@ def test_chaque_nouvel_essai_est_signale(tmp_path: Any) -> None:
         ),
     )
     assert signales == [(1, "lent", 5)]
+
+
+# --- qualification d'un enregistrement rapatrié -----------------------------
+
+
+def rapatrie() -> Enregistrement:
+    return replace(enregistrement("rapatrie"), fichier="2008/a.m4a")
+
+
+def test_une_qualification_favorable_rend_l_enregistrement_qualifie() -> None:
+    qualifie, qualification = qualifier(rapatrie(), "favorable", "", AUJOURDHUI)
+    assert qualifie.niveau == "qualifie"
+    assert qualifie.entrees == {"rapatrie": HIER, "qualifie": AUJOURDHUI}
+    assert qualification == Qualification(
+        enregistrement=URL,
+        emission_id="2008-03-02",
+        verdict="favorable",
+        motif="",
+        date=AUJOURDHUI,
+    )
+    assert qualifie.ecart is None
+
+
+def test_un_enregistrement_ecarte_reste_rapatrie_et_garde_son_motif() -> None:
+    ecarte, qualification = qualifier(
+        rapatrie(), "ecarte", "  pas la bonne émission ", AUJOURDHUI
+    )
+    assert ecarte.niveau == "rapatrie"
+    assert ecarte.entrees == {"rapatrie": HIER}
+    assert qualification.verdict == "ecarte"
+    assert qualification.motif == "pas la bonne émission"
+    assert ecarte.ecart == qualification
+
+
+def test_une_qualification_favorable_efface_un_ecart() -> None:
+    ecarte, _ = qualifier(rapatrie(), "ecarte", "coupé", HIER)
+    qualifie, _ = qualifier(ecarte, "favorable", "", AUJOURDHUI)
+    assert qualifie.niveau == "qualifie"
+    assert qualifie.ecart is None
+
+
+@pytest.mark.parametrize(
+    ("niveau", "verdict", "motif", "message"),
+    [
+        ("rapatrie", "ecarte", "  ", "motif"),
+        ("rapatrie", "peut-être", "", "verdict"),
+        ("telechargeable", "favorable", "", "telechargeable"),
+        ("qualifie", "favorable", "", "qualifie"),
+    ],
+)
+def test_une_qualification_impossible_est_refusee(
+    niveau: str, verdict: str, motif: str, message: str
+) -> None:
+    with pytest.raises(QualificationError, match=message):
+        qualifier(replace(rapatrie(), niveau=niveau), verdict, motif, AUJOURDHUI)
+
+
+def test_le_depot_garde_l_ecart_et_les_qualifications(depot: Depot) -> None:
+    ecarte, qualification = qualifier(rapatrie(), "ecarte", "coupé", AUJOURDHUI)
+    depot.enregistrer(ecarte)
+    depot.ajouter_qualification(qualification)
+    assert depot.tous() == [ecarte]
+    assert depot.qualifications() == [qualification]
+    assert depot.base["pap_qualifications"].count_documents({}) == 1
+
+
+def test_les_qualifications_s_exportent_en_csv(tmp_path: Any) -> None:
+    _, favorable = qualifier(rapatrie(), "favorable", "", AUJOURDHUI)
+    _, ecart = qualifier(rapatrie(), "ecarte", "coupé, à 40 min", HIER)
+    ecrire_qualifications([favorable, ecart], tmp_path)
+    assert (tmp_path / "qualifications.csv").read_text(encoding="utf-8") == (
+        "emission_id,enregistrement,verdict,motif,date\n"
+        f'2008-03-02,{URL},ecarte,"coupé, à 40 min",2026-11-20T09:00:00+00:00\n'
+        f"2008-03-02,{URL},favorable,,2026-11-21T09:00:00+00:00\n"
+    )
