@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from lmelp_pap.arbitrages import lire_arbitrages
-from lmelp_pap.arbitrer import creer_serveur
+from lmelp_pap.arbitrer import AUDIOS, AUDIOS_LMELP, creer_serveur
 from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import construire_liste
@@ -30,7 +30,7 @@ def _parser() -> argparse.ArgumentParser:
     cache = _chemin("PAP_CACHE", "data/raw/cache")
     donnees = _chemin("PAP_DONNEES", "data/processed")
     arbitrages = _chemin("PAP_ARBITRAGES", None)
-    audios = _chemin("PAP_AUDIOS", "data/raw/audios")
+    audios = _chemin("PAP_AUDIOS", str(AUDIOS))
     parser = argparse.ArgumentParser(prog="lmelp-pap")
     commandes = parser.add_subparsers(dest="commande", required=True)
     emissions = commandes.add_parser(
@@ -76,14 +76,14 @@ def _parser() -> argparse.ArgumentParser:
         "--audios",
         type=Path,
         default=audios,
-        help="dossier des enregistrements rapatriés (par défaut data/raw/audios)",
+        help=f"dossier des enregistrements rapatriés (par défaut {AUDIOS})",
     )
     arbitrer.add_argument(
         "--audios-lmelp",
         type=Path,
-        default=_chemin("PAP_AUDIOS_LMELP", "data/raw/audios-lmelp"),
+        default=_chemin("PAP_AUDIOS_LMELP", str(AUDIOS_LMELP)),
         help="dossier audio du back-office lmelp, où vont les enregistrements "
-        "mis à disposition (par défaut data/raw/audios-lmelp)",
+        f"mis à disposition (par défaut {AUDIOS_LMELP})",
     )
     arbitrer.add_argument(
         "--verification-jours",
