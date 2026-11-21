@@ -29,6 +29,11 @@ API :
 - ``POST /api/qualifications`` : qualifie l'enregistrement rapatrié d'une
   émission (``emission_id``, ``verdict`` : ``favorable`` ou ``ecarte``,
   ``motif``, obligatoire pour un écart) ;
+- ``GET /api/radiofrance/<emission_id>`` : la diffusion de l'émission dans
+  l'Open API Radio France, lue à la demande (module ``api_radiofrance``) :
+  ``statut`` (``trouvee``, ``introuvable``, ``sans_cle``, ``erreur`` avec son
+  ``detail``) et ``diffusion`` (``titre``, ``resume``, ``url``, ``equipe`` et
+  ``invites`` : ``nom``, ``role``) ; rien n'en est conservé ;
 - ``GET /audios/<fichier>`` : un fichier du dossier audio, avec les requêtes
   ``Range`` (206) pour le saut ; rien hors du dossier audio.
 
@@ -53,7 +58,7 @@ import sys
 import threading
 import time
 import traceback
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -62,6 +67,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from lmelp_pap.api_radiofrance import ApiRadioFranceError, lire_diffusion
 from lmelp_pap.arbitrages import (
     EXISTANTE,
     INEXISTANTE,
@@ -227,12 +233,15 @@ class Atelier:
         session: Any = None,
         audios: Path | None = None,
         intervalle: timedelta = timedelta(days=7),
+        jeton_radiofrance: str | None = None,
     ):
         """Lit le cache et construit une première fois la liste. ``depot`` :
         la maturité des enregistrements (Mongo), ``session`` : le client HTTP
         de la vérification et du rapatriement (``requests`` par défaut),
-        ``audios`` : le dossier des enregistrements rapatriés."""
+        ``audios`` : le dossier des enregistrements rapatriés,
+        ``jeton_radiofrance`` : la clé de l'Open API Radio France."""
         self.depot = depot
+        self.jeton_radiofrance = jeton_radiofrance
         self._session = session
         self.audios = audios or Path("data/raw/audios")
         self.intervalle = intervalle  # entre deux vérifications complètes
@@ -517,6 +526,38 @@ class Atelier:
                 f"écarté {emission_id} ({fait.fichier}) : « {qualification.motif} »"
             )
         return self.donnees()
+
+    def diffusion_radiofrance(self, emission_id: str) -> dict[str, Any]:
+        """La diffusion de l'émission dans l'Open API Radio France, lue à
+        l'instant et jamais conservée (CGU) ; le journal dit l'appel, sa
+        durée et son résultat, sans rien du contenu reçu."""
+        with self._verrou:
+            emission = self._emissions.get(emission_id)
+        if emission is None:
+            journal(f"api radiofrance {emission_id} : émission inconnue")
+            raise DemandeInvalideError(f"{emission_id} : émission inconnue")
+        reponse: dict[str, Any] = {"emission_id": emission_id, "diffusion": None}
+        if not self.jeton_radiofrance:
+            journal(f"api radiofrance {emission_id} : pas de clé")
+            return {**reponse, "statut": "sans_cle"}
+        pages = [
+            a.url for a in emission.attestations if a.source == "radiofrance" and a.url
+        ]
+        debut = time.monotonic()
+        try:
+            diffusion = lire_diffusion(
+                emission.date, pages, self.jeton_radiofrance, self._session
+            )
+        except ApiRadioFranceError as erreur:
+            duree = _duree(time.monotonic() - debut)
+            journal(f"api radiofrance {emission_id} : erreur {erreur} ({duree})")
+            return {**reponse, "statut": "erreur", "detail": str(erreur)}
+        duree = _duree(time.monotonic() - debut)
+        if diffusion is None:
+            journal(f"api radiofrance {emission_id} : introuvable ({duree})")
+            return {**reponse, "statut": "introuvable"}
+        journal(f"api radiofrance {emission_id} : trouvée ({duree})")
+        return {**reponse, "statut": "trouvee", "diffusion": asdict(diffusion)}
 
     @staticmethod
     def _rapatrie(depot: Depot, emission_id: str, url: object) -> Enregistrement:
@@ -850,12 +891,24 @@ def creer_serveur(
     audios: Path | None = None,
     planification: bool = False,
     intervalle: timedelta = timedelta(days=7),
+    jeton_radiofrance: str | None = None,
 ) -> ThreadingHTTPServer:
     """Le serveur de l'outil, prêt à servir (``serve_forever``). Sans
     ``depot``, la maturité des enregistrements est absente. Avec
     ``planification``, la vérification des URL part seule quand elle est due
-    (``Atelier.planifier``) ; l'atelier est ``serveur.atelier``."""
-    atelier = Atelier(cache, sortie, arbitrages, depot, session, audios, intervalle)
+    (``Atelier.planifier``) ; l'atelier est ``serveur.atelier``.
+    ``jeton_radiofrance`` : la clé de l'Open API Radio France, sans laquelle
+    la diffusion d'une émission répond ``sans_cle``."""
+    atelier = Atelier(
+        cache,
+        sortie,
+        arbitrages,
+        depot,
+        session,
+        audios,
+        intervalle,
+        jeton_radiofrance,
+    )
     if planification and depot is not None:
         atelier.planifier_en_continu()
 
@@ -878,6 +931,12 @@ def creer_serveur(
                 self._json(atelier.etat_verification())
             elif self.path == "/api/rapatriements":
                 self._json(atelier.etat_rapatriement())
+            elif self.path.startswith("/api/radiofrance/"):
+                emission_id = unquote(self.path.removeprefix("/api/radiofrance/"))
+                try:
+                    self._json(atelier.diffusion_radiofrance(emission_id))
+                except DemandeInvalideError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.NOT_FOUND)
             elif self.path.startswith("/audios/"):
                 self._audio()
             else:

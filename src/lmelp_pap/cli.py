@@ -156,6 +156,9 @@ def _arbitrer(args: argparse.Namespace) -> int:
         # puis à chaque échéance, et pour les URL nouvelles.
         planification=True,
         intervalle=timedelta(days=args.verification_jours),
+        # L'Open API Radio France, lue pendant l'écoute ; sans clé, l'écran
+        # d'écoute le dit et fonctionne sans elle.
+        jeton_radiofrance=os.environ.get("RADIOFRANCE_API_TOKEN") or None,
     )
     # VS Code redirige le port vers la machine hôte et y ouvre l'adresse.
     url = f"http://localhost:{serveur.server_address[1]}/"
