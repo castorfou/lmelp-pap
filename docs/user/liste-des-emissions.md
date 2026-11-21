@@ -300,6 +300,7 @@ Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans l
 | `--cache DOSSIER` | Dossier du cache (par défaut `data/raw/cache`). |
 | `--sortie DOSSIER` | Dossier des CSV de la liste, réécrits à chaque décision (par défaut `data/processed`). |
 | `--arbitrages FICHIER` | Fichier des arbitrages (par défaut `arbitrages.csv` dans le dossier de sortie). |
+| `--audios DOSSIER` | Dossier des enregistrements rapatriés (par défaut `data/raw/audios`, ou `PAP_AUDIOS`). |
 | `--port PORT` | Port du serveur (par défaut 8765). |
 | `--sans-navigateur` | N'ouvre pas la page ; l'adresse s'affiche dans le terminal. |
 
@@ -314,6 +315,9 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `GET /` | L'accueil. `GET /liste` : la liste en mode arbitrage. |
 | `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
+| `POST /api/rapatriements` | Lance en fond le rapatriement des émissions `{"emissions": ["2007-01-14", …]}`, l'une après l'autre. Erreurs : 400 (liste vide, émission sans intégral téléchargeable), 409 (un lot tourne déjà), 503 (sans base Mongo). |
+| `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
+| `POST /api/rapatriements/arret` | Arrête le lot en cours. |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
 | `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, et `bilan` (`ok`, `net`, `passager`) une fois finie. |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
@@ -331,7 +335,23 @@ Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste, sinon l
 - **Survoler une année** affiche ses chiffres dans le titre du graphique et place la frise sur cette année. **Cliquer une année** filtre tout sur elle : compteurs, frise et page d'état ouverte ensuite ; le bouton « 1987 × » lève le filtre.
 - **Survoler un compteur** fait ressortir son état dans le graphique et la frise ; **cliquer** ouvre la **page de l'état** : son histogramme (un clic sur une année filtre la liste) et le tableau de ses émissions, trié par ancienneté (ou par date pour un état sans action) ; un clic sur un en-tête trie la colonne, un second inverse le sens. L'adresse garde l'état et l'année (`/#etat=telechargeable&annee=2008`).
 
-L'accueil suit le thème clair ou sombre du système. Sans base Mongo, il n'affiche que « sans enregistrement » et « dans lmelp », avec un bandeau.
+L'accueil suit le thème clair ou sombre du système. Sans base Mongo, il n'affiche que « sans enregistrement » et « dans lmelp », avec un bandeau. « pap », en haut à gauche, ramène à l'accueil sans filtre.
+
+### Télécharger les enregistrements (rapatrier)
+
+La page **téléchargeable** télécharge l'intégral des émissions sur le disque de l'appli : bouton **Télécharger** sur une ligne, cases à cocher puis **Télécharger : sélection (N)**, ou **Télécharger : tout (N)** après confirmation. Chaque fichier va dans le dossier audio (`--audios`, variable `PAP_AUDIOS` ; par défaut `data/raw/audios`), sous `<année>/<nom d'origine du fichier>`, et l'émission passe à **rapatrié**.
+
+- **Un intégral par émission** : quand une émission en a plusieurs encodages, le m4a passe avant le mp3.
+- **Fichier sûr** : le téléchargement s'écrit dans un `.part`, renommé une fois complet ; une interruption ne laisse jamais de fichier final incomplet. L'empreinte SHA-256 et la taille sont notées dans `pap_enregistrements` ; un fichier déjà présent avec la bonne empreinte n'est pas retéléchargé.
+- **Échecs** : un échec passager (délai dépassé, coupure) est retenté jusqu'à trois fois, après 5 puis 15 secondes ; une réponse HTTP autre que 200 ne l'est pas. Un échec persistant s'affiche en rouge sous le titre de l'émission (« échec le 21/11 à 09:23 : … ») jusqu'au prochain succès.
+- **Un lot à la fois**, les fichiers l'un après l'autre.
+
+Un **panneau flottant**, en haut à droite, suit le lot sur toutes les pages, et se retrouve après un rechargement ou depuis un autre poste :
+
+- replié : « Téléchargement 3 / 12 » et la barre du lot ;
+- déplié : les Mo reçus, le temps restant estimé, l'émission en cours avec son pourcentage, son débit et sa barre ;
+- **Arrêter** coupe aussitôt le fichier en cours (le `.part` est supprimé) ; les fichiers finis restent rapatriés ;
+- à la fin, le bilan (rapatriés, échecs et leurs erreurs) reste affiché jusqu'à ✕.
 
 ### Maturité des enregistrements
 
