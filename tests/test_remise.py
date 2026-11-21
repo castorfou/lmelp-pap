@@ -6,7 +6,6 @@ import hashlib
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -17,6 +16,13 @@ from lmelp_pap.remise import (
     duree_du_fichier,
     lire_api,
     mettre_a_disposition,
+)
+from tests.test_radiofrance_api import (
+    ReponseGraphQL,
+    SessionApi,
+    _noeud,
+    _page,
+    _personne,
 )
 
 
@@ -300,102 +306,39 @@ def test_la_duree_du_fichier_l_emporte_sur_celle_des_sources(
 
 
 # --- l'API Radio France, lue seulement avec un jeton ------------------------
+# Le client commun (``radiofrance_api``) lit les diffusions du jour ; ses
+# réponses factices viennent de ses tests.
 
 
-class ReponseApi:
-    def __init__(self, donnees: Any, statut: int = 200):
-        self.status_code = statut
-        self._donnees = donnees
-
-    def json(self) -> Any:
-        return self._donnees
-
-
-def _diffusion(jour: str, url: str = "", **champs: Any) -> dict[str, Any]:
-    horodatage = int(datetime.fromisoformat(jour + "T10:00:00+02:00").timestamp())
-    return {
-        "node": {
-            "url": url,
-            "published_date": str(horodatage),
-            "standFirst": champs.get("chapo"),
-            "personalitiesConnection": {
-                "edges": [
-                    {"relation": r, "node": {"name": n}}
-                    for r, n in champs.get("personnes", [])
-                ]
-            },
-        },
-        "cursor": jour,
-    }
-
-
-class SessionApi:
-    """Une API Radio France factice : des pages de diffusions, de la plus
-    récente à la plus ancienne."""
-
-    def __init__(self, pages: list[list[dict[str, Any]]], statut: int = 200):
-        self.pages = pages
-        self.statut = statut
-        self.demandes: list[dict[str, Any]] = []
-
-    def post(self, url: str, **options: Any) -> ReponseApi:
-        self.demandes.append({"url": url, **options})
-        page = self.pages[len(self.demandes) - 1]
-        return ReponseApi(
-            {
-                "data": {
-                    "diffusionsOfShowByUrl": {
-                        "edges": page,
-                        "pageInfo": {
-                            "hasNextPage": len(self.demandes) < len(self.pages),
-                            "endCursor": page[-1]["cursor"] if page else None,
-                        },
-                    }
-                }
-            },
-            self.statut,
-        )
-
-
-def test_lire_api_trouve_la_diffusion_du_jour_en_remontant_les_pages() -> None:
-    session = SessionApi(
-        [
-            [_diffusion("2026-11-15"), _diffusion("2020-01-05")],
-            [
-                _diffusion(
-                    "2014-09-28",
-                    chapo="Le chapô.",
-                    personnes=[
-                        ("producer", "Jérôme Garcin"),
-                        ("staff", "Ilinca Negulesco"),
-                        ("guest", "Arnaud Viviant"),
-                        ("guest", "Elisabeth Philippe"),
-                        ("tag", "Roman"),
-                    ],
-                ),
-                _diffusion("2014-09-21"),
-            ],
-            [_diffusion("2014-09-14")],
-        ]
+def test_lire_api_donne_les_morceaux_de_la_diffusion_du_jour() -> None:
+    noeud = _noeud(
+        PAGE,
+        personnalites=[
+            _personne("Jérôme Garcin", "producer"),
+            _personne("Ilinca Negulesco", "staff"),
+            _personne("Arnaud Viviant", "guest"),
+            _personne("Elisabeth Philippe", "guest"),
+            _personne("Roman", "tag"),
+        ],
     )
+    session = SessionApi(_page(noeud))
 
-    api = lire_api(session, "jeton", date(2014, 9, 28))
+    api = lire_api(session, "jeton", date(2014, 9, 28), [PAGE])
 
     assert api == {
         "animateur": "Jérôme Garcin",
-        "resume": "Le chapô.",
+        "resume": "Le résumé de la diffusion.",
         "equipe": "Ilinca Negulesco",
         "invites": "Arnaud Viviant, Elisabeth Philippe",
     }
-    assert len(session.demandes) == 2  # la page plus ancienne n'est pas lue
+    assert len(session.demandes) == 1
     assert session.demandes[0]["headers"]["x-token"] == "jeton"
-    assert session.demandes[0]["url"] == "https://openapi.radiofrance.fr/v1/graphql"
 
 
 def test_lire_api_sans_diffusion_ce_jour_rend_none() -> None:
-    session = SessionApi([[_diffusion("2014-10-05"), _diffusion("2014-09-21")]])
-    assert lire_api(session, "jeton", date(2014, 9, 28)) is None
+    assert lire_api(SessionApi(_page()), "jeton", date(2014, 9, 28)) is None
 
 
 def test_une_api_en_erreur_ne_bloque_pas() -> None:
-    assert lire_api(SessionApi([[]], statut=403), "jeton", date(2014, 9, 28)) is None
+    session = SessionApi(ReponseGraphQL(403, {"message": "Unauthorized"}))
+    assert lire_api(session, "jeton", date(2014, 9, 28)) is None

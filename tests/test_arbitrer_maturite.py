@@ -20,6 +20,7 @@ import pytest
 
 from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.maturite import Depot
+from lmelp_pap.radiofrance_api import MASQUE
 from tests.test_commande import _cache_rempli
 from tests.test_maturite import SON, Flux, Reponse, Session
 
@@ -809,7 +810,9 @@ class SessionAvecApi(SessionComplete):
     def post(self, adresse: str, **options: Any) -> Any:
         self.api.append(options)
         noeud = {
-            "url": "",
+            "url": "https://www.radiofrance.fr/franceinter/podcasts/"
+            "le-masque-et-la-plume/x-1",
+            "show": {"url": MASQUE},
             "published_date": str(
                 int(datetime(2014, 9, 28, 10, tzinfo=UTC).timestamp())
             ),
@@ -818,14 +821,7 @@ class SessionAvecApi(SessionComplete):
                 "edges": [{"relation": "guest", "node": {"name": "Arnaud Viviant"}}]
             },
         }
-        donnees = {
-            "data": {
-                "diffusionsOfShowByUrl": {
-                    "edges": [{"cursor": "a", "node": noeud}],
-                    "pageInfo": {"hasNextPage": False, "endCursor": "a"},
-                }
-            }
-        }
+        donnees = {"data": {"diffusions": {"edges": [{"cursor": "a", "node": noeud}]}}}
 
         class R:
             status_code = 200

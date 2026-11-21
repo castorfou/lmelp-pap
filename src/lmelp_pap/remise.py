@@ -23,21 +23,21 @@ et son absence ou son échec n'empêche rien.
 import contextlib
 import hashlib
 import os
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from lmelp_pap.liste import Emission
 from lmelp_pap.maturite import MORCEAU, Enregistrement
+from lmelp_pap.radiofrance_api import (
+    ApiRadioFranceError,
+    Personnalite,
+    lire_diffusion,
+)
 
 
-API = "https://openapi.radiofrance.fr/v1/graphql"
-EMISSION_URL = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume"
-PAGES_API = 40  # pages de 100 diffusions au plus, du plus récent au plus ancien
-DELAI_API = 20
-_PARIS = ZoneInfo("Europe/Paris")
 MOIS = (
     "janvier",
     "février",
@@ -264,60 +264,28 @@ def mettre_a_disposition(
     return replace(enregistrement, niveau="valide", entrees=entrees), fiche
 
 
-_REQUETE = """query($url: String!, $after: String) {
-  diffusionsOfShowByUrl(url: $url, first: 100, after: $after) {
-    edges { cursor node { url published_date standFirst
-      personalitiesConnection { edges { relation node { name } } } } }
-    pageInfo { hasNextPage endCursor }
-  }
-}"""
-
-
-def lire_api(session: Any, jeton: str, jour: date) -> dict[str, str] | None:
+def lire_api(
+    session: Any, jeton: str, jour: date, pages: Iterable[str] = ()
+) -> dict[str, str] | None:
     """Les morceaux de description que l'API Radio France donne pour la
-    diffusion du Masque de ce jour (heure de Paris) : ``animateur``
-    (producteur), ``resume`` (chapô), ``equipe``, ``invites``. Les pages de
-    diffusions, de la plus récente à la plus ancienne, sont lues jusqu'à
-    dépasser le jour. ``None`` sans diffusion ce jour-là, ou si l'API échoue.
-    Rien n'est conservé."""
-    apres: str | None = None
+    diffusion du Masque de ce jour (client ``radiofrance_api`` ; ``pages`` :
+    les pages radiofrance.fr connues de l'émission) : ``animateur``
+    (producteur), ``resume`` (chapô), ``equipe``, ``invites``. ``None`` sans
+    diffusion ce jour-là, ou si l'API échoue. Rien n'est conservé."""
     try:
-        for _ in range(PAGES_API):
-            reponse = session.post(
-                API,
-                json={
-                    "query": _REQUETE,
-                    "variables": {"url": EMISSION_URL, "after": apres},
-                },
-                headers={"x-token": jeton, "Content-Type": "application/json"},
-                timeout=DELAI_API,
-            )
-            if reponse.status_code != 200:
-                return None
-            connexion = reponse.json()["data"]["diffusionsOfShowByUrl"]
-            for bord in connexion["edges"]:
-                noeud = bord["node"]
-                quand = datetime.fromtimestamp(int(noeud["published_date"]), _PARIS)
-                if quand.date() == jour:
-                    return _morceaux_api(noeud)
-                if quand.date() < jour:
-                    return None
-            if not connexion["pageInfo"]["hasNextPage"]:
-                return None
-            apres = connexion["pageInfo"]["endCursor"]
-    except Exception:  # noqa: BLE001 — l'API ne bloque jamais la mise à disposition
+        diffusion = lire_diffusion(jour, pages, jeton, session)
+    except ApiRadioFranceError:
+        return None  # l'API ne bloque jamais la mise à disposition
+    if diffusion is None:
         return None
-    return None
 
+    def noms(personnes: tuple[Personnalite, ...]) -> str:
+        return ", ".join(p.nom for p in personnes)
 
-def _morceaux_api(noeud: dict[str, Any]) -> dict[str, str]:
-    personnes: dict[str, list[str]] = {}
-    for bord in (noeud.get("personalitiesConnection") or {}).get("edges", []):
-        personnes.setdefault(bord["relation"], []).append(bord["node"]["name"])
     morceaux = {
-        "animateur": ", ".join(personnes.get("producer", [])),
-        "resume": (noeud.get("standFirst") or "").strip(),
-        "equipe": ", ".join(personnes.get("staff", [])),
-        "invites": ", ".join(personnes.get("guest", [])),
+        "animateur": noms(diffusion.animateurs),
+        "resume": (diffusion.resume or "").strip(),
+        "equipe": noms(diffusion.equipe),
+        "invites": noms(diffusion.invites),
     }
     return {k: v for k, v in morceaux.items() if v}
