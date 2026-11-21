@@ -300,11 +300,26 @@ Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans l
 | `--cache DOSSIER` | Dossier du cache (par défaut `data/raw/cache`). |
 | `--sortie DOSSIER` | Dossier des CSV de la liste, réécrits à chaque décision (par défaut `data/processed`). |
 | `--arbitrages FICHIER` | Fichier des arbitrages (par défaut `arbitrages.csv` dans le dossier de sortie). |
+| `--verification-jours N` | Jours entre deux vérifications complètes des URL (par défaut 7, ou `PAP_VERIFICATION_JOURS`). |
 | `--audios DOSSIER` | Dossier des enregistrements rapatriés (par défaut `data/raw/audios`, ou `PAP_AUDIOS`). |
 | `--port PORT` | Port du serveur (par défaut 8765). |
 | `--sans-navigateur` | N'ouvre pas la page ; l'adresse s'affiche dans le terminal. |
 
 La page publiée n'a aucun de ces contrôles. Elle reflète les décisions d'une séance d'arbitrage une fois les CSV de `data/processed/` et `arbitrages.csv` committés sur `main`, qui la régénère et la redéploie.
+
+#### Logs
+
+L'appli écrit sur la sortie d'erreur (dans le conteneur : `docker logs lmelp-pap`) une ligne horodatée par étape de ses tâches de fond :
+
+```
+2026-11-21 10:53:51 vérification automatique (complète : jamais vérifiée) : 570 URL
+2026-11-21 10:54:02 vérification terminée en 10 s : 570 ok, 0 mortes, 0 échecs passagers
+2026-11-21 11:04:46 rapatriement : 1 émission demandée
+2026-11-21 11:04:53 rapatrié 2006-04-23 : 2006/14007-23.04.2006-ITEMA_20025254-2006F4007E0016-27.m4a, 71 Mo en 7 s
+2026-11-21 11:04:53 rapatriement terminé en 7 s : 1 rapatrié, 0 déjà là, 0 échec
+```
+
+Une vérification lancée par le bouton est « manuelle ». La raison d'une vérification automatique est indiquée : jamais vérifiée, base vide, date de la précédente, nouvelles URL. Un rapatriement trace aussi chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot.
 
 #### API
 
@@ -319,7 +334,7 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
 | `POST /api/rapatriements/arret` | Arrête le lot en cours. |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
-| `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, et `bilan` (`ok`, `net`, `passager`) une fois finie. |
+| `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, `bilan` (`ok`, `net`, `passager`) une fois finie, `derniere` et `prochaine` (dates de la dernière vérification complète et de la suivante). |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
 
 Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, date absente des dates candidates ou émission sans doute de date, attestation sans rapprochement ambigu ou émission qui n'est pas rivale, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
@@ -357,7 +372,12 @@ Un **panneau flottant**, en haut à droite, suit le lot sur toutes les pages, et
 
 Avec une base Mongo (`MONGO_URI` et `MONGO_DB`, dans l'environnement ou le fichier `.env`), l'appli suit la **maturité** de chaque enregistrement intégral, c'est-à-dire le niveau atteint sur le chemin qui le mène à lmelp : localisé, téléchargeable, rapatrié, qualifié, valide. Elle la conserve dans la collection `pap_enregistrements`, un document par URL d'intégral, avec la date d'entrée dans chaque niveau. Sans base, la page n'a ni badge, ni filtre, ni bouton de vérification.
 
-- Le bouton **Vérifier les URL des intégraux** du bandeau interroge chaque URL d'intégral de `enregistrements.csv` (requête `HEAD`, quatre à la fois) et affiche l'avancement, puis le bilan.
+- La **vérification des URL d'intégral** interroge chaque URL de `enregistrements.csv` (requête `HEAD`, quatre à la fois). Elle part seule :
+    - au démarrage de l'appli, si aucune vérification complète n'a encore eu lieu (base neuve) ;
+    - quand la dernière vérification complète date de plus de 7 jours (`--verification-jours`, variable `PAP_VERIFICATION_JOURS`) ; l'appli regarde toutes les heures ;
+    - après une reconstruction de la liste qui apporte des URL d'intégral jamais vues, pour celles-ci seulement.
+
+  Le bouton **Vérifier les URL des intégraux** du bandeau force une vérification complète et affiche l'avancement, puis le bilan. À côté, la page indique la date de la dernière vérification complète et de la prochaine. Une vérification ne démarre jamais si une autre tourne.
 
   | Réponse | Effet |
   |---|---|

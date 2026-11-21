@@ -25,6 +25,7 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `PAP_DONNEES` | `/data/processed` | CSV de la liste et arbitrages |
 | `PAP_ARBITRAGES` | `arbitrages.csv` dans `PAP_DONNEES` | fichier des arbitrages |
 | `PAP_AUDIOS` | `/data/audios` | enregistrements rapatriés, par année |
+| `PAP_VERIFICATION_JOURS` | `7` | jours entre deux vérifications complètes des URL d'intégral (la première part seule au démarrage sur une base neuve) |
 | `PUID` / `PGID` | `1000` / `1000` | propriétaire des fichiers créés dans `/data` |
 | `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité |
 
