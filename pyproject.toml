@@ -75,7 +75,7 @@ where = ["src"]
 "" = "src"
 
 [tool.setuptools.package-data]
-lmelp_pap = ["page.html", "arbitrage.html"]
+lmelp_pap = ["*.html"]
 
 # Configuration uv pour la reproductibilité
 [dependency-groups]
