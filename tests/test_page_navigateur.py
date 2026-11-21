@@ -622,13 +622,16 @@ def test_la_page_publiee_montre_l_attestation_du_doute_sans_bouton(
 
 
 def _avec_maturite(dossier: Path) -> dict[str, Any]:
-    """Les données de l'appli avec une base Mongo : la 1re émission
-    téléchargeable, la 2e localisée, les autres sans enregistrement suivi."""
+    """Les données de l'appli avec une base Mongo : hors lmelp, la 1re émission
+    téléchargeable, la 2e localisée ; les autres sans enregistrement suivi."""
     emissions = donnees_page(dossier)
-    for e, maturite in zip(emissions, ["telechargeable", "localise"]):
-        e["maturite"] = maturite
-    for e in emissions[2:]:
+    for e in emissions:
         e["maturite"] = None
+    hors_lmelp = [
+        e for e in emissions if all(a["source"] != "lmelp" for a in e["attestations"])
+    ]
+    for e, maturite in zip(hors_lmelp, ["telechargeable", "localise"]):
+        e["maturite"] = maturite
     return {"emissions": emissions, "arbitrages": [], "maturite_active": True}
 
 
@@ -639,7 +642,9 @@ def test_dans_l_appli_chaque_emission_porte_sa_maturite_et_se_filtre(
     page = _ouvrir(navigateur, construire_page(dossier, arbitrage=True), api=donnees)
     page.locator("#arb-nombre", has_text="0").wait_for()
 
-    premiere = donnees["emissions"][0]["id"]
+    premiere = next(
+        e["id"] for e in donnees["emissions"] if e["maturite"] == "telechargeable"
+    )
     badge = page.locator(f'.ligne[data-id="{premiere}"] .maturite')
     assert badge.inner_text() == "téléchargeable"
 
@@ -648,7 +653,10 @@ def test_dans_l_appli_chaque_emission_porte_sa_maturite_et_se_filtre(
     assert "Maturité : téléchargeable" in page.locator("#frise-filtres").inner_text()
 
     page.select_option("#maturite", "aucune")
-    assert page.locator(".ligne").count() == len(donnees["emissions"]) - 2
+    page.select_option("#maturite", "lmelp")
+    dans_lmelp = page.locator(".ligne").count()
+    page.select_option("#maturite", "aucune")
+    assert page.locator(".ligne").count() == len(donnees["emissions"]) - 2 - dans_lmelp
 
 
 def test_sans_base_la_page_n_a_ni_maturite_ni_verification(
@@ -686,3 +694,23 @@ def test_verifier_les_urls_affiche_le_bilan(
     page.locator("#arb-nombre", has_text="0").wait_for()
     page.get_by_role("button", name="Vérifier les URL des intégraux").click()
     page.locator("#arb-statut", has_text="2 téléchargeables").wait_for()
+
+
+def test_une_emission_dans_lmelp_est_dans_lmelp_quelle_que_soit_sa_maturite(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    donnees = _avec_maturite(dossier)
+    for e in donnees["emissions"]:
+        e["maturite"] = "telechargeable"  # 2015-01-04 est attestée par lmelp
+    page = _ouvrir(navigateur, construire_page(dossier, arbitrage=True), api=donnees)
+    page.locator("#arb-nombre", has_text="0").wait_for()
+
+    badge = page.locator('.ligne[data-id="2015-01-04"] .maturite')
+    assert badge.inner_text() == "dans lmelp"
+
+    page.select_option("#maturite", "telechargeable")
+    assert page.locator('.ligne[data-id="2015-01-04"]').count() == 0
+    assert page.locator(".ligne").count() == len(donnees["emissions"]) - 1
+
+    page.select_option("#maturite", "lmelp")
+    assert page.locator(".ligne").count() == 1

@@ -28,7 +28,7 @@
 .arb-doute button { font: inherit; font-size: 13px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer; }
 .maturite { font-size: 10.5px; padding: 1px 6px; border-radius: 3px; color: #fff; font-weight: 600; }
 .maturite.localise { background: #b07c1e; } .maturite.telechargeable { background: #c8622a; }
-.maturite.rapatrie { background: #3f7fb5; } .maturite.qualifie { background: #2f6fb2; } .maturite.valide { background: #2a9d8f; }
+.maturite.rapatrie { background: #3f7fb5; } .maturite.qualifie { background: #2f6fb2; } .maturite.valide { background: #2a9d8f; } .maturite.lmelp { background: #3c7d3a; }
 .arb button:disabled, .arbitrage button:disabled, .arb-doute button:disabled { opacity: .5; cursor: wait; }
 </style>
 <script>
@@ -117,15 +117,19 @@ function journal(arbitrages) {
 
 // Maturité des enregistrements (avec une base Mongo seulement) : badge, filtre et
 // vérification des URL d'intégral.
-const MATURITES = { localise: "localisé", telechargeable: "téléchargeable", rapatrie: "rapatrié", qualifie: "qualifié", valide: "valide" };
+// Une émission attestée par lmelp y est déjà : cet état l'emporte sur la maturité
+// de ses enregistrements.
+const MATURITES = { localise: "localisé", telechargeable: "téléchargeable", rapatrie: "rapatrié", qualifie: "qualifié", valide: "valide", lmelp: "dans lmelp" };
 let maturiteActive = false;
+const etatEmission = e => (e.sources.includes("lmelp") ? "lmelp" : e.maturite || null);
 function badgeMaturite(e) {
-  return maturiteActive && e.maturite ? `<span class="maturite ${esc(e.maturite)}">${MATURITES[e.maturite] || esc(e.maturite)}</span>` : "";
+  const m = maturiteActive && etatEmission(e);
+  return m ? `<span class="maturite ${esc(m)}">${MATURITES[m] || esc(m)}</span>` : "";
 }
 function passeMaturite(e) {
   const m = maturiteActive ? $("maturite").value : "";
   if (!m) return true;
-  return m === "aucune" ? !e.maturite : e.maturite === m;
+  return m === "aucune" ? !etatEmission(e) : etatEmission(e) === m;
 }
 function filtreMaturite() {
   if (!maturiteActive || !$("maturite").value) return [];
