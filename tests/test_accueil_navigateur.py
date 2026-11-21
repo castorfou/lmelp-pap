@@ -558,3 +558,108 @@ def test_survoler_les_rapatries_liste_leurs_dates(navigateur: Any) -> None:
     detail = rapatries.get_attribute("title")
     assert "2008-03-02" in detail
     assert "2008-03-09" in detail
+
+
+# --- mettre à disposition de lmelp ------------------------------------------
+
+
+def _remettre(
+    navigateur: Any, reponse: Any, accepter: bool = True
+) -> tuple[Any, dict[str, Any], list[Any]]:
+    """L'accueil sur la page qualifié ; ``reponse(donnees, cible)`` rend la
+    réponse de ``POST /api/remises``. Les confirmations sont acceptées ou
+    refusées selon ``accepter``."""
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "qualifie")
+    envoyees: list[Any] = []
+
+    def remises(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        apres = json.loads(json.dumps(donnees))
+        return reponse(
+            apres, next(e for e in apres["emissions"] if e["id"] == cible["id"])
+        )
+
+    page = _ouvrir(navigateur, donnees, api={"/api/remises": remises})
+    page.on("dialog", lambda d: d.accept() if accepter else d.dismiss())
+    page.locator('.compteur[data-etat="qualifie"]').click()
+    return page, cible, envoyees
+
+
+def _mise(apres: dict[str, Any], e: dict[str, Any]) -> dict[str, Any]:
+    e["maturite"] = "valide"
+    e["dans_lmelp"] = False
+    return {
+        **apres,
+        "remise": {"mises": [{"emission": e["id"], "fichier": "x.m4a"}], "refus": []},
+    }
+
+
+def test_la_page_qualifie_propose_la_mise_a_disposition_par_ligne_et_en_lot(
+    navigateur: Any,
+) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="qualifie"]').click()
+    lignes = page.locator("tbody tr")
+    nom = "Mettre à disposition de lmelp"
+    assert lignes.first.get_by_role("button", name=nom).count() == 1
+    assert lignes.first.locator("input[type=checkbox]").count() == 1
+    total = _comptes(_donnees())["qualifie"]
+    assert page.get_by_role("button", name=f"{nom} : tout ({total})").count() == 1
+
+
+def test_mettre_a_disposition_confirme_envoie_et_notifie(navigateur: Any) -> None:
+    page, cible, envoyees = _remettre(navigateur, _mise)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+
+    page.locator("#toast", has_text="mis à disposition").wait_for()
+    assert envoyees == [{"emissions": [cible["id"]]}]
+    comptes = _comptes(_donnees())
+    toast = page.locator("#toast").inner_text()
+    assert f"qualifié {comptes['qualifie']}→{comptes['qualifie'] - 1}" in toast
+    assert "valide" in toast
+    assert page.locator(f'tbody tr[data-id="{cible["id"]}"]').count() == 0
+
+
+def test_sans_confirmation_rien_n_est_envoye(navigateur: Any) -> None:
+    page, cible, envoyees = _remettre(navigateur, _mise, accepter=False)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    page.wait_for_timeout(200)
+    assert envoyees == []
+    assert ligne.count() == 1
+
+
+def test_une_collision_s_affiche_visiblement(navigateur: Any) -> None:
+    detail = "1987/a.m4a existe déjà dans le dossier de lmelp"
+
+    def collision(apres: dict[str, Any], e: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **apres,
+            "remise": {"mises": [], "refus": [{"emission": e["id"], "detail": detail}]},
+        }
+
+    page, cible, _ = _remettre(navigateur, collision)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+
+    alerte = page.locator(".refus")
+    alerte.wait_for()
+    assert cible["id"] in alerte.inner_text()
+    assert detail in alerte.inner_text()
+    assert "1 refus" in page.locator("#toast").inner_text()
+    page.get_by_role("button", name="Fermer les refus").click()
+    assert page.locator(".refus").count() == 0
+
+
+def test_une_emission_valide_entree_dans_lmelp_compte_dans_lmelp(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    entree = next(e for e in donnees["emissions"] if e["maturite"] == "valide")
+    entree["dans_lmelp"] = True
+    page = _ouvrir(navigateur, donnees)
+    comptes = _comptes(_donnees())
+    assert _compteurs(page)["valide"] == comptes["valide"] - 1
+    assert _compteurs(page)["lmelp"] == comptes["lmelp"] + 1

@@ -25,6 +25,8 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `PAP_DONNEES` | `/data/processed` | CSV de la liste et arbitrages |
 | `PAP_ARBITRAGES` | `arbitrages.csv` dans `PAP_DONNEES` | fichier des arbitrages |
 | `PAP_AUDIOS` | `/data/audios` | enregistrements rapatriés, par année |
+| `PAP_AUDIOS_LMELP` | `/audios-lmelp` | dossier audio du back-office lmelp, où vont les enregistrements mis à disposition |
+| `RADIOFRANCE_API_TOKEN` | aucune | jeton de l'API Radio France, lue seulement au moment d'une mise à disposition pour compléter la description |
 | `PAP_VERIFICATION_JOURS` | `7` | jours entre deux vérifications complètes des URL d'intégral (la première part seule au démarrage sur une base neuve) |
 | `PUID` / `PGID` | `1000` / `1000` | propriétaire des fichiers créés dans `/data` |
 | `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité |
@@ -73,6 +75,16 @@ Le dossier `pap/` est frère des autres dossiers de la stack, sous `/volume1/doc
 Le service `pap` se déclare dans le `docker-compose.yml` de docker-lmelp : image `ghcr.io/castorfou/lmelp-pap:latest`, montage `/volume1/docker/lmelp/pap:/data`, et `PUID`/`PGID` à `1027`, comme le backend (`.env.nas.example`). Les fichiers de `pap/` appartiennent alors à `1027:1027`.
 
 Dans docker-lmelp, `PAP_PORT` est le port publié sur le NAS (`8085` dans `.env.nas.example`). Le conteneur, lui, écoute toujours sur `8090` (`"${PAP_PORT}:8090"`). L'appli est donc servie sur `http://<NAS>:8085/`.
+
+Pour la mise à disposition de lmelp, le service `pap` monte aussi le dossier audio du back-office (`${AUDIO_PATH}`, celui que `backend` monte sur `/app/audios`) sur `/audios-lmelp` :
+
+```yaml
+    volumes:
+      - ${PAP_PATH_HOTE:-./data/pap}:/data
+      - ${AUDIO_PATH:-./data/audios}:/audios-lmelp
+```
+
+L'entrypoint ne reprend pas la propriété de ce dossier : il appartient au back-office, et doit seulement être inscriptible par `PUID`/`PGID`. pap y crée `<année>/<nom>` et n'écrase jamais un fichier existant.
 
 Watchtower met le conteneur à jour après chaque publication de l'image sur `main`.
 

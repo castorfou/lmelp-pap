@@ -79,6 +79,13 @@ def _parser() -> argparse.ArgumentParser:
         help="dossier des enregistrements rapatriés (par défaut data/raw/audios)",
     )
     arbitrer.add_argument(
+        "--audios-lmelp",
+        type=Path,
+        default=_chemin("PAP_AUDIOS_LMELP", "data/raw/audios-lmelp"),
+        help="dossier audio du back-office lmelp, où vont les enregistrements "
+        "mis à disposition (par défaut data/raw/audios-lmelp)",
+    )
+    arbitrer.add_argument(
         "--verification-jours",
         type=float,
         default=float(os.environ.get("PAP_VERIFICATION_JOURS") or 7),
@@ -152,6 +159,7 @@ def _arbitrer(args: argparse.Namespace) -> int:
         # base, l'appli sert la liste sans elle.
         depot=depot_depuis_env(),
         audios=args.audios,
+        audios_lmelp=args.audios_lmelp,
         # Vérification des URL d'intégral : au démarrage sur une base vide,
         # puis à chaque échéance, et pour les URL nouvelles.
         planification=True,

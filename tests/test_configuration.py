@@ -66,3 +66,17 @@ def test_une_option_explicite_l_emporte_sur_la_variable(
     args = _parser().parse_args(["arbitrer", "--port", "9000"])
 
     assert args.port == 9000
+
+
+def test_le_dossier_audio_de_lmelp_se_configure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PAP_AUDIOS_LMELP", raising=False)
+    assert _parser().parse_args(["arbitrer"]).audios_lmelp == Path(
+        "data/raw/audios-lmelp"
+    )
+
+    monkeypatch.setenv("PAP_AUDIOS_LMELP", "/audios-lmelp")
+    assert _parser().parse_args(["arbitrer"]).audios_lmelp == Path("/audios-lmelp")
+    args = _parser().parse_args(["arbitrer", "--audios-lmelp", "/ailleurs"])
+    assert args.audios_lmelp == Path("/ailleurs")
