@@ -174,12 +174,14 @@ def rapatrier(
     progres: Callable[[int, int | None], None] | None = None,
     arreter: Callable[[], bool] | None = None,
     attendre: Callable[[float], None] = time.sleep,
+    relance: Callable[[int, Exception, float], None] | None = None,
 ) -> Enregistrement:
     """Télécharge le fichier d'un enregistrement téléchargeable dans
     ``dossier/<année>/<nom d'origine>`` et le rend rapatrié. Un fichier déjà
     présent avec l'empreinte connue n'est pas retéléchargé. Un échec passager
     (délai, coupure) est retenté jusqu'à ``ESSAIS`` fois ; un statut HTTP ≠ 200
     ne l'est pas. ``progres(reçus, total)`` suit les octets reçus ;
+    ``relance(essai, erreur, pause)`` signale un nouvel essai ;
     ``arreter()`` vrai interrompt (``RapatriementInterrompuError``). En cas d'échec,
     aucun fichier (ni ``.part``) ne reste."""
     if enregistrement.niveau not in ("telechargeable", "rapatrie"):
@@ -209,9 +211,11 @@ def rapatrier(
                 http, enregistrement.url, final, progres, arreter
             )
             break
-        except requests.RequestException:
+        except requests.RequestException as erreur:
             if essai == ESSAIS:
                 raise
+            if relance:
+                relance(essai, erreur, PAUSES[essai - 1])
             attendre(PAUSES[essai - 1])
     return _rapatrie(enregistrement, relatif, sha256, taille, quand)
 

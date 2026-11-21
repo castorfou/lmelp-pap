@@ -525,3 +525,18 @@ def test_le_depot_garde_la_date_de_la_derniere_verification(depot: Depot) -> Non
     depot.noter_verification(HIER)
     depot.noter_verification(AUJOURDHUI)
     assert depot.derniere_verification() == AUJOURDHUI
+
+
+def test_chaque_nouvel_essai_est_signale(tmp_path: Any) -> None:
+    signales: list[tuple[int, str, float]] = []
+    rapatrier(
+        telechargeable(),
+        tmp_path,
+        SessionSuite(requests.ReadTimeout("lent"), Flux()),
+        AUJOURDHUI,
+        attendre=_sans_pause,
+        relance=lambda essai, erreur, pause: signales.append(
+            (essai, str(erreur), pause)
+        ),
+    )
+    assert signales == [(1, "lent", 5)]

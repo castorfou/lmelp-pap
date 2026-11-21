@@ -75,6 +75,7 @@ from lmelp_pap.liste import (
     dates_candidates,
 )
 from lmelp_pap.maturite import (
+    ESSAIS,
     Depot,
     Enregistrement,
     RapatriementError,
@@ -97,6 +98,17 @@ DOUTES_DE_DATE = ("désaccord de date", "jour inhabituel")
 
 # Période du fil de planification de la vérification des URL, en secondes.
 PLANIFICATION = 3600
+
+
+def _s(n: int) -> str:
+    """Le « s » du pluriel."""
+    return "s" if n > 1 else ""
+
+
+def _duree(secondes: float) -> str:
+    """Une durée lisible : « 16 s », « 3 min 41 s »."""
+    s = round(secondes)
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60} s"
 
 
 def journal(message: str) -> None:
@@ -363,6 +375,12 @@ class Atelier:
             bilan = {"rapatries": 0, "deja_la": 0, "echecs": 0}
             erreurs: list[dict[str, str]] = []
             recus = 0  # octets des fichiers finis
+            debut_lot = time.monotonic()
+            n_demandes = len(a_rapatrier)
+            journal(
+                f"rapatriement : {n_demandes} émission{_s(n_demandes)} "
+                f"demandée{_s(n_demandes)}"
+            )
             for n, enregistrement in enumerate(a_rapatrier, 1):
                 if tache.arret_demande():
                     tache.maj(arrete=True)
@@ -378,6 +396,19 @@ class Atelier:
                         fichier_octets=octets, fichier_total=total, octets=base + octets
                     )
 
+                def relance(
+                    essai: int,
+                    erreur: Exception,
+                    pause: float,
+                    emission: str = enregistrement.emission_id,
+                ) -> None:
+                    journal(
+                        f"échec {emission} (essai {essai}/{ESSAIS}) : "
+                        f"{erreur or type(erreur).__name__}, "
+                        f"nouvel essai dans {pause:g} s"
+                    )
+
+                debut = time.monotonic()
                 try:
                     avant = enregistrement.sha256
                     fait = rapatrier(
@@ -386,17 +417,26 @@ class Atelier:
                         self._session,
                         progres=progres,
                         arreter=tache.arret_demande,
+                        relance=relance,
                     )
                     depot.enregistrer(fait)
                     recus += fait.taille or 0
                     deja = bool(avant) and avant == fait.sha256
                     bilan["deja_la" if deja else "rapatries"] += 1
+                    journal(
+                        f"{'déjà là' if deja else 'rapatrié'} "
+                        f"{enregistrement.emission_id} : {fait.fichier}, "
+                        f"{round((fait.taille or 0) / 1e6)} Mo en "
+                        f"{round(time.monotonic() - debut)} s"
+                    )
                 except RapatriementInterrompuError:
                     tache.maj(arrete=True, octets=recus)
+                    journal(f"rapatriement arrêté pendant {enregistrement.emission_id}")
                     break
                 except Exception as erreur:  # noqa: BLE001 — l'erreur va au bilan
                     bilan["echecs"] += 1
                     detail = str(erreur) or type(erreur).__name__
+                    journal(f"échec {enregistrement.emission_id} : {detail}")
                     erreurs.append(
                         {"emission": enregistrement.emission_id, "detail": detail}
                     )
@@ -411,6 +451,13 @@ class Atelier:
                     )
                 tache.maj(faites=n, erreurs=list(erreurs), octets=recus)
             tache.maj(en_cours_sur=None)
+            arrete = " (arrêté)" if tache.etat()["arrete"] else ""
+            journal(
+                f"rapatriement terminé en {_duree(time.monotonic() - debut_lot)} : "
+                f"{bilan['rapatries']} rapatrié{_s(bilan['rapatries'])}, "
+                f"{bilan['deja_la']} déjà là, "
+                f"{bilan['echecs']} échec{_s(bilan['echecs'])}{arrete}"
+            )
             return bilan
 
         return self._rapatriement.lancer(len(a_rapatrier), travail, refuser=True)

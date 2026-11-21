@@ -429,3 +429,33 @@ def test_une_verification_manuelle_est_tracee(
     logs = capfd.readouterr().err
     assert "vérification manuelle (complète) : 3 URL" in logs
     assert "vérification terminée" in logs
+
+
+def test_le_rapatriement_laisse_une_trace_dans_les_logs(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _verifier(url)
+    capfd.readouterr()
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    _attendre_rapatriements(url)
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert "rapatriement : 1 émission demandée" in logs
+    assert f"rapatrié 2014-09-28 : 2014/{INTEGRAL_2014.rsplit('/', 1)[1]}" in logs
+    assert "rapatriement terminé en" in logs
+    assert "1 rapatrié, 0 déjà là, 0 échec" in logs
+
+
+def test_un_echec_de_rapatriement_est_trace(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _verifier(url)
+    _session_du_serveur(url).statut = 404
+    capfd.readouterr()
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    _attendre_rapatriements(url)
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert "échec 2014-09-28 : " in logs
+    assert "HTTP 404" in logs
+    assert "0 rapatrié, 0 déjà là, 1 échec" in logs
