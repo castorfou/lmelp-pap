@@ -15,9 +15,15 @@ URL) et le fait évoluer selon la vérification de son URL :
 - à partir de rapatrié, la vérification ne change plus le niveau.
 
 Chaque entrée dans un niveau est datée (``entrees``).
+
+Rapatrier un enregistrement téléchargeable télécharge son fichier dans le
+dossier audio de pap (``<année>/<nom d'origine>``), en passant par un
+``.part`` renommé à la fin : il devient rapatrié, avec le chemin du fichier,
+son empreinte SHA-256 et sa taille.
 """
 
 import csv
+import hashlib
 import os
 from collections import Counter
 from collections.abc import Callable, Iterable
@@ -37,6 +43,9 @@ SOURCE = "radiofrance"
 ENTETES = {"User-Agent": "lmelp-pap (https://github.com/castorfou/lmelp-pap)"}
 DELAI = 30
 CONCURRENCE = 4
+MORCEAU = 1 << 20  # 1 Mo par lecture du flux
+# Encodages préférés pour l'intégral retenu d'une émission.
+PREFERENCES = (".m4a", ".mp3")
 
 Resultat = Literal["ok", "net", "passager"]
 
@@ -60,6 +69,13 @@ class Enregistrement:
     niveau: str
     entrees: dict[str, datetime] = field(default_factory=dict)
     verification: Verification | None = None
+    fichier: str | None = None  # relatif au dossier audio, une fois rapatrié
+    sha256: str | None = None
+    taille: int | None = None
+
+
+class RapatriementError(RuntimeError):
+    """Un rapatriement impossible : niveau, réponse HTTP."""
 
 
 def classer(reponse: Any, maintenant: datetime) -> Verification:
@@ -115,6 +131,102 @@ def maturite_emission(enregistrements: Iterable[Enregistrement]) -> str | None:
     """La maturité d'une émission : celle de son enregistrement le plus avancé."""
     plus_avance = meilleur(enregistrements)
     return plus_avance.niveau if plus_avance else None
+
+
+def retenu(enregistrements: Iterable[Enregistrement]) -> Enregistrement | None:
+    """L'intégral à rapatrier parmi les enregistrements téléchargeables d'une
+    émission : m4a, sinon mp3, sinon le premier."""
+    candidats = [e for e in enregistrements if e.niveau == "telechargeable"]
+
+    def rang(e: Enregistrement) -> int:
+        fin = e.url.lower().rsplit("?", 1)[0]
+        return next(
+            (i for i, ext in enumerate(PREFERENCES) if fin.endswith(ext)),
+            len(PREFERENCES),
+        )
+
+    return min(candidats, key=rang, default=None)
+
+
+def _empreinte(chemin: Path) -> str:
+    h = hashlib.sha256()
+    with chemin.open("rb") as f:
+        for morceau in iter(lambda: f.read(MORCEAU), b""):
+            h.update(morceau)
+    return h.hexdigest()
+
+
+def rapatrier(
+    enregistrement: Enregistrement,
+    dossier: Path,
+    session: Any = None,
+    maintenant: datetime | None = None,
+) -> Enregistrement:
+    """Télécharge le fichier d'un enregistrement téléchargeable dans
+    ``dossier/<année>/<nom d'origine>`` et le rend rapatrié. Un fichier déjà
+    présent avec l'empreinte connue n'est pas retéléchargé. En cas d'échec,
+    aucun fichier (ni ``.part``) ne reste."""
+    if enregistrement.niveau not in ("telechargeable", "rapatrie"):
+        raise RapatriementError(
+            f"{enregistrement.url} : niveau {enregistrement.niveau}, "
+            "seul un enregistrement téléchargeable se rapatrie"
+        )
+    quand = maintenant or datetime.now(UTC)
+    relatif = (
+        enregistrement.fichier
+        or f"{enregistrement.emission_id[:4]}/{enregistrement.url.rsplit('/', 1)[-1]}"
+    )
+    final = dossier / relatif
+    if (
+        enregistrement.sha256
+        and final.is_file()
+        and _empreinte(final) == enregistrement.sha256
+    ):
+        return _rapatrie(
+            enregistrement, relatif, enregistrement.sha256, final.stat().st_size, quand
+        )
+
+    http: Any = session or requests.Session()
+    final.parent.mkdir(parents=True, exist_ok=True)
+    partiel = final.with_name(final.name + ".part")
+    h, taille = hashlib.sha256(), 0
+    try:
+        reponse = http.get(
+            enregistrement.url, stream=True, timeout=DELAI, headers=ENTETES
+        )
+        try:
+            if reponse.status_code != 200:
+                raise RapatriementError(
+                    f"{enregistrement.url} : HTTP {reponse.status_code}"
+                )
+            with partiel.open("wb") as f:
+                for morceau in reponse.iter_content(chunk_size=MORCEAU):
+                    f.write(morceau)
+                    h.update(morceau)
+                    taille += len(morceau)
+        finally:
+            reponse.close()
+        os.replace(partiel, final)
+    except BaseException:
+        partiel.unlink(missing_ok=True)
+        raise
+    return _rapatrie(enregistrement, relatif, h.hexdigest(), taille, quand)
+
+
+def _rapatrie(
+    e: Enregistrement, fichier: str, sha256: str, taille: int, quand: datetime
+) -> Enregistrement:
+    entrees = dict(e.entrees)
+    if e.niveau != "rapatrie":
+        entrees["rapatrie"] = quand
+    return replace(
+        e,
+        niveau="rapatrie",
+        entrees=entrees,
+        fichier=fichier,
+        sha256=sha256,
+        taille=taille,
+    )
 
 
 class Depot:
@@ -209,6 +321,9 @@ def _en_document(e: Enregistrement) -> dict[str, Any]:
         "verification": (
             {"date": v.date, "resultat": v.resultat, "detail": v.detail} if v else None
         ),
+        "fichier": e.fichier,
+        "sha256": e.sha256,
+        "taille": e.taille,
     }
 
 
@@ -228,4 +343,7 @@ def _depuis_document(d: dict[str, Any]) -> Enregistrement:
         verification=(
             Verification(_aware(v["date"]), v["resultat"], v["detail"]) if v else None
         ),
+        fichier=d.get("fichier"),
+        sha256=d.get("sha256"),
+        taille=d.get("taille"),
     )

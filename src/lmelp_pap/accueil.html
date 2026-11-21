@@ -70,6 +70,9 @@
 
   /* Page d'un état */
   .retour { margin-bottom: 8px; }
+  .lot { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+  button.primaire { background: var(--entete); color: var(--entete-texte); border-color: var(--entete); }
+  button:disabled { opacity: .5; cursor: wait; }
 </style>
 </head>
 <body>
@@ -91,14 +94,41 @@ const ETATS = [
 const ETAT = Object.fromEntries(ETATS.map(e => [e.cle, e]));
 // Les actions disponibles, par état : { libelle, lot, executer(emissions) }. La
 // colonne Action et les boutons de lot n'apparaissent que pour un état qui en a une.
-const ACTIONS = {};
+const ACTIONS = {
+  telechargeable: { libelle: "Télécharger", lot: true, executer: ids => tacheDeFond("/api/rapatriements", ids, "Téléchargement", b => `${b.rapatries + b.deja_la} rapatrié${b.rapatries + b.deja_la > 1 ? "s" : ""}`) },
+};
+const pause = ms => new Promise(r => setTimeout(r, ms));
+// Lance une tâche de fond sur des émissions, suit son avancement, puis recharge
+// les données et notifie le changement des compteurs.
+async function tacheDeFond(chemin, ids, verbe, resume) {
+  const avant = compter(EMISSIONS);
+  document.querySelectorAll("#accueil button[data-action], #lot, #lot-selection").forEach(b => { b.disabled = true; });
+  try {
+    let r = await fetch(chemin, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emissions: ids }) });
+    let t = await r.json();
+    if (!r.ok) throw new Error(t.erreur || r.statusText);
+    while (t.en_cours) {
+      toast(`${verbe} ${t.faites} / ${t.total}${t.en_cours_sur ? " : " + t.en_cours_sur : ""}…`, true);
+      await pause(1000);
+      t = await (await fetch(chemin)).json();
+    }
+    preparer(await (await fetch("/api/donnees")).json());
+    vue.choix.clear(); rendre();
+    const b = t.bilan || {};
+    const echecs = (t.erreurs || []).map(e => `${e.emission} (${e.detail})`).join(", ");
+    notifier(resume(b) + (b.echecs ? ` · ${b.echecs} échec(s) : ${echecs}` : ""), avant);
+  } catch (err) {
+    toast(`Échec : ${err.message}`);
+    rendre();
+  }
+}
 const couleur = c => `var(--${c})`;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const JOUR_MS = 86400000;
 
 let EMISSIONS = [], ANNEES = [], maturiteActive = false;
-const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1 };
+const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set() };
 
 // Une émission attestée par lmelp y est déjà : cet état l'emporte sur la maturité.
 function etatDe(e) {
@@ -126,7 +156,8 @@ function parAnnee(liste) {
   liste.forEach(e => m[e.annee][e.etat]++);
   return m;
 }
-function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("vu"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("vu"), 3200); }
+// Un message bref ; « tenir » le garde affiché (avancement d'une tâche).
+function toast(t, tenir = false) { const el = $("toast"); el.textContent = t; el.classList.add("vu"); clearTimeout(toast.t); if (!tenir) toast.t = setTimeout(() => el.classList.remove("vu"), 6000); }
 // Après une action : les compteurs qui ont changé (« rapatrié 12→15 »).
 function notifier(message, avant) {
   const apres = compter(EMISSIONS);
@@ -237,8 +268,8 @@ function pageEtat(racine) {
   racine.innerHTML = `<button class="retour">← Accueil</button>
     <div class="carte"><h2 style="margin-top:0"><span class="pastille" style="background:${couleur(s.cle)}"></span>${s.nom} : ${liste.length} émission(s) ${vue.annee ? `en ${vue.annee} <button id="effacer-annee">× toutes les années</button>` : ""}</h2><div id="h"></div>
     <div class="doux">Cliquer une année filtre la liste.</div></div>
-    ${action && action.lot ? `<div style="margin:8px 0"><button id="lot">${esc(action.libelle)} : tout (${liste.length})</button></div>` : ""}
-    <div class="carte" style="margin-top:8px"><table><thead><tr>${cols.map(c => `<th class="triable" data-k="${c.k}">${c.t}${tri.k === c.k ? (vue.sens > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}${action ? "<th>Action</th>" : ""}</tr></thead><tbody></tbody></table></div>`;
+    ${action && action.lot ? `<div class="lot"><button class="primaire" id="lot-selection">${esc(action.libelle)} : sélection (${vue.choix.size})</button><button id="lot">${esc(action.libelle)} : tout (${liste.length})</button></div>` : ""}
+    <div class="carte" style="margin-top:8px"><table><thead><tr>${action && action.lot ? `<th><input type="checkbox" id="tous" aria-label="Tout sélectionner"></th>` : ""}${cols.map(c => `<th class="triable" data-k="${c.k}">${c.t}${tri.k === c.k ? (vue.sens > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}${action ? "<th>Action</th>" : ""}</tr></thead><tbody></tbody></table></div>`;
   racine.querySelector(".retour").addEventListener("click", () => { vue.etat = null; rendre(); scrollTo(0, 0); });
   $("effacer-annee")?.addEventListener("click", () => { vue.annee = null; rendre(); });
   racine.querySelectorAll("th.triable").forEach(th => th.addEventListener("click", () => {
@@ -247,16 +278,26 @@ function pageEtat(racine) {
   }));
   $("h").append(histogramme({ liste: tous, hauteur: 90, empile: false, surligne: vue.etat, annee: vue.annee,
     clic: a => { vue.annee = vue.annee === a ? null : a; rendre(); } }));
-  $("lot")?.addEventListener("click", () => action.executer(liste));
+  $("lot")?.addEventListener("click", () => {
+    if (confirm(`${action.libelle} : les ${liste.length} émissions ?`)) action.executer(liste.map(e => e.id));
+  });
+  $("lot-selection")?.addEventListener("click", () => { if (vue.choix.size) action.executer([...vue.choix]); });
+  $("tous")?.addEventListener("change", ev => { liste.forEach(e => ev.target.checked ? vue.choix.add(e.id) : vue.choix.delete(e.id)); rendre(); });
   const tb = racine.querySelector("tbody");
-  tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}">${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
+  const lot = action && action.lot;
+  tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}">${lot ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
     (liste.length > 300 ? `<tr><td colspan="6" class="doux">… ${liste.length - 300} de plus</td></tr>` : "");
-  if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", () => action.executer([EMISSIONS.find(e => e.id === b.closest("tr").dataset.id)])));
+  if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", () => action.executer([b.closest("tr").dataset.id])));
+  if (lot) tb.querySelectorAll("input[type=checkbox]").forEach(c => c.addEventListener("change", () => {
+    const id = c.closest("tr").dataset.id;
+    c.checked ? vue.choix.add(id) : vue.choix.delete(id);
+    $("lot-selection").textContent = `${action.libelle} : sélection (${vue.choix.size})`;
+  }));
 }
 
 // ---------- Navigation : l'état ouvert et l'année filtrée vivent dans l'adresse ----------
 function ouvrir(etat) {
-  vue.etat = etat; vue.tri = ETAT[etat].action ? "depuis" : "date"; vue.sens = -1;
+  vue.etat = etat; vue.choix.clear(); vue.tri = ETAT[etat].action ? "depuis" : "date"; vue.sens = -1;
   rendre(); scrollTo(0, 0);
 }
 function lireAdresse() {

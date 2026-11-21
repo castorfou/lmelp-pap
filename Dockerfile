@@ -45,6 +45,7 @@ RUN playwright install --with-deps chromium \
 ENV PAP_HOTE=0.0.0.0 \
     PAP_PORT=8090 \
     PAP_CACHE=/data/cache \
+    PAP_AUDIOS=/data/audios \
     PAP_DONNEES=/data/processed \
     PYTHONUNBUFFERED=1
 

@@ -20,7 +20,21 @@ import pytest
 from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.maturite import Depot
 from tests.test_commande import _cache_rempli
-from tests.test_maturite import Reponse, Session
+from tests.test_maturite import SON, Flux, Reponse, Session
+
+
+class SessionComplete(Session):
+    """HEAD factices pour la vérification, GET en flux pour le rapatriement ;
+    ``attente`` retient le téléchargement tant qu'il n'est pas levé."""
+
+    def __init__(self, reponses: dict[str, Any]):
+        super().__init__(reponses)
+        self.attente = threading.Event()
+        self.attente.set()
+
+    def get(self, url: str, **options: Any) -> Flux:
+        self.attente.wait(5)
+        return Flux()
 
 
 INTEGRAL_2014 = (
@@ -60,14 +74,26 @@ def _demarrer(tmp_path: Path, **options: Any) -> Iterator[str]:
 
 @pytest.fixture
 def url(tmp_path: Path, depot: Depot) -> Iterator[str]:
-    session = Session(
+    session = SessionComplete(
         {
             INTEGRAL_2014: Reponse(200, "audio/mp4"),
             INTEGRAL_2017: Reponse(404),
             INTEGRAL_2024: Reponse(200, "audio/mp4"),
         }
     )
-    yield from _demarrer(tmp_path, depot=depot, session=session)
+    for adresse in _demarrer(
+        tmp_path, depot=depot, session=session, audios=tmp_path / "audios"
+    ):
+        SESSIONS[adresse] = session
+        yield adresse
+
+
+# La session factice de chaque serveur démarré, par adresse.
+SESSIONS: dict[str, SessionComplete] = {}
+
+
+def _session_du_serveur(url: str) -> SessionComplete:
+    return SESSIONS[url]
 
 
 @pytest.fixture
@@ -162,3 +188,79 @@ def test_chaque_emission_porte_la_date_d_entree_dans_sa_maturite(url: str) -> No
     aujourd_hui = datetime.now(UTC).date().isoformat()
     assert emissions["2014-09-28"]["maturite_depuis"].startswith(aujourd_hui)
     assert emissions["1967-01-01"]["maturite_depuis"] is None
+
+
+def _post_json(url: str, corps: dict[str, Any]) -> Any:
+    requete = urllib.request.Request(
+        url,
+        data=json.dumps(corps).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(requete) as r:
+        return json.load(r)
+
+
+def _attendre_rapatriements(url: str) -> dict[str, Any]:
+    for _ in range(100):
+        etat: dict[str, Any] = _get(f"{url}/api/rapatriements")
+        if not etat["en_cours"]:
+            return etat
+        time.sleep(0.05)
+    raise AssertionError("le rapatriement ne finit pas")
+
+
+def _verifier(url: str) -> None:
+    _post(f"{url}/api/verifications")
+    _attendre_fin(url)
+
+
+def test_rapatrier_une_emission_la_telecharge_et_la_passe_a_rapatrie(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    _verifier(url)
+    etat = _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    assert etat["total"] == 1
+
+    fin = _attendre_rapatriements(url)
+
+    assert fin["bilan"] == {"rapatries": 1, "deja_la": 0, "echecs": 0}
+    fichier = tmp_path / "audios" / "2014" / INTEGRAL_2014.rsplit("/", 1)[1]
+    assert fichier.read_bytes() == SON
+    assert _maturites(_get(f"{url}/api/donnees"))["2014-09-28"] == "rapatrie"
+    (rapatrie,) = [e for e in depot.tous() if e.niveau == "rapatrie"]
+    assert rapatrie.fichier == f"2014/{fichier.name}"
+
+
+def test_rapatrier_une_emission_sans_integral_telechargeable_est_refuse(
+    url: str,
+) -> None:
+    _verifier(url)
+    demandes: list[dict[str, Any]] = [
+        {"emissions": ["1967-01-01"]},
+        {"emissions": []},
+        {},
+    ]
+    for corps in demandes:
+        with pytest.raises(urllib.error.HTTPError) as erreur:
+            _post_json(f"{url}/api/rapatriements", corps)
+        assert erreur.value.code == 400
+
+
+def test_un_seul_rapatriement_a_la_fois(url: str) -> None:
+    _verifier(url)
+    # retient le téléchargement en cours
+    session = _session_du_serveur(url)
+    session.attente.clear()
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post_json(f"{url}/api/rapatriements", {"emissions": ["2024-02-11"]})
+    assert erreur.value.code == 409
+    session.attente.set()
+    _attendre_rapatriements(url)
+
+
+def test_sans_mongo_pas_de_rapatriement(url_sans_mongo: str) -> None:
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post_json(f"{url_sans_mongo}/api/rapatriements", {"emissions": ["x"]})
+    assert erreur.value.code == 503

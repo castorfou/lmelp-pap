@@ -84,8 +84,14 @@ def navigateur() -> Iterator[Any]:
 
 
 def _ouvrir(
-    navigateur: Any, donnees: dict[str, Any] | None = None, sombre: bool = False
+    navigateur: Any,
+    donnees: dict[str, Any] | None = None,
+    sombre: bool = False,
+    api: dict[str, Any] | None = None,
 ) -> Any:
+    """L'accueil servi hors ligne. ``api`` : des routes de plus, chemin →
+    fonction qui reçoit la requête et rend la réponse JSON ; ``/api/donnees``
+    peut y être remplacé."""
     page = navigateur.new_page(
         viewport={"width": 1280, "height": 1000},
         color_scheme="dark" if sombre else "light",
@@ -97,6 +103,9 @@ def _ouvrir(
         url = route.request.url
         if url.split("#")[0] == ADRESSE:
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
+        elif api and (chemin := "/" + url.split("/", 3)[-1]) in api:
+            reponse = api[chemin](route.request)
+            route.fulfill(body=json.dumps(reponse), content_type="application/json")
         elif url.endswith("/api/donnees"):
             route.fulfill(body=corps, content_type="application/json")
         else:
@@ -210,7 +219,7 @@ def test_la_page_dans_lmelp_n_a_ni_sources_ni_anciennete(navigateur: Any) -> Non
 
 def test_sans_action_pas_de_colonne_action(navigateur: Any) -> None:
     page = _ouvrir(navigateur)
-    page.locator('.compteur[data-etat="telechargeable"]').click()
+    page.locator('.compteur[data-etat="localise"]').click()
     entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
     assert "Action" not in entetes
 
@@ -238,3 +247,87 @@ def test_en_sombre_le_fond_est_sombre_et_les_etats_gardent_leur_couleur(
         )
 
     assert couleur(sombre) == couleur(clair)
+
+
+def test_la_page_telechargeable_propose_telecharger(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
+    assert entetes[-1] == "Action"
+    lignes = page.locator("tbody tr")
+    assert lignes.first.get_by_role("button", name="Télécharger").count() == 1
+    assert lignes.first.locator("input[type=checkbox]").count() == 1
+    assert page.get_by_role("button", name="Télécharger : sélection (0)").count() == 1
+    total = _comptes(_donnees())["telechargeable"]
+    assert page.get_by_role("button", name=f"Télécharger : tout ({total})").count()
+
+
+def test_telecharger_envoie_les_emissions_et_notifie(navigateur: Any) -> None:
+    donnees = _donnees()
+    envoyees: list[Any] = []
+    apres = json.loads(json.dumps(donnees))
+    rapatriee = next(e for e in apres["emissions"] if e["maturite"] == "telechargeable")
+    rapatriee["maturite"] = "rapatrie"
+    lectures = {"n": 0}
+
+    def donnees_api(requete: Any) -> Any:
+        lectures["n"] += 1
+        return donnees if lectures["n"] == 1 else apres
+
+    def rapatriements(requete: Any) -> Any:
+        if requete.method == "POST":
+            envoyees.append(json.loads(requete.post_data))
+            return {
+                "en_cours": True,
+                "faites": 0,
+                "total": 1,
+                "bilan": None,
+                "en_cours_sur": None,
+                "erreurs": [],
+            }
+        return {
+            "en_cours": False,
+            "faites": 1,
+            "total": 1,
+            "en_cours_sur": None,
+            "bilan": {"rapatries": 1, "deja_la": 0, "echecs": 0},
+            "erreurs": [],
+        }
+
+    page = _ouvrir(
+        navigateur,
+        api={"/api/donnees": donnees_api, "/api/rapatriements": rapatriements},
+    )
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{rapatriee["id"]}"]')
+    ligne.get_by_role("button", name="Télécharger").click()
+
+    page.locator("#toast", has_text="1 rapatrié").wait_for()
+    assert envoyees == [{"emissions": [rapatriee["id"]]}]
+    assert "rapatrié 1→2" in page.locator("#toast").inner_text()
+    assert page.locator(f'tbody tr[data-id="{rapatriee["id"]}"]').count() == 0
+
+
+def test_telecharger_la_selection(navigateur: Any) -> None:
+    envoyees: list[Any] = []
+
+    def rapatriements(requete: Any) -> Any:
+        if requete.method == "POST":
+            envoyees.append(json.loads(requete.post_data))
+        return {
+            "en_cours": False,
+            "faites": 2,
+            "total": 2,
+            "en_cours_sur": None,
+            "bilan": {"rapatries": 2, "deja_la": 0, "echecs": 0},
+            "erreurs": [],
+        }
+
+    page = _ouvrir(navigateur, api={"/api/rapatriements": rapatriements})
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    cases = page.locator("tbody input[type=checkbox]")
+    cases.nth(0).check()
+    cases.nth(1).check()
+    page.get_by_role("button", name="Télécharger : sélection (2)").click()
+    page.locator("#toast", has_text="2 rapatriés").wait_for()
+    assert len(envoyees[0]["emissions"]) == 2

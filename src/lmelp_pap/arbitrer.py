@@ -70,7 +70,15 @@ from lmelp_pap.liste import (
     construire_liste,
     dates_candidates,
 )
-from lmelp_pap.maturite import Depot, integraux, meilleur, verifier
+from lmelp_pap.maturite import (
+    Depot,
+    Enregistrement,
+    integraux,
+    meilleur,
+    rapatrier,
+    retenu,
+    verifier,
+)
 from lmelp_pap.page import construire_page, donnees_page
 
 
@@ -86,6 +94,63 @@ class MaturiteIndisponibleError(RuntimeError):
     """La maturité des enregistrements demande une base Mongo."""
 
 
+class TacheEnCoursError(RuntimeError):
+    """Une tâche de fond du même genre tourne déjà."""
+
+
+class Tache:
+    """Une tâche de fond (vérification, rapatriement) et son avancement :
+    ``en_cours``, ``faites``, ``total``, ``bilan`` une fois finie, et les
+    champs propres à la tâche."""
+
+    def __init__(self, **champs: Any):
+        self._champs = champs
+        self._etat: dict[str, Any] = self._repos()
+        self._verrou = threading.Lock()
+
+    def _repos(self) -> dict[str, Any]:
+        return {
+            "en_cours": False,
+            "faites": 0,
+            "total": 0,
+            "bilan": None,
+            **{
+                k: (list(v) if isinstance(v, list) else v)
+                for k, v in self._champs.items()
+            },
+        }
+
+    def etat(self) -> dict[str, Any]:
+        """L'avancement courant."""
+        with self._verrou:
+            return dict(self._etat)
+
+    def maj(self, **champs: Any) -> None:
+        """Met à jour l'avancement (appelé depuis le fil de la tâche)."""
+        with self._verrou:
+            self._etat.update(champs)
+
+    def lancer(self, total: int, travail: Any, refuser: bool = False) -> dict[str, Any]:
+        """Lance ``travail(tache)`` dans un fil, qui rend le bilan. Une tâche
+        déjà en cours est rendue telle quelle, ou refusée si ``refuser``."""
+        with self._verrou:
+            if self._etat["en_cours"]:
+                if refuser:
+                    raise TacheEnCoursError("une tâche est déjà en cours")
+                return dict(self._etat)
+            self._etat = {**self._repos(), "en_cours": True, "total": total}
+
+        def executer() -> None:
+            bilan = None
+            try:
+                bilan = travail(self)
+            finally:
+                self.maj(en_cours=False, bilan=bilan)
+
+        threading.Thread(target=executer, daemon=True).start()
+        return self.etat()
+
+
 class Atelier:
     """La liste en cours d'arbitrage : le cache lu une fois, les CSV réécrits."""
 
@@ -96,18 +161,17 @@ class Atelier:
         fichier: Path | None = None,
         depot: Depot | None = None,
         session: Any = None,
+        audios: Path | None = None,
     ):
         """Lit le cache et construit une première fois la liste. ``depot`` :
         la maturité des enregistrements (Mongo), ``session`` : le client HTTP
-        de la vérification des URL (``requests`` par défaut)."""
+        de la vérification et du rapatriement (``requests`` par défaut),
+        ``audios`` : le dossier des enregistrements rapatriés."""
         self.depot = depot
         self._session = session
-        self._verification: dict[str, Any] = {
-            "en_cours": False,
-            "faites": 0,
-            "total": 0,
-            "bilan": None,
-        }
+        self.audios = audios or Path("data/raw/audios")
+        self._verification = Tache()
+        self._rapatriement = Tache(en_cours_sur=None, erreurs=[])
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
         self.attestations = lire_cache(cache)
@@ -129,39 +193,70 @@ class Atelier:
 
     def etat_verification(self) -> dict[str, Any]:
         """L'avancement de la vérification des URL d'intégral."""
-        return dict(self._verification)
+        return self._verification.etat()
 
     def lancer_verification(self) -> dict[str, Any]:
         """Lance en fond la vérification des URL d'intégral, sauf si une est
         déjà en cours ; rend son avancement."""
+        depot = self._depot()
+        with self._verrou:
+            a_verifier = integraux(self.sortie)
+        return self._verification.lancer(
+            len(a_verifier),
+            lambda t: verifier(
+                a_verifier, depot, self._session, progres=lambda n: t.maj(faites=n)
+            ),
+        )
+
+    def etat_rapatriement(self) -> dict[str, Any]:
+        """L'avancement du rapatriement en cours ou du dernier."""
+        return self._rapatriement.etat()
+
+    def lancer_rapatriement(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Lance en fond, un par un, le rapatriement de l'intégral retenu de
+        chaque émission demandée (``emissions``). Une seule tâche à la fois."""
+        depot = self._depot()
+        ids = demande.get("emissions")
+        if not isinstance(ids, list) or not ids:
+            raise DemandeInvalideError("« emissions » : une liste non vide attendue")
+        par_emission: dict[str, list[Enregistrement]] = {}
+        for e in depot.tous():
+            par_emission.setdefault(e.emission_id, []).append(e)
+        a_rapatrier = []
+        for emission_id in ids:
+            choisi = retenu(par_emission.get(str(emission_id), []))
+            if choisi is None:
+                raise DemandeInvalideError(
+                    f"{emission_id} n'a aucun intégral téléchargeable"
+                )
+            a_rapatrier.append(choisi)
+
+        def travail(tache: Tache) -> dict[str, int]:
+            bilan = {"rapatries": 0, "deja_la": 0, "echecs": 0}
+            erreurs: list[dict[str, str]] = []
+            for n, enregistrement in enumerate(a_rapatrier, 1):
+                tache.maj(en_cours_sur=enregistrement.emission_id)
+                try:
+                    avant = enregistrement.sha256
+                    fait = rapatrier(enregistrement, self.audios, self._session)
+                    depot.enregistrer(fait)
+                    deja = bool(avant) and avant == fait.sha256
+                    bilan["deja_la" if deja else "rapatries"] += 1
+                except Exception as erreur:  # noqa: BLE001 — l'erreur va au bilan
+                    bilan["echecs"] += 1
+                    erreurs.append(
+                        {"emission": enregistrement.emission_id, "detail": str(erreur)}
+                    )
+                tache.maj(faites=n, erreurs=list(erreurs))
+            tache.maj(en_cours_sur=None)
+            return bilan
+
+        return self._rapatriement.lancer(len(a_rapatrier), travail, refuser=True)
+
+    def _depot(self) -> Depot:
         if self.depot is None:
             raise MaturiteIndisponibleError("MONGO_URI absent")
-        with self._verrou:
-            if not self._verification["en_cours"]:
-                a_verifier = integraux(self.sortie)
-                self._verification = {
-                    "en_cours": True,
-                    "faites": 0,
-                    "total": len(a_verifier),
-                    "bilan": None,
-                }
-                threading.Thread(
-                    target=self._verifier, args=(a_verifier,), daemon=True
-                ).start()
-            return dict(self._verification)
-
-    def _verifier(self, a_verifier: list[tuple[str, str]]) -> None:
-        assert self.depot is not None
-        bilan: dict[str, int] | None = None
-        try:
-            bilan = verifier(
-                a_verifier,
-                self.depot,
-                self._session,
-                progres=lambda n: self._verification.update(faites=n),
-            )
-        finally:
-            self._verification.update(en_cours=False, bilan=bilan)
+        return self.depot
 
     def page(self) -> str:
         """La page de la liste en mode arbitrage."""
@@ -409,10 +504,11 @@ def creer_serveur(
     arbitrages: Path | None = None,
     depot: Depot | None = None,
     session: Any = None,
+    audios: Path | None = None,
 ) -> ThreadingHTTPServer:
     """Le serveur de l'outil, prêt à servir (``serve_forever``). Sans
     ``depot``, la maturité des enregistrements est absente."""
-    atelier = Atelier(cache, sortie, arbitrages, depot, session)
+    atelier = Atelier(cache, sortie, arbitrages, depot, session, audios)
 
     class Requetes(BaseHTTPRequestHandler):
         """Les routes de la page et de l'API JSON."""
@@ -431,6 +527,8 @@ def creer_serveur(
                 self._json(atelier.donnees())
             elif self.path == "/api/verifications":
                 self._json(atelier.etat_verification())
+            elif self.path == "/api/rapatriements":
+                self._json(atelier.etat_rapatriement())
             else:
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 
@@ -443,6 +541,16 @@ def creer_serveur(
                 except MaturiteIndisponibleError as e:
                     self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
                 return
+            if self.path == "/api/rapatriements":
+                try:
+                    self._json(atelier.lancer_rapatriement(self._demande()))
+                except MaturiteIndisponibleError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                except TacheEnCoursError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.CONFLICT)
+                except (DemandeInvalideError, json.JSONDecodeError) as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.BAD_REQUEST)
+                return
             actions = {
                 "/api/arbitrages": atelier.arbitrer,
                 "/api/annulations": atelier.annuler,
@@ -452,13 +560,17 @@ def creer_serveur(
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
                 return
             try:
-                taille = int(self.headers.get("Content-Length") or 0)
-                demande = json.loads(self.rfile.read(taille) or b"{}")
-                if not isinstance(demande, dict):
-                    raise DemandeInvalideError("un objet JSON est attendu")
-                self._json(action(demande))
+                self._json(action(self._demande()))
             except (DemandeInvalideError, json.JSONDecodeError) as e:
                 self._json({"erreur": str(e)}, HTTPStatus.BAD_REQUEST)
+
+        def _demande(self) -> dict[str, Any]:
+            """Le corps JSON de la requête, un objet."""
+            taille = int(self.headers.get("Content-Length") or 0)
+            demande = json.loads(self.rfile.read(taille) or b"{}")
+            if not isinstance(demande, dict):
+                raise DemandeInvalideError("un objet JSON est attendu")
+            return demande
 
         def _json(self, donnees: object, statut: HTTPStatus = HTTPStatus.OK) -> None:
             """Répond en JSON."""

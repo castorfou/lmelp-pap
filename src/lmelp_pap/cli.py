@@ -29,6 +29,7 @@ def _parser() -> argparse.ArgumentParser:
     cache = _chemin("PAP_CACHE", "data/raw/cache")
     donnees = _chemin("PAP_DONNEES", "data/processed")
     arbitrages = _chemin("PAP_ARBITRAGES", None)
+    audios = _chemin("PAP_AUDIOS", "data/raw/audios")
     parser = argparse.ArgumentParser(prog="lmelp-pap")
     commandes = parser.add_subparsers(dest="commande", required=True)
     emissions = commandes.add_parser(
@@ -69,6 +70,12 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=arbitrages,
         help="fichier des arbitrages (par défaut : arbitrages.csv dans --sortie)",
+    )
+    arbitrer.add_argument(
+        "--audios",
+        type=Path,
+        default=audios,
+        help="dossier des enregistrements rapatriés (par défaut data/raw/audios)",
     )
     arbitrer.add_argument(
         "--port", type=int, default=int(os.environ.get("PAP_PORT") or 8765)
@@ -137,6 +144,7 @@ def _arbitrer(args: argparse.Namespace) -> int:
         # La maturité des enregistrements vit dans Mongo (MONGO_URI) ; sans
         # base, l'appli sert la liste sans elle.
         depot=depot_depuis_env(),
+        audios=args.audios,
     )
     # VS Code redirige le port vers la machine hôte et y ouvre l'adresse.
     url = f"http://localhost:{serveur.server_address[1]}/"
