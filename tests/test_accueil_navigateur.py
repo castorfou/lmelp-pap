@@ -755,3 +755,36 @@ def test_une_emission_valide_entree_dans_lmelp_compte_dans_lmelp(
     comptes = _comptes(_donnees())
     assert _compteurs(page)["valide"] == comptes["valide"] - 1
     assert _compteurs(page)["lmelp"] == comptes["lmelp"] + 1
+
+
+def test_la_page_rapatrie_s_ouvre_de_la_plus_recente_a_la_plus_ancienne(
+    navigateur: Any,
+) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="rapatrie"]').click()
+    dates = page.locator("tbody tr td:nth-child(1)").all_inner_texts()
+    dates = [d for d in dates if d[:4].isdigit()]
+    assert dates == sorted(dates, reverse=True)
+    assert page.locator("th.triable", has_text="Date").inner_text().endswith("▼")
+
+
+def test_le_tri_choisi_sur_une_page_est_garde(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="localise"]').click()
+    titre = page.locator("th.triable", has_text="Titre")
+    titre.click()
+    titre.click()  # titre décroissant
+    assert page.locator("th.triable", has_text="Titre").inner_text().endswith("▼")
+
+    page.get_by_role("button", name="← Accueil").click()
+    page.locator('.compteur[data-etat="localise"]').click()
+    assert page.locator("th.triable", has_text="Titre").inner_text().endswith("▼")
+
+    page.reload()
+    page.locator("tbody tr").first.wait_for()
+    assert page.locator("th.triable", has_text="Titre").inner_text().endswith("▼")
+
+    # une autre page garde son propre tri
+    page.get_by_role("button", name="← Accueil").click()
+    page.locator('.compteur[data-etat="rapatrie"]').click()
+    assert page.locator("th.triable", has_text="Date").inner_text().endswith("▼")
