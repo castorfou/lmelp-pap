@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import pytest
 import requests
 
-from lmelp_pap.api_radiofrance import (
+from lmelp_pap.radiofrance_api import (
     ApiRadioFranceError,
     Diffusion,
     Personnalite,
@@ -89,10 +89,8 @@ def test_trouve_la_diffusion_par_l_url_de_sa_page() -> None:
         titre="Aliène",
         resume="Le résumé de la diffusion.",
         url=PAGE,
-        equipe=(
-            Personnalite("Jérôme Garcin", "Producteur"),
-            Personnalite("Arnaud Viviant", None),
-        ),
+        animateurs=(Personnalite("Arnaud Viviant", None),),
+        equipe=(Personnalite("Jérôme Garcin", "Producteur"),),
         invites=(Personnalite("Une Autrice", None),),
     )
 
@@ -104,7 +102,7 @@ def test_la_requete_porte_la_cle_et_le_jour_a_l_heure_de_paris() -> None:
 
     demande = session.demandes[0]
     assert demande["url"] == "https://openapi.radiofrance.fr/v1/graphql"
-    assert demande["headers"]["X-Token"] == "cle"
+    assert demande["headers"]["x-token"] == "cle"
     debut = int(datetime(2024, 3, 24, tzinfo=ZoneInfo("Europe/Paris")).timestamp())
     variables = demande["json"]["variables"]
     assert variables["start"] == debut

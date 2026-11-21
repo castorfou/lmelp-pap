@@ -13,7 +13,8 @@ from typing import Any
 
 import pytest
 
-from tests.test_api_radiofrance import (
+from tests.test_arbitrer_maturite import _demarrer
+from tests.test_radiofrance_api import (
     MASQUE,
     ReponseGraphQL,
     SessionApi,
@@ -21,7 +22,6 @@ from tests.test_api_radiofrance import (
     _page,
     _personne,
 )
-from tests.test_arbitrer_maturite import _demarrer
 
 
 PAGE_2024 = f"{MASQUE}/le-masque-et-la-plume-du-dimanche-11-fevrier-2024-2491269"
@@ -31,6 +31,13 @@ PAGE_2024 = f"{MASQUE}/le-masque-et-la-plume-du-dimanche-11-fevrier-2024-2491269
 def _sans_base_lmelp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("MONGO_URI", raising=False)
+    monkeypatch.delenv("RADIOFRANCE_API_TOKEN", raising=False)
+
+
+@pytest.fixture
+def cle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """La clé de l'Open API Radio France, lue dans l'environnement."""
+    monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "cle")
 
 
 def _get(url: str) -> Any:
@@ -42,6 +49,7 @@ def _serveur(tmp_path: Path, **options: Any) -> Iterator[str]:
     yield from _demarrer(tmp_path, **options)
 
 
+@pytest.mark.usefixtures("cle")
 def test_la_diffusion_trouvee_donne_equipe_et_invites_et_le_journal(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
@@ -53,7 +61,7 @@ def test_la_diffusion_trouvee_donne_equipe_et_invites_et_le_journal(
         ],
     )
     session = SessionApi(_page(noeud))
-    for url in _serveur(tmp_path, session=session, jeton_radiofrance="cle"):
+    for url in _serveur(tmp_path, session=session):
         reponse = _get(f"{url}/api/radiofrance/2024-02-11")
 
     assert reponse == {
@@ -63,6 +71,7 @@ def test_la_diffusion_trouvee_donne_equipe_et_invites_et_le_journal(
             "titre": "Aliène",
             "resume": "Le résumé de la diffusion.",
             "url": PAGE_2024,
+            "animateurs": [],
             "equipe": [{"nom": "Jérôme Garcin", "role": "Producteur"}],
             "invites": [{"nom": "Une Autrice", "role": None}],
         },
@@ -76,11 +85,12 @@ def test_la_diffusion_trouvee_donne_equipe_et_invites_et_le_journal(
     assert "Aliène" not in logs
 
 
+@pytest.mark.usefixtures("cle")
 def test_sans_diffusion_du_masque_ce_jour_la(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
     session = SessionApi(_page())
-    for url in _serveur(tmp_path, session=session, jeton_radiofrance="cle"):
+    for url in _serveur(tmp_path, session=session):
         reponse = _get(f"{url}/api/radiofrance/2024-02-11")
 
     assert reponse["statut"] == "introuvable"
@@ -100,11 +110,12 @@ def test_sans_cle_l_api_n_est_pas_appelee(
     assert "api radiofrance 2024-02-11 : pas de clé" in capfd.readouterr().err
 
 
+@pytest.mark.usefixtures("cle")
 def test_une_erreur_de_l_api_est_rapportee_et_journalisee(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
     session = SessionApi(ReponseGraphQL(403, {"message": "Unauthorized"}))
-    for url in _serveur(tmp_path, session=session, jeton_radiofrance="cle"):
+    for url in _serveur(tmp_path, session=session):
         reponse = _get(f"{url}/api/radiofrance/2024-02-11")
 
     assert reponse["statut"] == "erreur"
@@ -114,10 +125,11 @@ def test_une_erreur_de_l_api_est_rapportee_et_journalisee(
     assert "Unauthorized" not in logs
 
 
+@pytest.mark.usefixtures("cle")
 def test_une_emission_inconnue_repond_404(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
-    for url in _serveur(tmp_path, session=SessionApi(), jeton_radiofrance="cle"):
+    for url in _serveur(tmp_path, session=SessionApi()):
         with pytest.raises(urllib.error.HTTPError) as erreur:
             _get(f"{url}/api/radiofrance/1900-01-01")
     assert erreur.value.code == 404

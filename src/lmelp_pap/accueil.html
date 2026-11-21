@@ -86,6 +86,8 @@
   .erreurs { margin: 4px 0 0; padding-left: 18px; color: #b3261e; font-size: 13px; }
   .echec { color: #b3261e; font-size: 12px; }
   .ecart { color: var(--localise); font-size: 12px; font-weight: 600; }
+  .alerte.refus { border-color: #b3261e; border-width: 2px; }
+  .alerte.refus .tete { display: flex; gap: 8px; align-items: center; justify-content: space-between; color: #b3261e; }
   /* Lecteur d'un enregistrement rapatrié, sous sa ligne */
   tr.ecoute td { background: var(--ligne); }
   tr.ecoute .lecteur, tr.ecoute .verdict { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
@@ -121,7 +123,40 @@ const ACTIONS = {
   telechargeable: { libelle: "Télécharger", lot: true, executer: ids => lancerRapatriement(ids) },
   // ouvre (ou referme) le lecteur sous la ligne de l'émission
   rapatrie: { libelle: "Écouter et qualifier", lot: false, executer: ids => { vue.ecoute = vue.ecoute === ids[0] ? null : ids[0]; rendre(); } },
+  // « confirmer » : la question posée avant d'agir, par ligne comme en lot
+  qualifie: {
+    libelle: "Mettre à disposition de lmelp", lot: true, executer: ids => mettreADisposition(ids),
+    confirmer: ids => `Mettre à disposition de lmelp ${ids.length > 1 ? `les ${ids.length} émissions` : `l'émission ${ids[0]}`} ? Le fichier est copié dans le dossier audio de lmelp ; une mise à disposition ne se retire pas.`,
+  },
 };
+
+// ---------- Mise à disposition de lmelp ----------
+// POST /api/remises : chaque émission qualifiée est copiée chez lmelp et passe
+// à valide ; un refus (fichier de même nom chez lmelp, niveau…) reste affiché
+// en haut de la page jusqu'à « Fermer ».
+async function mettreADisposition(ids) {
+  const avant = compter(EMISSIONS);
+  document.querySelectorAll("button[data-action], .lot button").forEach(b => { b.disabled = true; });
+  try {
+    const r = await fetch("/api/remises", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emissions: ids }) });
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.erreur || r.statusText);
+    const { mises, refus } = t.remise;
+    preparer(t); vue.choix.clear(); vue.refus = refus; rendre();
+    notifier(`${mises.length} mis à disposition${refus.length ? ` · ${refus.length} refus` : ""}`, avant);
+  } catch (err) {
+    toast(`Échec : ${err.message}`); rendre();
+  }
+}
+function afficherRefus(racine) {
+  if (!vue.refus.length) return;
+  const div = document.createElement("div");
+  div.className = "alerte refus"; div.setAttribute("role", "alert");
+  div.innerHTML = `<div class="tete"><b>Mise à disposition refusée (${vue.refus.length})</b><button id="fermer-refus" aria-label="Fermer les refus" title="Fermer">✕</button></div>` +
+    `<ul class="erreurs">${vue.refus.map(x => `<li><b>${esc(x.emission)}</b> : ${esc(x.detail)}</li>`).join("")}</ul>`;
+  racine.prepend(div);
+  $("fermer-refus").addEventListener("click", () => { vue.refus = []; rendre(); });
+}
 
 // ---------- Écoute et qualification d'un enregistrement rapatrié ----------
 // Le fichier vient de GET /audios/<fichier> (requêtes Range : le lecteur saute
@@ -157,8 +192,9 @@ function diffusionRF(r) {
   if (r.statut !== "trouvee" || !r.diffusion) return `<span class="doux">API Radio France indisponible${r.detail ? ` (${esc(r.detail)})` : ""}.</span>`;
   const d = r.diffusion;
   return (d.titre ? `<b>${esc(d.titre)}</b>` : "") + (d.resume ? `<div class="doux">${esc(d.resume)}</div>` : "") +
-    (d.equipe.length ? `<div>Équipe : ${nomsRF(d.equipe)}</div>` : "") +
-    (d.invites.length ? `<div>Invités : ${nomsRF(d.invites)}</div>` : "") +
+    ((d.animateurs || []).length ? `<div>Présentation : ${nomsRF(d.animateurs)}</div>` : "") +
+    ((d.equipe || []).length ? `<div>Équipe : ${nomsRF(d.equipe)}</div>` : "") +
+    ((d.invites || []).length ? `<div>Invités : ${nomsRF(d.invites)}</div>` : "") +
     `<div class="doux">Données fournies par l'Open API Radio France.</div>`;
 }
 async function chargerDiffusion(id) {
@@ -294,11 +330,12 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const JOUR_MS = 86400000;
 
 let EMISSIONS = [], ANNEES = [], maturiteActive = false;
-const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set(), ecoute: null };
+const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set(), ecoute: null, refus: [] };
 
-// Une émission attestée par lmelp y est déjà : cet état l'emporte sur la maturité.
+// Une émission attestée par lmelp, ou dont un enregistrement valide y est entré
+// (dans_lmelp), y est déjà : cet état l'emporte sur la maturité.
 function etatDe(e) {
-  if (e.attestations.some(a => a.source === "lmelp")) return "lmelp";
+  if (e.dans_lmelp || e.attestations.some(a => a.source === "lmelp")) return "lmelp";
   return e.maturite || "sans";
 }
 function preparer(d) {
@@ -447,10 +484,13 @@ function pageEtat(racine) {
   }));
   $("h").append(histogramme({ liste: tous, hauteur: 90, empile: false, surligne: vue.etat, annee: vue.annee,
     clic: a => { vue.annee = vue.annee === a ? null : a; rendre(); } }));
+  // une action qui a « confirmer » pose sa question avant d'agir, par ligne comme en lot
+  const confirme = ids => !action.confirmer || confirm(action.confirmer(ids));
   $("lot")?.addEventListener("click", () => {
-    if (confirm(`${action.libelle} : les ${liste.length} émissions ?`)) action.executer(liste.map(e => e.id));
+    const ids = liste.map(e => e.id);
+    if (confirm(action.confirmer ? action.confirmer(ids) : `${action.libelle} : les ${liste.length} émissions ?`)) action.executer(ids);
   });
-  $("lot-selection")?.addEventListener("click", () => { if (vue.choix.size) action.executer([...vue.choix]); });
+  $("lot-selection")?.addEventListener("click", () => { if (vue.choix.size && confirme([...vue.choix])) action.executer([...vue.choix]); });
   $("tous")?.addEventListener("change", ev => { liste.forEach(e => ev.target.checked ? vue.choix.add(e.id) : vue.choix.delete(e.id)); rendre(); });
   const tb = racine.querySelector("tbody");
   const lot = action && action.lot;
@@ -461,7 +501,10 @@ function pageEtat(racine) {
     const tr = tb.querySelector(`tr[data-id="${CSS.escape(ecoutee.id)}"]`);
     if (tr) { tr.insertAdjacentHTML("afterend", lecteur(ecoutee, tr.children.length)); brancherLecteur(ecoutee.id); }
   }
-  if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", () => action.executer([b.closest("tr").dataset.id])));
+  if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", () => {
+    const ids = [b.closest("tr").dataset.id];
+    if (confirme(ids)) action.executer(ids);
+  }));
   if (lot) tb.querySelectorAll("input[type=checkbox]").forEach(c => c.addEventListener("change", () => {
     const id = c.closest("tr").dataset.id;
     c.checked ? vue.choix.add(id) : vue.choix.delete(id);
@@ -492,6 +535,8 @@ function rendre() {
   $("resume").textContent = `${EMISSIONS.length} émissions · ${n.lmelp} dans lmelp · ${n.valide} valides`;
   ecrireAdresse();
   (vue.etat ? pageEtat : accueil)($("accueil"));
+  afficherRefus($("accueil"));
+  ajusterEcran();
 }
 // « pap » ramène à l'accueil, sans filtre ni page d'état.
 $("logo").addEventListener("click", ev => { ev.preventDefault(); vue.etat = null; vue.annee = null; vue.choix.clear(); rendre(); scrollTo(0, 0); });

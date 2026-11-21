@@ -30,19 +30,25 @@ API :
   émission (``emission_id``, ``verdict`` : ``favorable`` ou ``ecarte``,
   ``motif``, obligatoire pour un écart) ;
 - ``GET /api/radiofrance/<emission_id>`` : la diffusion de l'émission dans
-  l'Open API Radio France, lue à la demande (module ``api_radiofrance``) :
+  l'Open API Radio France, lue à la demande (module ``radiofrance_api``) :
   ``statut`` (``trouvee``, ``introuvable``, ``sans_cle``, ``erreur`` avec son
   ``detail``) et ``diffusion`` (``titre``, ``resume``, ``url``, ``equipe`` et
   ``invites`` : ``nom``, ``role``) ; rien n'en est conservé ;
+- ``POST /api/remises`` : met à disposition de lmelp l'enregistrement qualifié
+  de chaque émission (``emissions``) : copie dans le dossier audio de lmelp,
+  fiche ``pap_remises``, passage à valide ; la réponse porte en plus
+  ``remise`` (``mises``, ``refus`` avec leur ``detail``) ;
 - ``GET /audios/<fichier>`` : un fichier du dossier audio, avec les requêtes
   ``Range`` (206) pour le saut ; rien hors du dossier audio.
 
 Avec un dépôt Mongo, chaque émission des données porte sa ``maturite`` (le
 niveau de son enregistrement le plus avancé, ou ``null``), ``maturite_depuis``
 (la date d'entrée dans ce niveau), ``fichier_audio`` (le fichier écoutable,
-relatif au dossier audio), ``ecart`` (``date``, ``motif``) et les données
-``maturite_active`` ; sans dépôt, la vérification, le rapatriement et la
-qualification répondent 503.
+relatif au dossier audio), ``ecart`` (``date``, ``motif``), ``dans_lmelp``
+(attestée par lmelp, ou un épisode de lmelp porte le fichier d'un de ses
+enregistrements valides) et les données ``maturite_active`` ; sans dépôt, la
+vérification, le rapatriement, la qualification et la mise à disposition
+répondent 503.
 
 Chaque requête d'écriture renvoie les données à jour, comme ``GET /api/donnees``.
 Une émission y porte en plus, pour l'arbitrage de date, ses ``dates_candidates``
@@ -54,6 +60,7 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 
 import json
 import mimetypes
+import os
 import sys
 import threading
 import time
@@ -67,7 +74,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
-from lmelp_pap.api_radiofrance import ApiRadioFranceError, lire_diffusion
+import requests
+
 from lmelp_pap.arbitrages import (
     EXISTANTE,
     INEXISTANTE,
@@ -111,6 +119,8 @@ from lmelp_pap.maturite import (
     verifier,
 )
 from lmelp_pap.page import construire_page, donnees_page
+from lmelp_pap.radiofrance_api import ApiRadioFranceError, lire_diffusion
+from lmelp_pap.remise import RemiseError, lire_api, mettre_a_disposition
 
 
 # Les doutes qu'un arbitrage de date lève.
@@ -138,6 +148,17 @@ def journal(message: str) -> None:
     # un seul write : les lignes de deux fils ne se mêlent pas
     sys.stderr.write(f"{horodatage} {message}\n")
     sys.stderr.flush()
+
+
+def _dans_lmelp(
+    emission: Emission, enregistrements: list[Enregistrement], presents: set[str]
+) -> bool:
+    """L'émission est dans lmelp : attestée par lmelp, ou un de ses
+    enregistrements valides y est entré (un épisode de lmelp porte son
+    fichier en ``audio_rel_filename``)."""
+    return any(a.source == "lmelp" for a in emission.attestations) or any(
+        e.niveau == "valide" and e.fichier in presents for e in enregistrements
+    )
 
 
 class DemandeInvalideError(ValueError):
@@ -233,17 +254,19 @@ class Atelier:
         session: Any = None,
         audios: Path | None = None,
         intervalle: timedelta = timedelta(days=7),
-        jeton_radiofrance: str | None = None,
+        audios_lmelp: Path | None = None,
     ):
         """Lit le cache et construit une première fois la liste. ``depot`` :
         la maturité des enregistrements (Mongo), ``session`` : le client HTTP
-        de la vérification et du rapatriement (``requests`` par défaut),
-        ``audios`` : le dossier des enregistrements rapatriés,
-        ``jeton_radiofrance`` : la clé de l'Open API Radio France."""
+        de la vérification, du rapatriement et de l'API Radio France
+        (``requests`` par défaut), ``audios`` : le dossier des enregistrements
+        rapatriés, ``audios_lmelp`` : le dossier audio du back-office lmelp,
+        où vont les enregistrements mis à disposition."""
         self.depot = depot
-        self.jeton_radiofrance = jeton_radiofrance
         self._session = session
         self.audios = audios or Path("data/raw/audios")
+        self.audios_lmelp = audios_lmelp or Path("data/raw/audios-lmelp")
+        self._verrou_remise = threading.Lock()  # une mise à disposition à la fois
         self.intervalle = intervalle  # entre deux vérifications complètes
         self.planification = False
         self._verification = Tache()
@@ -537,17 +560,14 @@ class Atelier:
             journal(f"api radiofrance {emission_id} : émission inconnue")
             raise DemandeInvalideError(f"{emission_id} : émission inconnue")
         reponse: dict[str, Any] = {"emission_id": emission_id, "diffusion": None}
-        if not self.jeton_radiofrance:
+        jeton = os.environ.get("RADIOFRANCE_API_TOKEN")
+        if not jeton:
             journal(f"api radiofrance {emission_id} : pas de clé")
             return {**reponse, "statut": "sans_cle"}
-        pages = [
-            a.url for a in emission.attestations if a.source == "radiofrance" and a.url
-        ]
+        pages = _pages_radiofrance(emission)
         debut = time.monotonic()
         try:
-            diffusion = lire_diffusion(
-                emission.date, pages, self.jeton_radiofrance, self._session
-            )
+            diffusion = lire_diffusion(emission.date, pages, jeton, self._session)
         except ApiRadioFranceError as erreur:
             duree = _duree(time.monotonic() - debut)
             journal(f"api radiofrance {emission_id} : erreur {erreur} ({duree})")
@@ -576,6 +596,94 @@ class Atelier:
                 "rapatrié à qualifier"
             )
         return candidats[0]
+
+    def mettre_a_disposition(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Met à disposition de lmelp l'enregistrement qualifié de chaque
+        émission demandée (``emissions``), une par une : copie de son fichier
+        dans le dossier audio de lmelp, fiche dans ``pap_remises``, passage à
+        valide. Une émission déjà dans lmelp, sans enregistrement qualifié, ou
+        dont le fichier existe déjà chez lmelp est refusée sans rien écrire.
+        Rend les données à jour et le bilan (``remise`` : ``mises``,
+        ``refus``). L'API Radio France n'est lue qu'avec
+        ``RADIOFRANCE_API_TOKEN``."""
+        depot = self._depot()
+        ids = demande.get("emissions")
+        if not isinstance(ids, list) or not ids:
+            raise DemandeInvalideError("« emissions » : une liste non vide attendue")
+        jeton = os.environ.get("RADIOFRANCE_API_TOKEN")
+        mises: list[dict[str, str]] = []
+        refus: list[dict[str, str]] = []
+        with self._verrou_remise:
+            par_emission: dict[str, list[Enregistrement]] = {}
+            for e in depot.tous():
+                par_emission.setdefault(e.emission_id, []).append(e)
+            presents = depot.dans_lmelp(
+                e.fichier for e in depot.tous() if e.niveau == "valide" and e.fichier
+            )
+            for brut in ids:
+                emission_id = str(brut)
+                enregistrements = par_emission.get(emission_id, [])
+                plus_avance = meilleur(enregistrements)
+                niveau = plus_avance.niveau if plus_avance else "aucun"
+                try:
+                    emission = self._emissions.get(emission_id)
+                    if emission is None:
+                        raise RemiseError(f"émission inconnue : {emission_id}")
+                    if _dans_lmelp(emission, enregistrements, presents):
+                        raise RemiseError(f"{emission_id} est déjà dans lmelp")
+                    choisi = next(
+                        (e for e in enregistrements if e.niveau == "qualifie"), None
+                    )
+                    if choisi is None:
+                        raise RemiseError(
+                            f"{emission_id} : aucun enregistrement qualifié"
+                        )
+                    api = self._api_pour_remise(emission, jeton) if jeton else None
+                    fait, fiche = mettre_a_disposition(
+                        choisi,
+                        emission,
+                        self.audios,
+                        self.audios_lmelp,
+                        datetime.now(UTC),
+                        api,
+                    )
+                    depot.ajouter_remise(fiche)
+                    depot.enregistrer(fait)
+                except RemiseError as erreur:
+                    journal(
+                        f"mise à disposition refusée {emission_id} "
+                        f"(niveau {niveau}) : {erreur}"
+                    )
+                    refus.append({"emission": emission_id, "detail": str(erreur)})
+                    continue
+                relatif = fait.fichier or ""
+                journal(
+                    f"mis à disposition {emission_id} : {self.audios / relatif} → "
+                    f"{self.audios_lmelp / relatif} (sha256 {(fait.sha256 or '')[:12]}"
+                    f"{', API Radio France' if api else ''})"
+                )
+                mises.append({"emission": emission_id, "fichier": relatif})
+        journal(
+            f"mise à disposition : {len(mises)} mise{_s(len(mises))} à disposition, "
+            f"{len(refus)} refus"
+        )
+        return {**self.donnees(), "remise": {"mises": mises, "refus": refus}}
+
+    def _api_pour_remise(self, emission: Emission, jeton: str) -> dict[str, str] | None:
+        """Les morceaux de description de l'API Radio France pour la remise,
+        l'appel journalisé (durée, résultat) sans rien du contenu reçu."""
+        debut = time.monotonic()
+        api = lire_api(
+            self._session or requests.Session(),
+            jeton,
+            emission.date,
+            _pages_radiofrance(emission),
+        )
+        journal(
+            f"api radiofrance {emission.id} (mise à disposition) : "
+            f"{'trouvée' if api else 'rien'} ({_duree(time.monotonic() - debut)})"
+        )
+        return api
 
     def _depot(self) -> Depot:
         if self.depot is None:
@@ -743,8 +851,17 @@ class Atelier:
                 par_emission.setdefault(enregistrement.emission_id, []).append(
                     enregistrement
                 )
+            presents = self.depot.dans_lmelp(
+                x.fichier
+                for liste in par_emission.values()
+                for x in liste
+                if x.niveau == "valide" and x.fichier
+            )
             for e in emissions:
                 plus_avance = meilleur(par_emission.get(e["id"], []))
+                e["dans_lmelp"] = _dans_lmelp(
+                    self._emissions[e["id"]], par_emission.get(e["id"], []), presents
+                )
                 e["maturite"] = plus_avance.niveau if plus_avance else None
                 echecs = [x.echec for x in par_emission.get(e["id"], []) if x.echec]
                 dernier = max(echecs, key=lambda v: v.date, default=None)
@@ -875,6 +992,11 @@ def type_audio(chemin: Path) -> str:
     )
 
 
+def _pages_radiofrance(emission: Emission) -> list[str]:
+    """Les pages radiofrance.fr connues de l'émission (ses attestations)."""
+    return [a.url for a in emission.attestations if a.source == "radiofrance" and a.url]
+
+
 def _ressource(nom: str) -> str:
     """Un fichier livré avec le paquet (la page d'accueil)."""
     return files("lmelp_pap").joinpath(nom).read_text(encoding="utf-8")
@@ -891,23 +1013,14 @@ def creer_serveur(
     audios: Path | None = None,
     planification: bool = False,
     intervalle: timedelta = timedelta(days=7),
-    jeton_radiofrance: str | None = None,
+    audios_lmelp: Path | None = None,
 ) -> ThreadingHTTPServer:
     """Le serveur de l'outil, prêt à servir (``serve_forever``). Sans
     ``depot``, la maturité des enregistrements est absente. Avec
     ``planification``, la vérification des URL part seule quand elle est due
-    (``Atelier.planifier``) ; l'atelier est ``serveur.atelier``.
-    ``jeton_radiofrance`` : la clé de l'Open API Radio France, sans laquelle
-    la diffusion d'une émission répond ``sans_cle``."""
+    (``Atelier.planifier``) ; l'atelier est ``serveur.atelier``."""
     atelier = Atelier(
-        cache,
-        sortie,
-        arbitrages,
-        depot,
-        session,
-        audios,
-        intervalle,
-        jeton_radiofrance,
+        cache, sortie, arbitrages, depot, session, audios, intervalle, audios_lmelp
     )
     if planification and depot is not None:
         atelier.planifier_en_continu()
@@ -967,6 +1080,14 @@ def creer_serveur(
             if self.path == "/api/qualifications":
                 try:
                     self._json(atelier.qualifier(self._demande()))
+                except MaturiteIndisponibleError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                except (DemandeInvalideError, json.JSONDecodeError) as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.BAD_REQUEST)
+                return
+            if self.path == "/api/remises":
+                try:
+                    self._json(atelier.mettre_a_disposition(self._demande()))
                 except MaturiteIndisponibleError as e:
                     self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
                 except (DemandeInvalideError, json.JSONDecodeError) as e:

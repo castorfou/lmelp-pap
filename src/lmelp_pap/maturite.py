@@ -47,6 +47,8 @@ from dotenv import find_dotenv, load_dotenv
 NIVEAUX = ("localise", "telechargeable", "rapatrie", "qualifie", "valide")
 COLLECTION = "pap_enregistrements"
 QUALIFICATIONS = "pap_qualifications"
+REMISES = "pap_remises"  # fiches des mises à disposition, lues par lmelp
+EPISODES_LMELP = "episodes"  # les épisodes de lmelp, dans la même base
 ETAT = "pap_etat"  # état de l'appli : date de la dernière vérification complète
 SOURCE = "radiofrance"
 ENTETES = {"User-Agent": "lmelp-pap (https://github.com/castorfou/lmelp-pap)"}
@@ -389,6 +391,24 @@ class Depot:
     def ajouter_qualification(self, qualification: Qualification) -> None:
         """Conserve une qualification (collection ``pap_qualifications``)."""
         self.base[QUALIFICATIONS].insert_one(_qualification_en_document(qualification))
+
+    def ajouter_remise(self, fiche: dict[str, Any]) -> None:
+        """Écrit la fiche d'une mise à disposition (collection ``pap_remises``,
+        une par enregistrement)."""
+        self.base[REMISES].replace_one({"_id": fiche["_id"]}, fiche, upsert=True)
+
+    def dans_lmelp(self, fichiers: Iterable[str]) -> set[str]:
+        """Ceux des fichiers (``<année>/<nom>``) qu'un épisode de lmelp porte
+        en ``audio_rel_filename`` (collection ``episodes`` de la même base)."""
+        noms = sorted(set(fichiers))
+        if not noms:
+            return set()
+        return {
+            d["audio_rel_filename"]
+            for d in self.base[EPISODES_LMELP].find(
+                {"audio_rel_filename": {"$in": noms}}, {"audio_rel_filename": True}
+            )
+        }
 
     def qualifications(self) -> list[Qualification]:
         """Toutes les qualifications conservées, de la plus ancienne à la plus

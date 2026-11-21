@@ -1,6 +1,7 @@
-"""La diffusion d'une émission dans l'Open API Radio France, lue à la demande.
+"""Le client de l'Open API Radio France : la diffusion d'une émission, lue à
+la demande (écoute, mise à disposition).
 
-L'API (GraphQL, en-tête ``X-Token``) n'a pas de requête par identifiant de
+L'API (GraphQL, en-tête ``x-token``) n'a pas de requête par identifiant de
 diffusion : on lit les diffusions de France Inter du jour de l'émission (heure
 de Paris) et on retient celle dont l'URL est une page radiofrance.fr connue de
 l'émission, sinon la première du Masque et la Plume.
@@ -27,9 +28,11 @@ PAGES_MAX = 3
 DELAI = 15  # secondes
 PARIS = ZoneInfo("Europe/Paris")
 
-# Les relations de ``personalitiesConnection`` : l'équipe (animateur et
-# critiques) et les invités ; ``tag`` (personnalité citée) n'est pas retenu.
-EQUIPE = ("staff", "producer")
+# Les relations de ``personalitiesConnection`` : ``producer`` (l'animateur),
+# ``staff`` (l'équipe : critiques…), ``guest`` (les invités) ; ``tag``
+# (personnalité citée) n'est pas retenu.
+ANIMATEURS = ("producer",)
+EQUIPE = ("staff",)
 INVITES = ("guest",)
 
 REQUETE = """query ($start: Int, $end: Int, $first: Int, $after: String) {
@@ -66,6 +69,7 @@ class Diffusion:
     titre: str | None
     resume: str | None
     url: str | None
+    animateurs: tuple[Personnalite, ...]
     equipe: tuple[Personnalite, ...]
     invites: tuple[Personnalite, ...]
 
@@ -106,7 +110,7 @@ def _diffusions(http: Any, jeton: str, variables: dict[str, Any]) -> list[Any]:
         reponse = http.post(
             POINT,
             json={"query": REQUETE, "variables": dict(variables)},
-            headers={"X-Token": jeton, "Content-Type": "application/json"},
+            headers={"x-token": jeton, "Content-Type": "application/json"},
             timeout=DELAI,
         )
     except requests.RequestException as erreur:
@@ -145,6 +149,7 @@ def _diffusion(noeud: dict[str, Any]) -> Diffusion:
         titre=noeud.get("title"),
         resume=noeud.get("standFirst"),
         url=noeud.get("url"),
+        animateurs=parmi(ANIMATEURS),
         equipe=parmi(EQUIPE),
         invites=parmi(INVITES),
     )

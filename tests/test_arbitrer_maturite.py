@@ -4,6 +4,7 @@ Le serveur tourne sur un port libre avec un dépôt mongomock et une session
 HTTP factice : la vérification des URL n'atteint jamais le réseau.
 """
 
+import hashlib
 import json
 import threading
 import time
@@ -19,6 +20,7 @@ import pytest
 
 from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.maturite import Depot
+from lmelp_pap.radiofrance_api import MASQUE
 from tests.test_commande import _cache_rempli
 from tests.test_maturite import SON, Flux, Reponse, Session
 
@@ -57,6 +59,7 @@ INTEGRAL_2024 = (
 def _sans_base_lmelp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("MONGO_URI", raising=False)
+    monkeypatch.delenv("RADIOFRANCE_API_TOKEN", raising=False)
 
 
 @pytest.fixture
@@ -74,17 +77,22 @@ def _demarrer(tmp_path: Path, **options: Any) -> Iterator[str]:
     serveur.server_close()
 
 
+REPONSES = {
+    INTEGRAL_2014: Reponse(200, "audio/mp4"),
+    INTEGRAL_2017: Reponse(404),
+    INTEGRAL_2024: Reponse(200, "audio/mp4"),
+}
+
+
 @pytest.fixture
 def url(tmp_path: Path, depot: Depot) -> Iterator[str]:
-    session = SessionComplete(
-        {
-            INTEGRAL_2014: Reponse(200, "audio/mp4"),
-            INTEGRAL_2017: Reponse(404),
-            INTEGRAL_2024: Reponse(200, "audio/mp4"),
-        }
-    )
+    session = SessionComplete(REPONSES)
     for adresse in _demarrer(
-        tmp_path, depot=depot, session=session, audios=tmp_path / "audios"
+        tmp_path,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        audios_lmelp=tmp_path / "audios-lmelp",
     ):
         SESSIONS[adresse] = session
         yield adresse
@@ -629,3 +637,237 @@ def test_rien_ne_se_lit_hors_du_dossier_audio(url: str, chemin: str) -> None:
     with pytest.raises(urllib.error.HTTPError) as erreur:
         _lire(f"{url}/audios/{chemin}")
     assert erreur.value.code == 404
+
+
+# --- mettre à disposition de lmelp ------------------------------------------
+
+
+def _qualifier_2014(url: str) -> None:
+    _rapatrier_2014(url)
+    _post_json(
+        f"{url}/api/qualifications",
+        {"emission_id": "2014-09-28", "verdict": "favorable"},
+    )
+
+
+def _remettre(url: str, *ids: str) -> Any:
+    return _post_json(f"{url}/api/remises", {"emissions": list(ids)})
+
+
+def test_mettre_a_disposition_copie_ecrit_la_fiche_et_rend_valide(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+
+    donnees = _remettre(url, "2014-09-28")
+
+    assert (tmp_path / "audios-lmelp" / FICHIER_2014).read_bytes() == SON
+    assert (tmp_path / "audios" / FICHIER_2014).exists()
+    emission = _emissions(donnees)["2014-09-28"]
+    assert emission["maturite"] == "valide"
+    assert emission["dans_lmelp"] is False
+    assert donnees["remise"] == {
+        "mises": [{"emission": "2014-09-28", "fichier": FICHIER_2014}],
+        "refus": [],
+    }
+    (fiche,) = depot.base["pap_remises"].find()
+    assert fiche["_id"] == INTEGRAL_2014
+    assert fiche["audio_rel_filename"] == FICHIER_2014
+    assert fiche["titre"] == "Le Masque et la Plume du 28 septembre 2014"
+    assert fiche["episode_page_url"].endswith("les-livres-a-lire-2989961")
+    assert "par : Jérôme Garcin" in fiche["description"]
+    (enregistrement,) = [e for e in depot.tous() if e.url == INTEGRAL_2014]
+    assert enregistrement.niveau == "valide"
+
+
+def test_une_collision_est_refusee_avec_un_message_sans_toucher_aux_fichiers(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    cible = tmp_path / "audios-lmelp" / FICHIER_2014
+    cible.parent.mkdir(parents=True)
+    cible.write_bytes(b"celui de lmelp")
+
+    donnees = _remettre(url, "2014-09-28")
+
+    assert cible.read_bytes() == b"celui de lmelp"
+    assert [p.name for p in cible.parent.iterdir()] == [cible.name]
+    (refus,) = donnees["remise"]["refus"]
+    assert refus["emission"] == "2014-09-28"
+    assert "existe déjà" in refus["detail"]
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "qualifie"
+    assert list(depot.base["pap_remises"].find()) == []
+
+
+def test_seule_une_emission_qualifiee_se_met_a_disposition(url: str) -> None:
+    _rapatrier_2014(url)
+
+    donnees = _remettre(url, "2014-09-28", "inconnue")
+
+    assert [r["emission"] for r in donnees["remise"]["refus"]] == [
+        "2014-09-28",
+        "inconnue",
+    ]
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "rapatrie"
+
+
+def test_une_demande_sans_emissions_est_invalide(url: str) -> None:
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post_json(f"{url}/api/remises", {})
+    assert erreur.value.code == 400
+
+
+def test_sans_mongo_pas_de_mise_a_disposition(url_sans_mongo: str) -> None:
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _remettre(url_sans_mongo, "2014-09-28")
+    assert erreur.value.code == 503
+
+
+def test_un_episode_lmelp_de_meme_fichier_fait_entrer_l_emission_dans_lmelp(
+    url: str, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    _remettre(url, "2014-09-28")
+    assert _emissions(_get(f"{url}/api/donnees"))["2014-09-28"]["dans_lmelp"] is False
+
+    depot.base["episodes"].insert_one(
+        {"titre": "Le Masque", "audio_rel_filename": FICHIER_2014}
+    )
+
+    emissions = _emissions(_get(f"{url}/api/donnees"))
+    assert emissions["2014-09-28"]["dans_lmelp"] is True
+    assert emissions["2024-02-11"]["dans_lmelp"] is False
+
+
+def test_une_emission_deja_dans_lmelp_n_est_pas_remise(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    # un autre enregistrement de l'émission est déjà valide et entré dans lmelp
+    depot.base["pap_enregistrements"].insert_one(
+        {
+            "_id": "fonds-prive:2014-09-28",
+            "emission_id": "2014-09-28",
+            "source": "passionne",
+            "niveau": "valide",
+            "entrees": {},
+            "fichier": "2014/2014-09-28-passionne.mp3",
+        }
+    )
+    depot.base["episodes"].insert_one(
+        {"audio_rel_filename": "2014/2014-09-28-passionne.mp3"}
+    )
+
+    donnees = _remettre(url, "2014-09-28")
+
+    (refus,) = donnees["remise"]["refus"]
+    assert "déjà dans lmelp" in refus["detail"]
+    assert not (tmp_path / "audios-lmelp" / FICHIER_2014).exists()
+
+
+def test_les_mises_a_disposition_sont_tracees(
+    url: str, tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _qualifier_2014(url)
+    capfd.readouterr()
+
+    _remettre(url, "2014-09-28", "2024-02-11")
+
+    logs = capfd.readouterr().err
+    court = hashlib.sha256(SON).hexdigest()[:12]
+    assert (
+        f"mis à disposition 2014-09-28 : {tmp_path / 'audios' / FICHIER_2014} → "
+        f"{tmp_path / 'audios-lmelp' / FICHIER_2014} (sha256 {court})"
+    ) in logs
+    assert "mise à disposition refusée 2024-02-11 (niveau telechargeable) : " in logs
+    assert "mise à disposition : 1 mise à disposition, 1 refus" in logs
+
+
+def test_une_collision_est_tracee(
+    url: str, tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _qualifier_2014(url)
+    cible = tmp_path / "audios-lmelp" / FICHIER_2014
+    cible.parent.mkdir(parents=True)
+    cible.write_bytes(b"x")
+    capfd.readouterr()
+
+    _remettre(url, "2014-09-28")
+
+    logs = capfd.readouterr().err
+    assert "mise à disposition refusée 2014-09-28 (niveau qualifie) : " in logs
+    assert "existe déjà" in logs
+
+
+class SessionAvecApi(SessionComplete):
+    """La session factice, avec une API Radio France qui connaît le
+    28/09/2014."""
+
+    def __init__(self, reponses: dict[str, Any]):
+        super().__init__(reponses)
+        self.api: list[dict[str, Any]] = []
+
+    def post(self, adresse: str, **options: Any) -> Any:
+        self.api.append(options)
+        noeud = {
+            "url": "https://www.radiofrance.fr/franceinter/podcasts/"
+            "le-masque-et-la-plume/x-1",
+            "show": {"url": MASQUE},
+            "published_date": str(
+                int(datetime(2014, 9, 28, 10, tzinfo=UTC).timestamp())
+            ),
+            "standFirst": "Chapô de l'API.",
+            "personalitiesConnection": {
+                "edges": [{"relation": "guest", "node": {"name": "Arnaud Viviant"}}]
+            },
+        }
+        donnees = {"data": {"diffusions": {"edges": [{"cursor": "a", "node": noeud}]}}}
+
+        class R:
+            status_code = 200
+
+            def json(self) -> Any:
+                return donnees
+
+        return R()
+
+
+def test_avec_un_jeton_l_api_radio_france_complete_la_description(
+    tmp_path: Path, depot: Depot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "jeton-secret")
+    session = SessionAvecApi(REPONSES)
+    for adresse in _demarrer(
+        tmp_path,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        audios_lmelp=tmp_path / "audios-lmelp",
+    ):
+        _qualifier_2014(adresse)
+        _remettre(adresse, "2014-09-28")
+
+    (fiche,) = depot.base["pap_remises"].find()
+    assert "invités : Arnaud Viviant" in fiche["description"]
+    assert fiche["sources_description"]["invites"] == "api_radiofrance"
+    assert session.api[0]["headers"]["x-token"] == "jeton-secret"
+    assert "jeton-secret" not in str(fiche)
+
+
+def test_sans_jeton_l_api_n_est_pas_lue(
+    tmp_path: Path, depot: Depot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("RADIOFRANCE_API_TOKEN", raising=False)
+    session = SessionAvecApi(REPONSES)
+    for adresse in _demarrer(
+        tmp_path,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        audios_lmelp=tmp_path / "audios-lmelp",
+    ):
+        _qualifier_2014(adresse)
+        donnees = _remettre(adresse, "2014-09-28")
+
+    assert session.api == []
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "valide"
