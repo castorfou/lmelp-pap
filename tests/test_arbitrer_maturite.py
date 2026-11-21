@@ -799,6 +799,27 @@ def test_une_collision_est_tracee(
     assert "existe déjà" in logs
 
 
+def test_une_remise_interrompue_apres_la_copie_se_termine_et_est_tracee(
+    url: str, tmp_path: Path, depot: Depot, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _qualifier_2014(url)
+    # une panne a suivi la copie : le fichier est chez lmelp, rien d'autre
+    cible = tmp_path / "audios-lmelp" / FICHIER_2014
+    cible.parent.mkdir(parents=True)
+    cible.write_bytes(SON)
+    capfd.readouterr()
+
+    donnees = _remettre(url, "2014-09-28")
+
+    assert donnees["remise"]["refus"] == []
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "valide"
+    (fiche,) = depot.base["pap_remises"].find()
+    assert fiche["audio_rel_filename"] == FICHIER_2014
+    logs = capfd.readouterr().err
+    assert "mis à disposition 2014-09-28 : " in logs
+    assert "reprise : fichier déjà copié, même sha256" in logs
+
+
 class SessionAvecApi(SessionComplete):
     """La session factice, avec une API Radio France qui connaît le
     28/09/2014."""

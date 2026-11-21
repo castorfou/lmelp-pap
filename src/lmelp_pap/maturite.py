@@ -240,7 +240,8 @@ def retenu(enregistrements: Iterable[Enregistrement]) -> Enregistrement | None:
     return min(candidats, key=rang, default=None)
 
 
-def _empreinte(chemin: Path) -> str:
+def empreinte(chemin: Path) -> str:
+    """L'empreinte SHA-256 (hexadécimale) d'un fichier, lu par morceaux."""
     h = hashlib.sha256()
     with chemin.open("rb") as f:
         for morceau in iter(lambda: f.read(MORCEAU), b""):
@@ -280,7 +281,7 @@ def rapatrier(
     if (
         enregistrement.sha256
         and final.is_file()
-        and _empreinte(final) == enregistrement.sha256
+        and empreinte(final) == enregistrement.sha256
     ):
         return _rapatrie(
             enregistrement, relatif, enregistrement.sha256, final.stat().st_size, quand

@@ -639,7 +639,7 @@ class Atelier:
                             f"{emission_id} : aucun enregistrement qualifié"
                         )
                     api = self._api_pour_remise(emission, jeton) if jeton else None
-                    fait, fiche = mettre_a_disposition(
+                    fait, fiche, reprise = mettre_a_disposition(
                         choisi,
                         emission,
                         self.audios,
@@ -660,7 +660,8 @@ class Atelier:
                 journal(
                     f"mis à disposition {emission_id} : {self.audios / relatif} → "
                     f"{self.audios_lmelp / relatif} (sha256 {(fait.sha256 or '')[:12]}"
-                    f"{', API Radio France' if api else ''})"
+                    f"{', API Radio France' if api else ''}"
+                    f"{', reprise : fichier déjà copié, même sha256' if reprise else ''})"
                 )
                 mises.append({"emission": emission_id, "fichier": relatif})
         journal(

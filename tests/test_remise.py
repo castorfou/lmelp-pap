@@ -92,7 +92,7 @@ def test_mettre_a_disposition_copie_le_fichier_et_rend_valide(
     audios, lmelp = dossiers
     enregistrement = qualifie(audios)
 
-    valide, fiche = mettre_a_disposition(
+    valide, fiche, _ = mettre_a_disposition(
         enregistrement, emission(RADIOFRANCE), audios, lmelp, MAINTENANT
     )
 
@@ -128,6 +128,38 @@ def test_une_collision_de_nom_est_refusee_sans_rien_ecrire(
 
     assert (lmelp / "2014" / NOM).read_bytes() == b"le fichier de lmelp"
     assert [p.name for p in (lmelp / "2014").iterdir()] == [NOM]
+
+
+def test_apres_une_panne_un_fichier_deja_copie_termine_la_remise(
+    dossiers: tuple[Path, Path],
+) -> None:
+    # la copie a abouti, mais ni la fiche ni le passage à valide n'ont suivi
+    audios, lmelp = dossiers
+    (lmelp / "2014").mkdir(parents=True)
+    (lmelp / "2014" / NOM).write_bytes(SON)
+
+    valide, fiche, reprise = mettre_a_disposition(
+        qualifie(audios), emission(RADIOFRANCE), audios, lmelp, MAINTENANT
+    )
+
+    assert reprise is True
+    assert valide.niveau == "valide"
+    assert fiche["audio_rel_filename"] == f"2014/{NOM}"
+    assert fiche["sha256"] == EMPREINTE
+    assert (lmelp / "2014" / NOM).read_bytes() == SON
+    assert [p.name for p in (lmelp / "2014").iterdir()] == [NOM]
+
+
+def test_une_remise_ordinaire_n_est_pas_une_reprise(
+    dossiers: tuple[Path, Path],
+) -> None:
+    audios, lmelp = dossiers
+
+    *_, reprise = mettre_a_disposition(
+        qualifie(audios), emission(RADIOFRANCE), audios, lmelp, MAINTENANT
+    )
+
+    assert reprise is False
 
 
 @pytest.mark.parametrize("niveau", ["rapatrie", "valide", "telechargeable"])
@@ -180,7 +212,7 @@ def test_la_description_prend_la_page_radiofrance_d_abord(
 ) -> None:
     audios, lmelp = dossiers
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         qualifie(audios), emission(INA, RADIOFRANCE), audios, lmelp, MAINTENANT
     )
 
@@ -205,7 +237,7 @@ def test_sans_page_radiofrance_l_api_puis_l_ina(dossiers: tuple[Path, Path]) -> 
         "invites": "Arnaud Viviant, Elisabeth Philippe",
     }
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         qualifie(audios), emission(INA), audios, lmelp, MAINTENANT, api=api
     )
 
@@ -227,7 +259,7 @@ def test_sans_api_l_ina_donne_resume_et_animateur(
 ) -> None:
     audios, lmelp = dossiers
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         qualifie(audios), emission(INA), audios, lmelp, MAINTENANT
     )
 
@@ -242,7 +274,7 @@ def test_sans_aucune_source_l_animateur_est_deduit_de_la_date(
 ) -> None:
     audios, lmelp = dossiers
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         qualifie(audios),
         emission(animateur="Jérôme Garcin"),
         audios,
@@ -296,7 +328,7 @@ def test_la_duree_du_fichier_l_emporte_sur_celle_des_sources(
     (audios / "2014" / NOM).write_bytes(contenu)
     enregistrement = replace(enregistrement, sha256=hashlib.sha256(contenu).hexdigest())
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         enregistrement, emission(RADIOFRANCE), audios, lmelp, MAINTENANT
     )
 

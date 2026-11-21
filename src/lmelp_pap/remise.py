@@ -4,7 +4,9 @@ Mettre à disposition (glossaire, *maturité d'un enregistrement*, niveau
 valide) copie le fichier de l'enregistrement du dossier audio de pap
 (``<année>/<nom>``) vers le dossier audio du back-office lmelp, sous le même
 nom, en passant par un ``.part`` renommé à la fin. Un fichier de même nom déjà
-présent fait refuser la mise à disposition, sans rien écrire.
+présent fait refuser la mise à disposition, sans rien écrire, sauf s'il a
+l'empreinte de l'enregistrement : c'est une mise à disposition interrompue
+après la copie (panne), qui se termine (fiche, passage à valide).
 
 La fiche rendue, écrite dans la collection ``pap_remises``, est prête à
 devenir un document ``episodes`` de lmelp (schéma : ``docs/dev/architecture.md``,
@@ -27,10 +29,10 @@ from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from lmelp_pap.liste import Emission
-from lmelp_pap.maturite import MORCEAU, Enregistrement
+from lmelp_pap.maturite import MORCEAU, Enregistrement, empreinte
 from lmelp_pap.radiofrance_api import (
     ApiRadioFranceError,
     Personnalite,
@@ -60,12 +62,13 @@ class RemiseError(ValueError):
     """Une mise à disposition impossible : niveau, fichier, collision."""
 
 
-def _empreinte(chemin: Path) -> str:
-    h = hashlib.sha256()
-    with chemin.open("rb") as f:
-        for morceau in iter(lambda: f.read(MORCEAU), b""):
-            h.update(morceau)
-    return h.hexdigest()
+class Remise(NamedTuple):
+    """Le résultat d'une mise à disposition : l'enregistrement devenu valide,
+    sa fiche ``pap_remises``, et ``reprise`` si le fichier était déjà copié."""
+
+    enregistrement: Enregistrement
+    fiche: dict[str, Any]
+    reprise: bool
 
 
 def _copier(source: Path, final: Path, sha256: str | None) -> None:
@@ -205,13 +208,14 @@ def mettre_a_disposition(
     audios_lmelp: Path,
     maintenant: datetime,
     api: dict[str, str] | None = None,
-) -> tuple[Enregistrement, dict[str, Any]]:
+) -> Remise:
     """Copie le fichier d'un enregistrement qualifié dans
     ``audios_lmelp/<année>/<nom>`` et rend l'enregistrement valide et sa fiche
     pour ``pap_remises``. ``api`` : les morceaux lus dans l'API Radio France
     (``lire_api``), ou ``None``. ``RemiseError`` sans rien écrire si
     l'enregistrement n'est pas qualifié, si son fichier manque ou a changé, ou
-    si un fichier de même nom existe chez lmelp."""
+    si un fichier de même nom et d'une autre empreinte existe chez lmelp ; de
+    même empreinte, la copie est tenue pour faite (``reprise``)."""
     if enregistrement.niveau != "qualifie" or not enregistrement.fichier:
         raise RemiseError(
             f"{enregistrement.url} : niveau {enregistrement.niveau}, "
@@ -222,9 +226,15 @@ def mettre_a_disposition(
     if not source.is_file():
         raise RemiseError(f"{relatif} : fichier introuvable dans le dossier de pap")
     final = audios_lmelp / relatif
-    if final.exists():
+    reprise = final.exists()
+    if reprise and not (
+        enregistrement.sha256
+        and final.is_file()
+        and empreinte(final) == enregistrement.sha256
+    ):
         raise RemiseError(f"{relatif} existe déjà dans le dossier de lmelp")
-    _copier(source, final, enregistrement.sha256)
+    if not reprise:
+        _copier(source, final, enregistrement.sha256)
 
     secondes = duree_du_fichier(final)
     duree = (secondes, "fichier") if secondes else None
@@ -261,7 +271,8 @@ def mettre_a_disposition(
         "date_remise": maintenant,
     }
     entrees = {**enregistrement.entrees, "valide": maintenant}
-    return replace(enregistrement, niveau="valide", entrees=entrees), fiche
+    valide = replace(enregistrement, niveau="valide", entrees=entrees)
+    return Remise(valide, fiche, reprise)
 
 
 def lire_api(
