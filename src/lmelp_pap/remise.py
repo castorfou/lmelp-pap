@@ -33,7 +33,6 @@ from lmelp_pap.liste import Emission
 from lmelp_pap.maturite import MORCEAU, Enregistrement
 
 
-REMISES = "pap_remises"
 API = "https://openapi.radiofrance.fr/v1/graphql"
 EMISSION_URL = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume"
 PAGES_API = 40  # pages de 100 diffusions au plus, du plus récent au plus ancien
