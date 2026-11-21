@@ -11,6 +11,7 @@ on:
       - 'Dockerfile'
       - '.dockerignore'
       - '.github/workflows/docker.yml'
+      - 'scripts/fumee_image.sh'
   pull_request:
     branches: [main]
     paths:
@@ -21,6 +22,7 @@ on:
       - 'Dockerfile'
       - '.dockerignore'
       - '.github/workflows/docker.yml'
+      - 'scripts/fumee_image.sh'
   workflow_dispatch:
 
 permissions:
@@ -32,7 +34,7 @@ env:
 
 jobs:
   image:
-    name: 🏗️ Build (push et mise à jour du NAS sur main)
+    name: 🏗️ Build, fumée (push et mise à jour du NAS sur main)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -59,15 +61,31 @@ jobs:
             type=sha
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and push
+      # Construite d'abord sans pousser, chargée dans le daemon local, pour la
+      # fumée : seule l'image révèle ce qui part vraiment (gabarits HTML du
+      # paquet compris).
+      - name: Build (sans push)
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          load: true
+          tags: lmelp-pap:fumee
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 💨 Test de fumée de l'image
+        run: scripts/fumee_image.sh lmelp-pap:fumee
+
+      # Seulement si la fumée passe ; les couches viennent du cache du build.
+      - name: Push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: 🔄 Mise à jour sur le NAS (Watchtower)
         # Watchtower (castorfou/dockers) pull l'image et redémarre le conteneur pap labellisé.

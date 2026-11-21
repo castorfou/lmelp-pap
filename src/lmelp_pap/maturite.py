@@ -20,6 +20,11 @@ Rapatrier un enregistrement téléchargeable télécharge son fichier dans le
 dossier audio de pap (``<année>/<nom d'origine>``), en passant par un
 ``.part`` renommé à la fin : il devient rapatrié, avec le chemin du fichier,
 son empreinte SHA-256 et sa taille.
+
+Qualifier un enregistrement rapatrié le juge à l'écoute : favorable, il
+devient qualifié ; écarté (avec un motif), il reste rapatrié et porte son
+écart. Chaque qualification est conservée dans ``pap_qualifications`` et
+s'exporte dans ``qualifications.csv``.
 """
 
 import contextlib
@@ -41,6 +46,9 @@ from dotenv import find_dotenv, load_dotenv
 
 NIVEAUX = ("localise", "telechargeable", "rapatrie", "qualifie", "valide")
 COLLECTION = "pap_enregistrements"
+QUALIFICATIONS = "pap_qualifications"
+REMISES = "pap_remises"  # fiches des mises à disposition, lues par lmelp
+EPISODES_LMELP = "episodes"  # les épisodes de lmelp, dans la même base
 ETAT = "pap_etat"  # état de l'appli : date de la dernière vérification complète
 SOURCE = "radiofrance"
 ENTETES = {"User-Agent": "lmelp-pap (https://github.com/castorfou/lmelp-pap)"}
@@ -64,6 +72,22 @@ class Verification:
     detail: str
 
 
+Verdict = Literal["favorable", "ecarte"]
+VERDICTS: tuple[Verdict, ...] = ("favorable", "ecarte")
+
+
+@dataclass(frozen=True)
+class Qualification:
+    """Le jugement porté à l'écoute sur un enregistrement (glossaire,
+    *qualification*) : favorable, ou écarté avec un motif."""
+
+    enregistrement: str  # l'URL de l'enregistrement
+    emission_id: str
+    verdict: Verdict
+    motif: str
+    date: datetime
+
+
 @dataclass(frozen=True)
 class Enregistrement:
     """Un enregistrement intégral, identifié par son URL, et sa maturité."""
@@ -78,6 +102,64 @@ class Enregistrement:
     sha256: str | None = None
     taille: int | None = None
     echec: Verification | None = None  # dernier échec de rapatriement
+    ecart: Qualification | None = None  # rapatrié, mais écarté à l'écoute
+
+
+class QualificationError(ValueError):
+    """Une qualification impossible : niveau, verdict, motif manquant."""
+
+
+def qualifier(
+    enregistrement: Enregistrement, verdict: str, motif: str, maintenant: datetime
+) -> tuple[Enregistrement, Qualification]:
+    """Qualifie un enregistrement rapatrié : favorable, il devient qualifié ;
+    écarté (motif obligatoire), il reste rapatrié et garde son écart. Rend
+    l'enregistrement et la qualification à conserver. Une qualification ne
+    touche ni l'émission ni son thème."""
+    if enregistrement.niveau != "rapatrie":
+        raise QualificationError(
+            f"{enregistrement.url} : niveau {enregistrement.niveau}, "
+            "seul un enregistrement rapatrié se qualifie"
+        )
+    if verdict not in VERDICTS:
+        raise QualificationError(
+            f"verdict invalide : {verdict!r} (attendu : {', '.join(VERDICTS)})"
+        )
+    motif = motif.strip()
+    if verdict == "ecarte" and not motif:
+        raise QualificationError("un écart demande un motif")
+    qualification = Qualification(
+        enregistrement.url,
+        enregistrement.emission_id,
+        "favorable" if verdict == "favorable" else "ecarte",
+        motif,
+        maintenant,
+    )
+    if verdict == "ecarte":
+        return replace(enregistrement, ecart=qualification), qualification
+    entrees = {**enregistrement.entrees, "qualifie": maintenant}
+    qualifie = replace(enregistrement, niveau="qualifie", entrees=entrees, ecart=None)
+    return qualifie, qualification
+
+
+def ecrire_qualifications(
+    qualifications: Iterable[Qualification], dossier: Path
+) -> None:
+    """Écrit ``qualifications.csv`` : chaque qualification, de la plus ancienne
+    à la plus récente."""
+    with (dossier / "qualifications.csv").open("w", encoding="utf-8", newline="") as f:
+        ecrivain = csv.writer(f, lineterminator="\n")
+        ecrivain.writerow(["emission_id", "enregistrement", "verdict", "motif", "date"])
+        for q in sorted(qualifications, key=lambda q: q.date):
+            ecrivain.writerow(
+                [
+                    q.emission_id,
+                    q.enregistrement,
+                    q.verdict,
+                    q.motif,
+                    q.date.isoformat(),
+                ]
+            )
 
 
 class RapatriementError(RuntimeError):
@@ -158,7 +240,8 @@ def retenu(enregistrements: Iterable[Enregistrement]) -> Enregistrement | None:
     return min(candidats, key=rang, default=None)
 
 
-def _empreinte(chemin: Path) -> str:
+def empreinte(chemin: Path) -> str:
+    """L'empreinte SHA-256 (hexadécimale) d'un fichier, lu par morceaux."""
     h = hashlib.sha256()
     with chemin.open("rb") as f:
         for morceau in iter(lambda: f.read(MORCEAU), b""):
@@ -198,7 +281,7 @@ def rapatrier(
     if (
         enregistrement.sha256
         and final.is_file()
-        and _empreinte(final) == enregistrement.sha256
+        and empreinte(final) == enregistrement.sha256
     ):
         return _rapatrie(
             enregistrement, relatif, enregistrement.sha256, final.stat().st_size, quand
@@ -306,6 +389,37 @@ class Depot:
         document = _en_document(enregistrement)
         self._collection.replace_one({"_id": document["_id"]}, document, upsert=True)
 
+    def ajouter_qualification(self, qualification: Qualification) -> None:
+        """Conserve une qualification (collection ``pap_qualifications``)."""
+        self.base[QUALIFICATIONS].insert_one(_qualification_en_document(qualification))
+
+    def ajouter_remise(self, fiche: dict[str, Any]) -> None:
+        """Écrit la fiche d'une mise à disposition (collection ``pap_remises``,
+        une par enregistrement)."""
+        self.base[REMISES].replace_one({"_id": fiche["_id"]}, fiche, upsert=True)
+
+    def dans_lmelp(self, fichiers: Iterable[str]) -> set[str]:
+        """Ceux des fichiers (``<année>/<nom>``) qu'un épisode de lmelp porte
+        en ``audio_rel_filename`` (collection ``episodes`` de la même base)."""
+        noms = sorted(set(fichiers))
+        if not noms:
+            return set()
+        return {
+            d["audio_rel_filename"]
+            for d in self.base[EPISODES_LMELP].find(
+                {"audio_rel_filename": {"$in": noms}}, {"audio_rel_filename": True}
+            )
+        }
+
+    def qualifications(self) -> list[Qualification]:
+        """Toutes les qualifications conservées, de la plus ancienne à la plus
+        récente."""
+        documents = self.base[QUALIFICATIONS].find({}, {"_id": False})
+        return sorted(
+            (_qualification_depuis_document(d) for d in documents),
+            key=lambda q: q.date,
+        )
+
 
 def verification_due(
     a_verifier: list[tuple[str, str]],
@@ -410,7 +524,28 @@ def _en_document(e: Enregistrement) -> dict[str, Any]:
             if e.echec
             else None
         ),
+        "ecart": _qualification_en_document(e.ecart) if e.ecart else None,
     }
+
+
+def _qualification_en_document(q: Qualification) -> dict[str, Any]:
+    return {
+        "enregistrement": q.enregistrement,
+        "emission_id": q.emission_id,
+        "verdict": q.verdict,
+        "motif": q.motif,
+        "date": q.date,
+    }
+
+
+def _qualification_depuis_document(d: dict[str, Any]) -> Qualification:
+    return Qualification(
+        d["enregistrement"],
+        d["emission_id"],
+        d["verdict"],
+        d["motif"],
+        _aware(d["date"]),
+    )
 
 
 def _aware(d: datetime) -> datetime:
@@ -439,4 +574,5 @@ def _depuis_document(d: dict[str, Any]) -> Enregistrement:
             if d.get("echec")
             else None
         ),
+        ecart=_qualification_depuis_document(d["ecart"]) if d.get("ecart") else None,
     )

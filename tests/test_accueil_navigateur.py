@@ -466,6 +466,90 @@ def test_pap_en_haut_a_gauche_ramene_a_l_accueil(navigateur: Any) -> None:
     assert "etat=" not in page.url
 
 
+def _avec_rapatrie() -> tuple[dict[str, Any], dict[str, Any]]:
+    """Les données simulées, l'émission rapatriée portant son fichier."""
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "rapatrie")
+    cible["fichier_audio"] = "1987/14007-04.10.1987 a.m4a"
+    cible["ecart"] = None
+    return donnees, cible
+
+
+def _qualifier(navigateur: Any, reponse: Any) -> tuple[Any, dict[str, Any], list[Any]]:
+    """L'accueil sur la page rapatrié, le lecteur de l'émission ouvert ;
+    ``reponse(emission)`` change l'émission dans les données renvoyées."""
+    donnees, cible = _avec_rapatrie()
+    envoyees: list[Any] = []
+
+    def qualifications(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        apres = json.loads(json.dumps(donnees))
+        reponse(next(e for e in apres["emissions"] if e["id"] == cible["id"]))
+        return apres
+
+    page = _ouvrir(navigateur, donnees, api={"/api/qualifications": qualifications})
+    page.locator('.compteur[data-etat="rapatrie"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Écouter et qualifier").click()
+    return page, cible, envoyees
+
+
+def test_la_page_rapatrie_propose_ecouter_et_qualifier_sans_lot(
+    navigateur: Any,
+) -> None:
+    donnees, _ = _avec_rapatrie()
+    page = _ouvrir(navigateur, donnees)
+    page.locator('.compteur[data-etat="rapatrie"]').click()
+    entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
+    assert entetes[-1] == "Action"
+    assert page.get_by_role("button", name="Écouter et qualifier").count() == 1
+    assert page.locator("tbody input[type=checkbox]").count() == 0
+    assert page.locator(".lot").count() == 0
+
+
+def test_ecouter_ouvre_un_lecteur_sur_le_fichier_rapatrie(navigateur: Any) -> None:
+    page, _, _ = _qualifier(navigateur, lambda e: None)
+    lecteur = page.locator("audio")
+    lecteur.wait_for(state="attached")
+    assert lecteur.get_attribute("src") == "/audios/1987/14007-04.10.1987%20a.m4a"
+    assert lecteur.get_attribute("controls") is not None
+    assert page.get_by_role("button", name="+30 s").count() == 1
+    assert page.get_by_role("button", name="−30 s").count() == 1
+    assert page.get_by_role("button", name="Écarter").is_disabled()
+
+
+def test_favorable_qualifie_l_emission_et_notifie(navigateur: Any) -> None:
+    def favorable(e: dict[str, Any]) -> None:
+        e["maturite"] = "qualifie"
+
+    page, cible, envoyees = _qualifier(navigateur, favorable)
+    page.get_by_role("button", name="Favorable").click()
+
+    page.locator("#toast", has_text="qualifié").wait_for()
+    assert envoyees == [{"emission_id": cible["id"], "verdict": "favorable"}]
+    toast = page.locator("#toast").inner_text()
+    assert "rapatrié 1→0" in toast
+    qualifies = _comptes(_donnees())["qualifie"]
+    assert f"qualifié {qualifies}→{qualifies + 1}" in toast
+    assert page.locator(f'tbody tr[data-id="{cible["id"]}"]').count() == 0
+
+
+def test_ecarter_demande_un_motif_et_l_affiche_sur_la_ligne(navigateur: Any) -> None:
+    def ecarte(e: dict[str, Any]) -> None:
+        e["ecart"] = {"date": "2026-11-21T10:00:00+01:00", "motif": "pas la bonne"}
+
+    page, cible, envoyees = _qualifier(navigateur, ecarte)
+    page.get_by_label("Motif de l'écart").fill("pas la bonne")
+    page.get_by_role("button", name="Écarter").click()
+
+    page.locator("#toast", has_text="écarté").wait_for()
+    assert envoyees == [
+        {"emission_id": cible["id"], "verdict": "ecarte", "motif": "pas la bonne"}
+    ]
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    assert "écarté : pas la bonne" in ligne.inner_text()
+
+
 def test_survoler_les_rapatries_liste_leurs_dates(navigateur: Any) -> None:
     page = _ouvrir(navigateur, api={"/api/rapatriements": lambda r: FINI_AVEC_ECHEC})
     rapatries = page.locator("#bandeau .rapatriees")
@@ -474,3 +558,233 @@ def test_survoler_les_rapatries_liste_leurs_dates(navigateur: Any) -> None:
     detail = rapatries.get_attribute("title")
     assert "2008-03-02" in detail
     assert "2008-03-09" in detail
+
+
+# --- Écoute : page radiofrance.fr et diffusion de l'Open API ---------------
+
+PAGE_RF = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/x-1"
+
+
+def _ecouter(
+    navigateur: Any, radiofrance: Any, page_rf: bool = True
+) -> tuple[Any, list[str]]:
+    """Le lecteur ouvert sur l'émission rapatriée ; ``radiofrance`` : la
+    réponse de ``GET /api/radiofrance/<id>``."""
+    donnees, cible = _avec_rapatrie()
+    if page_rf:
+        cible["attestations"].append(
+            {"source": "radiofrance", "url": PAGE_RF, "titre": "Une fiche"}
+        )
+    appels: list[str] = []
+
+    def api(requete: Any) -> Any:
+        appels.append(requete.url)
+        return radiofrance
+
+    page = _ouvrir(navigateur, donnees, api={f"/api/radiofrance/{cible['id']}": api})
+    page.locator('.compteur[data-etat="rapatrie"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Écouter et qualifier").click()
+    page.locator("tr.ecoute").wait_for()
+    return page, appels
+
+
+TROUVEE = {
+    "statut": "trouvee",
+    "diffusion": {
+        "titre": "Les livres de la semaine",
+        "resume": "Un résumé.",
+        "url": PAGE_RF,
+        "animateurs": [{"nom": "Rebecca Manzoni", "role": None}],
+        "equipe": [
+            {"nom": "Jérôme Garcin", "role": "Producteur"},
+            {"nom": "Arnaud Viviant", "role": None},
+        ],
+        "invites": [{"nom": "Une Autrice", "role": None}],
+    },
+}
+
+
+def test_l_ecoute_ouvre_la_page_radiofrance_dans_un_nouvel_onglet(
+    navigateur: Any,
+) -> None:
+    page, _ = _ecouter(navigateur, TROUVEE)
+    lien = page.locator("tr.ecoute").get_by_role("link", name="page radiofrance.fr")
+    assert lien.get_attribute("href") == PAGE_RF
+    assert lien.get_attribute("target") == "_blank"
+    assert "noopener" in (lien.get_attribute("rel") or "")
+
+
+def test_sans_page_radiofrance_pas_de_lien(navigateur: Any) -> None:
+    page, _ = _ecouter(navigateur, TROUVEE, page_rf=False)
+    page.locator("tr.ecoute .radiofrance", has_text="Jérôme Garcin").wait_for()
+    assert page.locator("tr.ecoute a").count() == 0
+
+
+def test_l_ecoute_montre_l_equipe_et_les_invites_de_l_api(navigateur: Any) -> None:
+    page, appels = _ecouter(navigateur, TROUVEE)
+    bloc = page.locator("tr.ecoute .radiofrance")
+    bloc.get_by_text("Jérôme Garcin", exact=False).wait_for()
+    texte = bloc.inner_text()
+    assert "Présentation : Rebecca Manzoni" in texte
+    assert "Équipe : Jérôme Garcin (Producteur), Arnaud Viviant" in texte
+    assert "Arnaud Viviant" in texte
+    assert "Une Autrice" in texte
+    assert "Les livres de la semaine" in texte
+    assert "Open API Radio France" in texte
+    assert len(appels) == 1
+
+
+@pytest.mark.parametrize(
+    ("reponse", "message"),
+    [
+        ({"statut": "sans_cle", "diffusion": None}, "pas de clé"),
+        ({"statut": "introuvable", "diffusion": None}, "aucune diffusion"),
+        ({"statut": "erreur", "detail": "HTTP 403", "diffusion": None}, "HTTP 403"),
+    ],
+)
+def test_sans_donnees_de_l_api_un_message_et_l_ecoute_reste_possible(
+    navigateur: Any, reponse: dict[str, Any], message: str
+) -> None:
+    page, _ = _ecouter(navigateur, reponse)
+    page.locator("tr.ecoute .radiofrance", has_text=message).wait_for()
+    assert page.locator("tr.ecoute audio").count() == 1
+    assert page.get_by_role("button", name="Favorable").is_enabled()
+
+
+# --- mettre à disposition de lmelp ------------------------------------------
+
+
+def _remettre(
+    navigateur: Any, reponse: Any, accepter: bool = True
+) -> tuple[Any, dict[str, Any], list[Any]]:
+    """L'accueil sur la page qualifié ; ``reponse(donnees, cible)`` rend la
+    réponse de ``POST /api/remises``. Les confirmations sont acceptées ou
+    refusées selon ``accepter``."""
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "qualifie")
+    envoyees: list[Any] = []
+
+    def remises(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        apres = json.loads(json.dumps(donnees))
+        return reponse(
+            apres, next(e for e in apres["emissions"] if e["id"] == cible["id"])
+        )
+
+    page = _ouvrir(navigateur, donnees, api={"/api/remises": remises})
+    page.on("dialog", lambda d: d.accept() if accepter else d.dismiss())
+    page.locator('.compteur[data-etat="qualifie"]').click()
+    return page, cible, envoyees
+
+
+def _mise(apres: dict[str, Any], e: dict[str, Any]) -> dict[str, Any]:
+    e["maturite"] = "valide"
+    e["dans_lmelp"] = False
+    return {
+        **apres,
+        "remise": {"mises": [{"emission": e["id"], "fichier": "x.m4a"}], "refus": []},
+    }
+
+
+def test_la_page_qualifie_propose_la_mise_a_disposition_par_ligne_et_en_lot(
+    navigateur: Any,
+) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="qualifie"]').click()
+    lignes = page.locator("tbody tr")
+    nom = "Mettre à disposition de lmelp"
+    assert lignes.first.get_by_role("button", name=nom).count() == 1
+    assert lignes.first.locator("input[type=checkbox]").count() == 1
+    total = _comptes(_donnees())["qualifie"]
+    assert page.get_by_role("button", name=f"{nom} : tout ({total})").count() == 1
+
+
+def test_mettre_a_disposition_confirme_envoie_et_notifie(navigateur: Any) -> None:
+    page, cible, envoyees = _remettre(navigateur, _mise)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+
+    page.locator("#toast", has_text="mis à disposition").wait_for()
+    assert envoyees == [{"emissions": [cible["id"]]}]
+    comptes = _comptes(_donnees())
+    toast = page.locator("#toast").inner_text()
+    assert f"qualifié {comptes['qualifie']}→{comptes['qualifie'] - 1}" in toast
+    assert "valide" in toast
+    assert page.locator(f'tbody tr[data-id="{cible["id"]}"]').count() == 0
+
+
+def test_sans_confirmation_rien_n_est_envoye(navigateur: Any) -> None:
+    page, cible, envoyees = _remettre(navigateur, _mise, accepter=False)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    page.wait_for_timeout(200)
+    assert envoyees == []
+    assert ligne.count() == 1
+
+
+def test_une_collision_s_affiche_visiblement(navigateur: Any) -> None:
+    detail = "1987/a.m4a existe déjà dans le dossier de lmelp"
+
+    def collision(apres: dict[str, Any], e: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **apres,
+            "remise": {"mises": [], "refus": [{"emission": e["id"], "detail": detail}]},
+        }
+
+    page, cible, _ = _remettre(navigateur, collision)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+
+    alerte = page.locator(".refus")
+    alerte.wait_for()
+    assert cible["id"] in alerte.inner_text()
+    assert detail in alerte.inner_text()
+    assert "1 refus" in page.locator("#toast").inner_text()
+    page.get_by_role("button", name="Fermer les refus").click()
+    assert page.locator(".refus").count() == 0
+
+
+def test_une_emission_valide_entree_dans_lmelp_compte_dans_lmelp(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    entree = next(e for e in donnees["emissions"] if e["maturite"] == "valide")
+    entree["dans_lmelp"] = True
+    page = _ouvrir(navigateur, donnees)
+    comptes = _comptes(_donnees())
+    assert _compteurs(page)["valide"] == comptes["valide"] - 1
+    assert _compteurs(page)["lmelp"] == comptes["lmelp"] + 1
+
+
+def test_la_page_rapatrie_s_ouvre_de_la_plus_recente_a_la_plus_ancienne(
+    navigateur: Any,
+) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="rapatrie"]').click()
+    dates = page.locator("tbody tr td:nth-child(1)").all_inner_texts()
+    dates = [d for d in dates if d[:4].isdigit()]
+    assert dates == sorted(dates, reverse=True)
+    assert page.locator("th.triable", has_text="Date").inner_text().endswith("▼")
+
+
+def test_le_tri_choisi_sur_une_page_est_garde(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="localise"]').click()
+    titre = page.locator("th.triable", has_text="Titre")
+    titre.click()
+    titre.click()  # titre décroissant
+    assert page.locator("th.triable", has_text="Titre").inner_text().endswith("▼")
+
+    page.get_by_role("button", name="← Accueil").click()
+    page.locator('.compteur[data-etat="localise"]').click()
+    assert page.locator("th.triable", has_text="Titre").inner_text().endswith("▼")
+
+    page.reload()
+    page.locator("tbody tr").first.wait_for()
+    assert page.locator("th.triable", has_text="Titre").inner_text().endswith("▼")
+
+    # une autre page garde son propre tri
+    page.get_by_role("button", name="← Accueil").click()
+    page.locator('.compteur[data-etat="rapatrie"]').click()
+    assert page.locator("th.triable", has_text="Date").inner_text().endswith("▼")
