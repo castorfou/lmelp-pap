@@ -728,3 +728,20 @@ def test_dans_l_appli_la_liste_ramene_a_l_accueil(
     assert lien.get_attribute("href") == "/"
     publiee = _ouvrir(navigateur, construire_page(dossier))
     assert publiee.get_by_role("link", name="← Accueil").count() == 0
+
+
+def test_la_liste_affiche_la_derniere_et_la_prochaine_verification(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    donnees = _avec_maturite(dossier)
+    # Le routage simulé répond à toute requête GET de l'API avec ces données :
+    # elles portent aussi l'avancement de la vérification.
+    donnees |= {
+        "en_cours": False,
+        "derniere": "2026-11-21T09:30:00+01:00",
+        "prochaine": "2026-11-28T09:30:00+01:00",
+    }
+    page = _ouvrir(navigateur, construire_page(dossier, arbitrage=True), api=donnees)
+    texte = page.locator("#arb-verification").inner_text()
+    assert "21/11" in texte
+    assert "28/11" in texte

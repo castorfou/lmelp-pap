@@ -10,7 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -157,6 +157,8 @@ def test_avant_une_premiere_verification_l_etat_est_au_repos(url: str) -> None:
         "faites": 0,
         "total": 0,
         "bilan": None,
+        "derniere": None,
+        "prochaine": None,
     }
 
 
@@ -306,3 +308,82 @@ def test_un_echec_reste_visible_sur_l_emission(url: str) -> None:
     assert "404" in echec["detail"]
     assert echec["date"]
     assert emissions["2024-02-11"]["echec_rapatriement"] is None
+
+
+# --- vérification automatique -----------------------------------------------
+
+
+@pytest.fixture
+def serveur_planifie(tmp_path: Path, depot: Depot) -> Iterator[Any]:
+    """Un serveur avec la planification, et son atelier."""
+    cache = tmp_path / "cache"
+    _cache_rempli(cache)
+    session = SessionComplete(
+        {
+            INTEGRAL_2014: Reponse(200, "audio/mp4"),
+            INTEGRAL_2017: Reponse(404),
+            INTEGRAL_2024: Reponse(200, "audio/mp4"),
+        }
+    )
+    serveur: Any = creer_serveur(
+        cache,
+        tmp_path / "sortie",
+        port=0,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        planification=True,
+    )
+    threading.Thread(target=serveur.serve_forever, daemon=True).start()
+    serveur.url = f"http://127.0.0.1:{serveur.server_address[1]}"
+    yield serveur
+    serveur.shutdown()
+    serveur.server_close()
+
+
+def test_sur_une_base_vide_la_verification_part_seule(serveur_planifie: Any) -> None:
+    fin = _attendre_fin(serveur_planifie.url)
+    assert fin["bilan"] == {"ok": 2, "net": 1, "passager": 0}
+    maturites = _maturites(_get(f"{serveur_planifie.url}/api/donnees"))
+    assert maturites["2014-09-28"] == "telechargeable"
+    assert maturites["2017-01-01"] == "localise"
+    assert fin["derniere"]
+    assert fin["prochaine"] > fin["derniere"]
+
+
+def test_planifier_deux_fois_ne_relance_rien(serveur_planifie: Any) -> None:
+    _attendre_fin(serveur_planifie.url)
+    assert serveur_planifie.atelier.planifier() is None
+
+
+def test_une_verification_perimee_repart(serveur_planifie: Any, depot: Depot) -> None:
+    _attendre_fin(serveur_planifie.url)
+    depot.noter_verification(datetime.now(UTC) - timedelta(days=8))
+    assert serveur_planifie.atelier.planifier() == "complete"
+    fin = _attendre_fin(serveur_planifie.url)
+    assert fin["faites"] == 3
+    derniere = datetime.fromisoformat(fin["derniere"])
+    assert datetime.now(UTC) - derniere < timedelta(minutes=1)
+
+
+def test_une_url_nouvelle_est_verifiee_seule(
+    serveur_planifie: Any, tmp_path: Path, depot: Depot
+) -> None:
+    _attendre_fin(serveur_planifie.url)
+    avant = depot.derniere_verification()
+    nouvelle = "https://media.radiofrance-podcast.net/podcast09/nouvelle.m4a"
+    with (tmp_path / "sortie" / "enregistrements.csv").open("a") as f:
+        f.write(f"2014-09-28,{nouvelle},intégral,radiofrance,00:55:00\n")
+    serveur_planifie.atelier._session.reponses[nouvelle] = Reponse(200, "audio/mp4")
+
+    assert serveur_planifie.atelier.planifier() == "nouvelles"
+    fin = _attendre_fin(serveur_planifie.url)
+
+    assert fin["faites"] == 1
+    assert depot.derniere_verification() == avant
+    assert nouvelle in {e.url for e in depot.tous()}
+
+
+def test_sans_planification_rien_ne_part(url: str) -> None:
+    time.sleep(0.3)
+    assert _get(f"{url}/api/verifications")["bilan"] is None

@@ -6,6 +6,7 @@ import sys
 import webbrowser
 from collections import Counter
 from collections.abc import Sequence
+from datetime import timedelta
 from pathlib import Path
 
 from lmelp_pap.arbitrages import lire_arbitrages
@@ -78,6 +79,12 @@ def _parser() -> argparse.ArgumentParser:
         help="dossier des enregistrements rapatriés (par défaut data/raw/audios)",
     )
     arbitrer.add_argument(
+        "--verification-jours",
+        type=float,
+        default=float(os.environ.get("PAP_VERIFICATION_JOURS") or 7),
+        help="jours entre deux vérifications complètes des URL (par défaut 7)",
+    )
+    arbitrer.add_argument(
         "--port", type=int, default=int(os.environ.get("PAP_PORT") or 8765)
     )
     arbitrer.add_argument(
@@ -145,6 +152,10 @@ def _arbitrer(args: argparse.Namespace) -> int:
         # base, l'appli sert la liste sans elle.
         depot=depot_depuis_env(),
         audios=args.audios,
+        # Vérification des URL d'intégral : au démarrage sur une base vide,
+        # puis à chaque échéance, et pour les URL nouvelles.
+        planification=True,
+        intervalle=timedelta(days=args.verification_jours),
     )
     # VS Code redirige le port vers la machine hôte et y ouvre l'adresse.
     url = f"http://localhost:{serveur.server_address[1]}/"
