@@ -381,6 +381,13 @@ Un **panneau flottant**, en haut à droite, suit le lot sur toutes les pages, et
 
 La page **rapatrié** propose, sur chaque ligne, **Écouter et qualifier** : un lecteur s'ouvre sous la ligne, sur le fichier rapatrié. On s'y déplace librement (barre du lecteur, boutons **−30 s** et **+30 s**) : le fichier se lit par morceaux, sans être téléchargé en entier. Un second clic sur le bouton referme le lecteur.
 
+Pour vérifier ce qu'on entend, le lecteur montre aussi :
+
+- **page radiofrance.fr ↗**, un lien par fiche radiofrance.fr de l'émission, qui s'ouvre dans un nouvel onglet ; sans fiche connue, pas de lien ;
+- la diffusion vue par l'**Open API Radio France**, lue à l'ouverture du lecteur : titre, chapô, présentation (animateur), équipe (critiques) et invités. Il faut la clé `RADIOFRANCE_API_TOKEN` dans l'environnement de l'appli (`.env`). Sans clé, sans diffusion du Masque ce jour-là ou si l'API ne répond pas, une ligne le dit ; l'écoute et la qualification restent possibles.
+
+Les données de l'API ne sont gardées que dans la page ouverte : rien n'est écrit sur disque, en base ni dans les logs, qui ne notent que l'appel, sa durée et son résultat (`api radiofrance 2024-02-11 : trouvée (0 s)`, `introuvable`, `pas de clé`, `erreur HTTP 403`). Chaque ouverture coûte une à trois requêtes, sur un quota de 1 000 par jour.
+
 La **qualification** juge l'enregistrement, pas l'émission : elle ne change ni l'émission ni son thème.
 
 - **Favorable** : l'enregistrement devient **qualifié** (date d'entrée notée) et l'émission quitte la page rapatrié.
