@@ -330,6 +330,8 @@ def test_telecharger_la_selection(navigateur: Any) -> None:
     cases.nth(1).check()
     page.get_by_role("button", name="Télécharger : sélection (2)").click()
     page.locator("#toast", has_text="2 rapatriés").wait_for()
+    assert page.get_by_role("button", name="Télécharger : sélection (0)").count()
+    assert page.locator("tbody input[type=checkbox]:checked").count() == 0
     assert len(envoyees[0]["emissions"]) == 2
 
 
@@ -417,3 +419,14 @@ def test_l_echec_d_une_emission_s_affiche_sur_sa_ligne(navigateur: Any) -> None:
     ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
     assert "échec" in ligne.inner_text()
     assert "Read timed out." in ligne.inner_text()
+
+
+def test_pendant_un_lot_la_selection_est_videe(navigateur: Any) -> None:
+    page = _ouvrir(navigateur, api={"/api/rapatriements": lambda r: EN_COURS})
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    page.locator("tbody input[type=checkbox]").nth(0).check()
+    page.get_by_role("button", name="Télécharger : sélection (1)").click()
+    page.get_by_role("button", name="Télécharger : sélection (0)").wait_for(
+        timeout=3000
+    )
+    assert page.locator("tbody input[type=checkbox]:checked").count() == 0

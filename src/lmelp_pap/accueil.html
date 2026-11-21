@@ -128,7 +128,7 @@ async function lancerRapatriement(ids) {
     const t = await r.json();
     if (!r.ok) throw new Error(t.erreur || r.statusText);
     SUIVI.etat = { en_cours: true }; SUIVI.arret = false;
-    vue.choix.clear();
+    vue.choix.clear(); rendre();
     suivre(t);
   } catch (err) { toast(`Échec : ${err.message}`); }
 }
