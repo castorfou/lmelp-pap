@@ -46,11 +46,14 @@ ENV PAP_HOTE=0.0.0.0 \
     PAP_PORT=8090 \
     PAP_CACHE=/data/cache \
     PAP_AUDIOS=/data/audios \
+    PAP_AUDIOS_LMELP=/audios-lmelp \
     PAP_DONNEES=/data/processed \
     PYTHONUNBUFFERED=1
 
-RUN mkdir -p /data/cache /data/processed /data/audios /data/logs \
-    && chown -R appuser:appuser /data
+# /audios-lmelp : le dossier audio du back-office lmelp, monté par le compose
+# (${AUDIO_PATH}) ; l'entrypoint ne le chowne pas, il appartient au back-office.
+RUN mkdir -p /data/cache /data/processed /data/audios /data/logs /audios-lmelp \
+    && chown -R appuser:appuser /data /audios-lmelp
 VOLUME ["/data"]
 
 # Le conteneur démarre en root : l'entrypoint remappe appuser sur PUID/PGID
