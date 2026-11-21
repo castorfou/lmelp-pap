@@ -147,10 +147,21 @@ function activerMaturite() {
   $("maturite").addEventListener("change", () => { etat.affichees = LOT; rendre(); });
   $("arb-statut").insertAdjacentHTML("beforebegin",
     `<div><button type="button" id="arb-verifier">Vérifier les URL des intégraux</button> ` +
-    `<span class="meta">une URL qui répond avec un son rend l'enregistrement téléchargeable</span></div>`);
+    `<span class="meta">une URL qui répond avec un son rend l'enregistrement téléchargeable</span> ` +
+    `<span class="meta" id="arb-verification"></span></div>`);
   $("arb-verifier").addEventListener("click", verifierUrls);
+  datesVerification();
 }
 const pause = ms => new Promise(r => setTimeout(r, ms));
+// La vérification part seule (base vide, chaque semaine, URL nouvelles) :
+// la page montre quand elle a eu lieu et quand elle reviendra.
+const jourHeure = d => new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ");
+async function datesVerification(v) {
+  try { v = v || await (await fetch("/api/verifications")).json(); } catch { return; }
+  $("arb-verification").textContent = v.derniere
+    ? `· dernière vérification le ${jourHeure(v.derniere)} · prochaine le ${jourHeure(v.prochaine)}`
+    : v.en_cours ? "· vérification en cours" : "· jamais vérifiées";
+}
 async function verifierUrls() {
   const b = $("arb-verifier"); b.disabled = true;
   try {
@@ -163,6 +174,7 @@ async function verifierUrls() {
       v = await (await fetch("/api/verifications")).json();
     }
     appliquer(await (await fetch("/api/donnees")).json());
+    datesVerification(v);
     const n = v.bilan || {};
     statut(`${v.total} URL vérifiées : ${n.ok || 0} téléchargeables, ${n.net || 0} mortes (→ localisé), ${n.passager || 0} échecs passagers.`);
   } catch (err) {

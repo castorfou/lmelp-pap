@@ -31,7 +31,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -41,6 +41,7 @@ from dotenv import find_dotenv, load_dotenv
 
 NIVEAUX = ("localise", "telechargeable", "rapatrie", "qualifie", "valide")
 COLLECTION = "pap_enregistrements"
+ETAT = "pap_etat"  # état de l'appli : date de la dernière vérification complète
 SOURCE = "radiofrance"
 ENTETES = {"User-Agent": "lmelp-pap (https://github.com/castorfou/lmelp-pap)"}
 DELAI = 30
@@ -173,12 +174,14 @@ def rapatrier(
     progres: Callable[[int, int | None], None] | None = None,
     arreter: Callable[[], bool] | None = None,
     attendre: Callable[[float], None] = time.sleep,
+    relance: Callable[[int, Exception, float], None] | None = None,
 ) -> Enregistrement:
     """Télécharge le fichier d'un enregistrement téléchargeable dans
     ``dossier/<année>/<nom d'origine>`` et le rend rapatrié. Un fichier déjà
     présent avec l'empreinte connue n'est pas retéléchargé. Un échec passager
     (délai, coupure) est retenté jusqu'à ``ESSAIS`` fois ; un statut HTTP ≠ 200
     ne l'est pas. ``progres(reçus, total)`` suit les octets reçus ;
+    ``relance(essai, erreur, pause)`` signale un nouvel essai ;
     ``arreter()`` vrai interrompt (``RapatriementInterrompuError``). En cas d'échec,
     aucun fichier (ni ``.part``) ne reste."""
     if enregistrement.niveau not in ("telechargeable", "rapatrie"):
@@ -208,9 +211,11 @@ def rapatrier(
                 http, enregistrement.url, final, progres, arreter
             )
             break
-        except requests.RequestException:
+        except requests.RequestException as erreur:
             if essai == ESSAIS:
                 raise
+            if relance:
+                relance(essai, erreur, PAUSES[essai - 1])
             attendre(PAUSES[essai - 1])
     return _rapatrie(enregistrement, relatif, sha256, taille, quand)
 
@@ -283,10 +288,40 @@ class Depot:
         """Tous les enregistrements connus."""
         return [_depuis_document(d) for d in self._collection.find()]
 
+    def derniere_verification(self) -> datetime | None:
+        """La date de la dernière vérification complète des URL, ou ``None``."""
+        document = self.base[ETAT].find_one({"_id": "verification"})
+        return _aware(document["derniere"]) if document else None
+
+    def noter_verification(self, quand: datetime) -> None:
+        """Note la fin d'une vérification complète des URL."""
+        self.base[ETAT].replace_one(
+            {"_id": "verification"},
+            {"_id": "verification", "derniere": quand},
+            upsert=True,
+        )
+
     def enregistrer(self, enregistrement: Enregistrement) -> None:
         """Écrit (ou remplace) le document de l'enregistrement."""
         document = _en_document(enregistrement)
         self._collection.replace_one({"_id": document["_id"]}, document, upsert=True)
+
+
+def verification_due(
+    a_verifier: list[tuple[str, str]],
+    connues: set[str],
+    derniere: datetime | None,
+    maintenant: datetime,
+    intervalle: timedelta,
+) -> tuple[str | None, list[tuple[str, str]]]:
+    """La vérification à lancer : ``("complete", toutes)`` sur une base vide
+    ou si la dernière vérification complète manque ou date de plus
+    d'``intervalle`` ; ``("nouvelles", urls)`` pour les URL d'intégral jamais
+    vues ; sinon ``(None, [])``."""
+    if not connues or derniere is None or maintenant - derniere >= intervalle:
+        return "complete", list(a_verifier)
+    nouvelles = [(u, e) for u, e in a_verifier if u not in connues]
+    return ("nouvelles", nouvelles) if nouvelles else (None, [])
 
 
 def depot_depuis_env() -> Depot | None:

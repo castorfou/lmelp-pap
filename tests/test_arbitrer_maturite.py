@@ -10,7 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +114,17 @@ def _post(url: str) -> Any:
         return json.load(r)
 
 
+def _attendre_bilan(url: str) -> dict[str, Any]:
+    """Attend une vérification finie, même lancée par le fil de planification
+    (qui peut ne pas avoir encore démarré)."""
+    for _ in range(100):
+        etat: dict[str, Any] = _get(f"{url}/api/verifications")
+        if not etat["en_cours"] and etat["bilan"] is not None:
+            return etat
+        time.sleep(0.05)
+    raise AssertionError("aucune vérification finie")
+
+
 def _attendre_fin(url: str) -> dict[str, Any]:
     for _ in range(100):
         etat: dict[str, Any] = _get(f"{url}/api/verifications")
@@ -157,6 +168,8 @@ def test_avant_une_premiere_verification_l_etat_est_au_repos(url: str) -> None:
         "faites": 0,
         "total": 0,
         "bilan": None,
+        "derniere": None,
+        "prochaine": None,
     }
 
 
@@ -273,6 +286,7 @@ def test_l_avancement_donne_les_octets_recus(url: str) -> None:
     _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
     fin = _attendre_rapatriements(url)
     assert fin["octets"] == len(SON)
+    assert fin["rapatriees"] == ["2014-09-28"]
     assert fin["fichier_octets"] == len(SON)
     assert fin["fichier_total"] == len(SON)
     assert fin["debut"]
@@ -306,3 +320,143 @@ def test_un_echec_reste_visible_sur_l_emission(url: str) -> None:
     assert "404" in echec["detail"]
     assert echec["date"]
     assert emissions["2024-02-11"]["echec_rapatriement"] is None
+
+
+# --- vérification automatique -----------------------------------------------
+
+
+@pytest.fixture
+def serveur_planifie(tmp_path: Path, depot: Depot) -> Iterator[Any]:
+    """Un serveur avec la planification, et son atelier."""
+    cache = tmp_path / "cache"
+    _cache_rempli(cache)
+    session = SessionComplete(
+        {
+            INTEGRAL_2014: Reponse(200, "audio/mp4"),
+            INTEGRAL_2017: Reponse(404),
+            INTEGRAL_2024: Reponse(200, "audio/mp4"),
+        }
+    )
+    serveur: Any = creer_serveur(
+        cache,
+        tmp_path / "sortie",
+        port=0,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        planification=True,
+    )
+    threading.Thread(target=serveur.serve_forever, daemon=True).start()
+    serveur.url = f"http://127.0.0.1:{serveur.server_address[1]}"
+    yield serveur
+    serveur.shutdown()
+    serveur.server_close()
+
+
+def test_sur_une_base_vide_la_verification_part_seule(serveur_planifie: Any) -> None:
+    fin = _attendre_bilan(serveur_planifie.url)
+    assert fin["bilan"] == {"ok": 2, "net": 1, "passager": 0}
+    maturites = _maturites(_get(f"{serveur_planifie.url}/api/donnees"))
+    assert maturites["2014-09-28"] == "telechargeable"
+    assert maturites["2017-01-01"] == "localise"
+    assert fin["derniere"]
+    assert fin["prochaine"] > fin["derniere"]
+
+
+def test_planifier_deux_fois_ne_relance_rien(serveur_planifie: Any) -> None:
+    _attendre_bilan(serveur_planifie.url)
+    assert serveur_planifie.atelier.planifier() is None
+
+
+def test_une_verification_perimee_repart(serveur_planifie: Any, depot: Depot) -> None:
+    _attendre_bilan(serveur_planifie.url)
+    depot.noter_verification(datetime.now(UTC) - timedelta(days=8))
+    assert serveur_planifie.atelier.planifier() == "complete"
+    fin = _attendre_bilan(serveur_planifie.url)
+    assert fin["faites"] == 3
+    derniere = datetime.fromisoformat(fin["derniere"])
+    assert datetime.now(UTC) - derniere < timedelta(minutes=1)
+
+
+def test_une_url_nouvelle_est_verifiee_seule(
+    serveur_planifie: Any, tmp_path: Path, depot: Depot
+) -> None:
+    _attendre_bilan(serveur_planifie.url)
+    avant = depot.derniere_verification()
+    nouvelle = "https://media.radiofrance-podcast.net/podcast09/nouvelle.m4a"
+    with (tmp_path / "sortie" / "enregistrements.csv").open("a") as f:
+        f.write(f"2014-09-28,{nouvelle},intégral,radiofrance,00:55:00\n")
+    serveur_planifie.atelier._session.reponses[nouvelle] = Reponse(200, "audio/mp4")
+
+    assert serveur_planifie.atelier.planifier() == "nouvelles"
+    fin = _attendre_bilan(serveur_planifie.url)
+
+    assert fin["faites"] == 1
+    assert depot.derniere_verification() == avant
+    assert nouvelle in {e.url for e in depot.tous()}
+
+
+def test_sans_planification_rien_ne_part(url: str) -> None:
+    time.sleep(0.3)
+    assert _get(f"{url}/api/verifications")["bilan"] is None
+
+
+def test_la_verification_automatique_laisse_une_trace_dans_les_logs(
+    serveur_planifie: Any, depot: Depot, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _attendre_bilan(serveur_planifie.url)
+    il_y_a_8_jours = datetime.now(UTC) - timedelta(days=8)
+    depot.noter_verification(il_y_a_8_jours)
+    capfd.readouterr()  # oublie le démarrage
+
+    serveur_planifie.atelier.planifier()
+    _attendre_bilan(serveur_planifie.url)
+    time.sleep(0.1)
+
+    logs = capfd.readouterr().err
+    date = il_y_a_8_jours.astimezone().strftime("%d/%m/%Y")
+    assert f"vérification automatique (complète : dernière le {date} à " in logs
+    assert ") : 3 URL" in logs
+    assert "vérification terminée" in logs
+    assert "2 ok, 1 mortes, 0 échecs passagers" in logs
+
+
+def test_une_verification_manuelle_est_tracee(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _post(f"{url}/api/verifications")
+    _attendre_fin(url)
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert "vérification manuelle (complète) : 3 URL" in logs
+    assert "vérification terminée" in logs
+
+
+def test_le_rapatriement_laisse_une_trace_dans_les_logs(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _verifier(url)
+    capfd.readouterr()
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    _attendre_rapatriements(url)
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert "rapatriement : 1 émission demandée" in logs
+    assert f"rapatrié 2014-09-28 : 2014/{INTEGRAL_2014.rsplit('/', 1)[1]}" in logs
+    assert "rapatriement terminé en" in logs
+    assert "1 rapatrié, 0 déjà là, 0 échec" in logs
+
+
+def test_un_echec_de_rapatriement_est_trace(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _verifier(url)
+    _session_du_serveur(url).statut = 404
+    capfd.readouterr()
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    _attendre_rapatriements(url)
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert "échec 2014-09-28 : " in logs
+    assert "HTTP 404" in logs
+    assert "0 rapatrié, 0 déjà là, 1 échec" in logs

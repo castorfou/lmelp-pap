@@ -6,7 +6,7 @@ Le réseau est simulé par une session factice, Mongo par mongomock.
 
 import hashlib
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import mongomock
@@ -27,6 +27,7 @@ from lmelp_pap.maturite import (
     meilleur,
     rapatrier,
     retenu,
+    verification_due,
     verifier,
 )
 
@@ -478,3 +479,64 @@ def test_l_echec_d_un_rapatriement_se_memorise(depot: Depot) -> None:
 def test_un_rapatriement_reussi_efface_l_echec(tmp_path: Any) -> None:
     echoue = replace(telechargeable(), echec=Verification(AUJOURDHUI, "net", "lent"))
     assert rapatrier(echoue, tmp_path, SessionFlux(), AUJOURDHUI).echec is None
+
+
+# --- vérification automatique : quand vérifier, et quoi ----------------------
+
+SEMAINE = timedelta(days=7)
+LISTE = [(URL, "2008-03-02"), (M4A, "2008-03-02")]
+
+
+def test_base_vide_verification_complete() -> None:
+    assert verification_due(LISTE, set(), None, AUJOURDHUI, SEMAINE) == (
+        "complete",
+        LISTE,
+    )
+
+
+def test_jamais_verifiee_verification_complete() -> None:
+    connues = {URL, M4A}
+    assert verification_due(LISTE, connues, None, AUJOURDHUI, SEMAINE)[0] == "complete"
+
+
+def test_a_jour_rien_a_faire() -> None:
+    connues = {URL, M4A}
+    assert verification_due(LISTE, connues, HIER, AUJOURDHUI, SEMAINE) == (None, [])
+
+
+def test_perimee_verification_complete() -> None:
+    il_y_a_8_jours = AUJOURDHUI - timedelta(days=8)
+    connues = {URL, M4A}
+    assert verification_due(LISTE, connues, il_y_a_8_jours, AUJOURDHUI, SEMAINE) == (
+        "complete",
+        LISTE,
+    )
+
+
+def test_urls_nouvelles_seules() -> None:
+    assert verification_due(LISTE, {URL}, HIER, AUJOURDHUI, SEMAINE) == (
+        "nouvelles",
+        [(M4A, "2008-03-02")],
+    )
+
+
+def test_le_depot_garde_la_date_de_la_derniere_verification(depot: Depot) -> None:
+    assert depot.derniere_verification() is None
+    depot.noter_verification(HIER)
+    depot.noter_verification(AUJOURDHUI)
+    assert depot.derniere_verification() == AUJOURDHUI
+
+
+def test_chaque_nouvel_essai_est_signale(tmp_path: Any) -> None:
+    signales: list[tuple[int, str, float]] = []
+    rapatrier(
+        telechargeable(),
+        tmp_path,
+        SessionSuite(requests.ReadTimeout("lent"), Flux()),
+        AUJOURDHUI,
+        attendre=_sans_pause,
+        relance=lambda essai, erreur, pause: signales.append(
+            (essai, str(erreur), pause)
+        ),
+    )
+    assert signales == [(1, "lent", 5)]

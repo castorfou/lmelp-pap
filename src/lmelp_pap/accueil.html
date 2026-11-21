@@ -78,6 +78,7 @@
   #bandeau .tete button { padding: 2px 8px; font-size: 12px; }
   #bandeau .plier { border: 0; background: none; color: var(--doux); }
   #bandeau .corps { display: grid; gap: 4px; }
+  #bandeau .rapatriees[title]:not([title=""]) { cursor: help; text-decoration: underline dotted var(--doux); }
   #bandeau .fichier { display: flex; justify-content: space-between; gap: 8px; }
   .barre { height: 6px; background: var(--ligne); border-radius: 3px; overflow: hidden; }
   .barre i { display: block; height: 100%; background: var(--telechargeable); transition: width .5s; }
@@ -185,7 +186,7 @@ function afficherBandeau() {
     const bl = t.bilan, n = bl.rapatries + bl.deja_la;
     b.innerHTML = `<div class="tete"><span class="icone" aria-hidden="true">${bl.echecs ? "!" : "✓"}</span><b>Téléchargement terminé${t.arrete ? " (arrêté)" : ""}</b>${plier}<button id="fermer-bandeau" aria-label="Fermer" title="Fermer">✕</button></div>` +
       (SUIVI.replie ? "" :
-        `<div class="corps"><div>${n} rapatrié${n > 1 ? "s" : ""}${bl.echecs ? `, ${bl.echecs} échec(s)` : ""} <span class="doux">· ${mo(t.octets)} reçus</span></div>` +
+        `<div class="corps"><div><span class="rapatriees" title="${esc((t.rapatriees || []).join("\n"))}">${n} rapatrié${n > 1 ? "s" : ""}</span>${bl.echecs ? `, ${bl.echecs} échec(s)` : ""} <span class="doux">· ${mo(t.octets)} reçus</span></div>` +
         (t.erreurs && t.erreurs.length ? `<ul class="erreurs">${t.erreurs.map(e => `<li><b>${esc(e.emission)}</b> : ${esc(e.detail)}</li>`).join("")}</ul>` : "") + `</div>`);
     $("fermer-bandeau").addEventListener("click", () => { ecrireFerme(t.debut); afficherBandeau(); });
   }

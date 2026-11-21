@@ -39,9 +39,12 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 """
 
 import json
+import sys
 import threading
+import time
+import traceback
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -72,6 +75,7 @@ from lmelp_pap.liste import (
     dates_candidates,
 )
 from lmelp_pap.maturite import (
+    ESSAIS,
     Depot,
     Enregistrement,
     RapatriementError,
@@ -82,6 +86,7 @@ from lmelp_pap.maturite import (
     meilleur,
     rapatrier,
     retenu,
+    verification_due,
     verifier,
 )
 from lmelp_pap.page import construire_page, donnees_page
@@ -89,6 +94,29 @@ from lmelp_pap.page import construire_page, donnees_page
 
 # Les doutes qu'un arbitrage de date lève.
 DOUTES_DE_DATE = ("désaccord de date", "jour inhabituel")
+
+
+# Période du fil de planification de la vérification des URL, en secondes.
+PLANIFICATION = 3600
+
+
+def _s(n: int) -> str:
+    """Le « s » du pluriel."""
+    return "s" if n > 1 else ""
+
+
+def _duree(secondes: float) -> str:
+    """Une durée lisible : « 16 s », « 3 min 41 s »."""
+    s = round(secondes)
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60} s"
+
+
+def journal(message: str) -> None:
+    """Une ligne horodatée dans les logs (sortie d'erreur, ``docker logs``)."""
+    horodatage = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    # un seul write : les lignes de deux fils ne se mêlent pas
+    sys.stderr.write(f"{horodatage} {message}\n")
+    sys.stderr.flush()
 
 
 class DemandeInvalideError(ValueError):
@@ -183,6 +211,7 @@ class Atelier:
         depot: Depot | None = None,
         session: Any = None,
         audios: Path | None = None,
+        intervalle: timedelta = timedelta(days=7),
     ):
         """Lit le cache et construit une première fois la liste. ``depot`` :
         la maturité des enregistrements (Mongo), ``session`` : le client HTTP
@@ -191,6 +220,8 @@ class Atelier:
         self.depot = depot
         self._session = session
         self.audios = audios or Path("data/raw/audios")
+        self.intervalle = intervalle  # entre deux vérifications complètes
+        self.planification = False
         self._verification = Tache()
         self._rapatriement = Tache(
             en_cours_sur=None,
@@ -200,6 +231,7 @@ class Atelier:
             fichier_total=None,
             debut=None,
             arrete=False,
+            rapatriees=[],  # émissions rapatriées (ou déjà là) pendant le lot
         )
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
@@ -221,21 +253,101 @@ class Atelier:
             return self._donnees()
 
     def etat_verification(self) -> dict[str, Any]:
-        """L'avancement de la vérification des URL d'intégral."""
-        return self._verification.etat()
+        """L'avancement de la vérification des URL d'intégral, avec la date de
+        la dernière vérification complète et de la prochaine."""
+        etat = self._verification.etat()
+        derniere = self.depot.derniere_verification() if self.depot else None
+        etat["derniere"] = derniere.isoformat() if derniere else None
+        etat["prochaine"] = (
+            (derniere + self.intervalle).isoformat() if derniere else None
+        )
+        return etat
 
-    def lancer_verification(self) -> dict[str, Any]:
+    def lancer_verification(
+        self,
+        a_verifier: list[tuple[str, str]] | None = None,
+        origine: str = "manuelle",
+    ) -> dict[str, Any]:
         """Lance en fond la vérification des URL d'intégral, sauf si une est
-        déjà en cours ; rend son avancement."""
+        déjà en cours ; rend son avancement. Sans liste, toutes les URL de la
+        liste sont vérifiées et la date de cette vérification complète est
+        notée ; avec une liste, seulement celles-là."""
         depot = self._depot()
+        complete = a_verifier is None
+        if a_verifier is None:
+            with self._verrou:
+                a_verifier = integraux(self.sortie)
+        urls = a_verifier
+        if self._verification.etat()["en_cours"]:
+            return self._verification.etat()
+        genre = "complète" if complete else "partielle"
+        journal(
+            f"vérification {origine}"
+            f"{'' if '(' in origine else f' ({genre})'} : {len(urls)} URL"
+        )
+
+        def travail(t: Tache) -> dict[str, int]:
+            debut = time.monotonic()
+            bilan = verifier(
+                urls, depot, self._session, progres=lambda n: t.maj(faites=n)
+            )
+            if complete:
+                depot.noter_verification(datetime.now(UTC))
+            journal(
+                f"vérification terminée en {round(time.monotonic() - debut)} s : "
+                f"{bilan['ok']} ok, {bilan['net']} mortes, "
+                f"{bilan['passager']} échecs passagers"
+            )
+            return bilan
+
+        return self._verification.lancer(len(urls), travail)
+
+    def planifier(self, maintenant: datetime | None = None) -> str | None:
+        """Lance la vérification due (base vide, dernière vérification
+        complète trop ancienne, URL nouvelles), sauf si une tourne déjà ;
+        rend son genre (``complete``, ``nouvelles``) ou ``None``."""
+        if self.depot is None or self._verification.etat()["en_cours"]:
+            return None
         with self._verrou:
             a_verifier = integraux(self.sortie)
-        return self._verification.lancer(
-            len(a_verifier),
-            lambda t: verifier(
-                a_verifier, depot, self._session, progres=lambda n: t.maj(faites=n)
-            ),
+        connues = {e.url for e in self.depot.tous()}
+        derniere = self.depot.derniere_verification()
+        maintenant = maintenant or datetime.now(UTC)
+        genre, urls = verification_due(
+            a_verifier, connues, derniere, maintenant, self.intervalle
         )
+        if genre == "complete":
+            raison = (
+                "jamais vérifiée"
+                if derniere is None
+                else "base vide"
+                if not connues
+                else "dernière le " + derniere.astimezone().strftime("%d/%m/%Y à %H:%M")
+            )
+            self.lancer_verification(None, f"automatique (complète : {raison})")
+        elif genre == "nouvelles":
+            self.lancer_verification(urls, "automatique (nouvelles URL)")
+        return genre
+
+    def _apres_reconstruction(self) -> None:
+        """Une reconstruction peut apporter des URL d'intégral nouvelles."""
+        if self.planification:
+            self.planifier()
+
+    def planifier_en_continu(self, periode: float = PLANIFICATION) -> None:
+        """Vérifie au démarrage, puis toutes les ``periode`` secondes, si une
+        vérification est due (fil de fond)."""
+
+        def boucle() -> None:
+            while True:
+                try:
+                    self.planifier()
+                except Exception:  # noqa: BLE001 — la planification ne doit pas mourir
+                    traceback.print_exc()  # visible dans les logs du conteneur
+                time.sleep(periode)
+
+        self.planification = True
+        threading.Thread(target=boucle, daemon=True).start()
 
     def etat_rapatriement(self) -> dict[str, Any]:
         """L'avancement du rapatriement en cours ou du dernier."""
@@ -264,6 +376,13 @@ class Atelier:
             bilan = {"rapatries": 0, "deja_la": 0, "echecs": 0}
             erreurs: list[dict[str, str]] = []
             recus = 0  # octets des fichiers finis
+            rapatriees: list[str] = []
+            debut_lot = time.monotonic()
+            n_demandes = len(a_rapatrier)
+            journal(
+                f"rapatriement : {n_demandes} émission{_s(n_demandes)} "
+                f"demandée{_s(n_demandes)}"
+            )
             for n, enregistrement in enumerate(a_rapatrier, 1):
                 if tache.arret_demande():
                     tache.maj(arrete=True)
@@ -279,6 +398,19 @@ class Atelier:
                         fichier_octets=octets, fichier_total=total, octets=base + octets
                     )
 
+                def relance(
+                    essai: int,
+                    erreur: Exception,
+                    pause: float,
+                    emission: str = enregistrement.emission_id,
+                ) -> None:
+                    journal(
+                        f"échec {emission} (essai {essai}/{ESSAIS}) : "
+                        f"{erreur or type(erreur).__name__}, "
+                        f"nouvel essai dans {pause:g} s"
+                    )
+
+                debut = time.monotonic()
                 try:
                     avant = enregistrement.sha256
                     fait = rapatrier(
@@ -287,17 +419,28 @@ class Atelier:
                         self._session,
                         progres=progres,
                         arreter=tache.arret_demande,
+                        relance=relance,
                     )
                     depot.enregistrer(fait)
                     recus += fait.taille or 0
                     deja = bool(avant) and avant == fait.sha256
                     bilan["deja_la" if deja else "rapatries"] += 1
+                    rapatriees.append(enregistrement.emission_id)
+                    tache.maj(rapatriees=list(rapatriees))
+                    journal(
+                        f"{'déjà là' if deja else 'rapatrié'} "
+                        f"{enregistrement.emission_id} : {fait.fichier}, "
+                        f"{round((fait.taille or 0) / 1e6)} Mo en "
+                        f"{round(time.monotonic() - debut)} s"
+                    )
                 except RapatriementInterrompuError:
                     tache.maj(arrete=True, octets=recus)
+                    journal(f"rapatriement arrêté pendant {enregistrement.emission_id}")
                     break
                 except Exception as erreur:  # noqa: BLE001 — l'erreur va au bilan
                     bilan["echecs"] += 1
                     detail = str(erreur) or type(erreur).__name__
+                    journal(f"échec {enregistrement.emission_id} : {detail}")
                     erreurs.append(
                         {"emission": enregistrement.emission_id, "detail": detail}
                     )
@@ -312,6 +455,13 @@ class Atelier:
                     )
                 tache.maj(faites=n, erreurs=list(erreurs), octets=recus)
             tache.maj(en_cours_sur=None)
+            arrete = " (arrêté)" if tache.etat()["arrete"] else ""
+            journal(
+                f"rapatriement terminé en {_duree(time.monotonic() - debut_lot)} : "
+                f"{bilan['rapatries']} rapatrié{_s(bilan['rapatries'])}, "
+                f"{bilan['deja_la']} déjà là, "
+                f"{bilan['echecs']} échec{_s(bilan['echecs'])}{arrete}"
+            )
             return bilan
 
         return self._rapatriement.lancer(len(a_rapatrier), travail, refuser=True)
@@ -373,7 +523,9 @@ class Atelier:
             )
             ajouter_arbitrage(self.fichier, arbitrage)
             self._reconstruire()
-            return self._donnees()
+            donnees = self._donnees()
+        self._apres_reconstruction()
+        return donnees
 
     def annuler(self, demande: dict[str, Any]) -> dict[str, Any]:
         """Retire les arbitrages d'une émission, ou d'une attestation."""
@@ -390,7 +542,9 @@ class Atelier:
             if not retirer_arbitrages(self.fichier, cles):
                 raise DemandeInvalideError("aucun arbitrage à annuler")
             self._reconstruire()
-            return self._donnees()
+            donnees = self._donnees()
+        self._apres_reconstruction()
+        return donnees
 
     def _rapprochement(
         self, emission: Emission, demande: dict[str, Any]
@@ -580,10 +734,16 @@ def creer_serveur(
     depot: Depot | None = None,
     session: Any = None,
     audios: Path | None = None,
+    planification: bool = False,
+    intervalle: timedelta = timedelta(days=7),
 ) -> ThreadingHTTPServer:
     """Le serveur de l'outil, prêt à servir (``serve_forever``). Sans
-    ``depot``, la maturité des enregistrements est absente."""
-    atelier = Atelier(cache, sortie, arbitrages, depot, session, audios)
+    ``depot``, la maturité des enregistrements est absente. Avec
+    ``planification``, la vérification des URL part seule quand elle est due
+    (``Atelier.planifier``) ; l'atelier est ``serveur.atelier``."""
+    atelier = Atelier(cache, sortie, arbitrages, depot, session, audios, intervalle)
+    if planification and depot is not None:
+        atelier.planifier_en_continu()
 
     class Requetes(BaseHTTPRequestHandler):
         """Les routes de la page et de l'API JSON."""
@@ -669,4 +829,6 @@ def creer_serveur(
         def log_message(self, format: str, *args: Any) -> None:
             """Pas de ligne par requête dans le terminal."""
 
-    return ThreadingHTTPServer((hote, port), Requetes)
+    serveur = ThreadingHTTPServer((hote, port), Requetes)
+    serveur.atelier = atelier  # type: ignore[attr-defined]
+    return serveur
