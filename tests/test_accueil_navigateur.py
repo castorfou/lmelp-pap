@@ -558,3 +558,93 @@ def test_survoler_les_rapatries_liste_leurs_dates(navigateur: Any) -> None:
     detail = rapatries.get_attribute("title")
     assert "2008-03-02" in detail
     assert "2008-03-09" in detail
+
+
+# --- Écoute : page radiofrance.fr et diffusion de l'Open API ---------------
+
+PAGE_RF = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/x-1"
+
+
+def _ecouter(
+    navigateur: Any, radiofrance: Any, page_rf: bool = True
+) -> tuple[Any, list[str]]:
+    """Le lecteur ouvert sur l'émission rapatriée ; ``radiofrance`` : la
+    réponse de ``GET /api/radiofrance/<id>``."""
+    donnees, cible = _avec_rapatrie()
+    if page_rf:
+        cible["attestations"].append(
+            {"source": "radiofrance", "url": PAGE_RF, "titre": "Une fiche"}
+        )
+    appels: list[str] = []
+
+    def api(requete: Any) -> Any:
+        appels.append(requete.url)
+        return radiofrance
+
+    page = _ouvrir(navigateur, donnees, api={f"/api/radiofrance/{cible['id']}": api})
+    page.locator('.compteur[data-etat="rapatrie"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Écouter et qualifier").click()
+    page.locator("tr.ecoute").wait_for()
+    return page, appels
+
+
+TROUVEE = {
+    "statut": "trouvee",
+    "diffusion": {
+        "titre": "Les livres de la semaine",
+        "resume": "Un résumé.",
+        "url": PAGE_RF,
+        "equipe": [
+            {"nom": "Jérôme Garcin", "role": "Producteur"},
+            {"nom": "Arnaud Viviant", "role": None},
+        ],
+        "invites": [{"nom": "Une Autrice", "role": None}],
+    },
+}
+
+
+def test_l_ecoute_ouvre_la_page_radiofrance_dans_un_nouvel_onglet(
+    navigateur: Any,
+) -> None:
+    page, _ = _ecouter(navigateur, TROUVEE)
+    lien = page.locator("tr.ecoute").get_by_role("link", name="page radiofrance.fr")
+    assert lien.get_attribute("href") == PAGE_RF
+    assert lien.get_attribute("target") == "_blank"
+    assert "noopener" in (lien.get_attribute("rel") or "")
+
+
+def test_sans_page_radiofrance_pas_de_lien(navigateur: Any) -> None:
+    page, _ = _ecouter(navigateur, TROUVEE, page_rf=False)
+    page.locator("tr.ecoute .radiofrance", has_text="Jérôme Garcin").wait_for()
+    assert page.locator("tr.ecoute a").count() == 0
+
+
+def test_l_ecoute_montre_l_equipe_et_les_invites_de_l_api(navigateur: Any) -> None:
+    page, appels = _ecouter(navigateur, TROUVEE)
+    bloc = page.locator("tr.ecoute .radiofrance")
+    bloc.get_by_text("Jérôme Garcin", exact=False).wait_for()
+    texte = bloc.inner_text()
+    assert "Jérôme Garcin (Producteur)" in texte
+    assert "Arnaud Viviant" in texte
+    assert "Une Autrice" in texte
+    assert "Les livres de la semaine" in texte
+    assert "Open API Radio France" in texte
+    assert len(appels) == 1
+
+
+@pytest.mark.parametrize(
+    ("reponse", "message"),
+    [
+        ({"statut": "sans_cle", "diffusion": None}, "pas de clé"),
+        ({"statut": "introuvable", "diffusion": None}, "aucune diffusion"),
+        ({"statut": "erreur", "detail": "HTTP 403", "diffusion": None}, "HTTP 403"),
+    ],
+)
+def test_sans_donnees_de_l_api_un_message_et_l_ecoute_reste_possible(
+    navigateur: Any, reponse: dict[str, Any], message: str
+) -> None:
+    page, _ = _ecouter(navigateur, reponse)
+    page.locator("tr.ecoute .radiofrance", has_text=message).wait_for()
+    assert page.locator("tr.ecoute audio").count() == 1
+    assert page.get_by_role("button", name="Favorable").is_enabled()

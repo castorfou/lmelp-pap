@@ -90,6 +90,8 @@
   tr.ecoute td { background: var(--ligne); }
   tr.ecoute .lecteur, tr.ecoute .verdict { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
   tr.ecoute audio { flex: 1; min-width: 280px; height: 36px; }
+  tr.ecoute .radiofrance { margin: 6px 0; display: grid; gap: 2px; }
+  tr.ecoute .radiofrance a { color: var(--qualifie); justify-self: start; }
   tr.ecoute input { flex: 1; min-width: 220px; font: inherit; padding: 4px 8px; border: 1px solid var(--trait); border-radius: 6px; background: var(--carte); color: var(--texte); }
   .lot { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
   button.primaire { background: var(--entete); color: var(--entete-texte); border-color: var(--entete); }
@@ -133,11 +135,44 @@ function lecteur(e, colonnesN) {
        <span class="doux">${esc(e.fichier)}</span>`
     : `<span class="echec">aucun fichier écoutable pour cette émission</span>`;
   return `<tr class="ecoute"><td colspan="${colonnesN}"><div class="lecteur">${corps}</div>
+    ${radiofrance(e)}
     <div class="verdict"><button class="primaire" id="favorable" ${e.fichier ? "" : "disabled"}>Favorable</button>
     <input id="motif" aria-label="Motif de l'écart" placeholder="motif de l'écart (obligatoire pour écarter)">
     <button id="ecarter" disabled>Écarter</button></div></td></tr>`;
 }
+// ---------- Écoute : page radiofrance.fr et diffusion de l'Open API Radio France ----------
+// Les pages radiofrance.fr viennent des attestations ; la diffusion (équipe,
+// invités, titre, chapô) est lue à l'ouverture par GET /api/radiofrance/<id>,
+// gardée dans la mémoire de la page seulement (CGU de l'API).
+const DIFFUSIONS = {};
+const nomsRF = l => l.map(p => esc(p.nom) + (p.role ? ` (${esc(p.role)})` : "")).join(", ");
+function radiofrance(e) {
+  const liens = e.pages.map(p => `<a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer" title="${esc(p.titre)}">page radiofrance.fr ↗</a>`).join(" ");
+  return `<div class="radiofrance">${liens}<div class="api">${diffusionRF(DIFFUSIONS[e.id])}</div></div>`;
+}
+function diffusionRF(r) {
+  if (!r) return `<span class="doux">API Radio France : lecture…</span>`;
+  if (r.statut === "sans_cle") return `<span class="doux">API Radio France : pas de clé (RADIOFRANCE_API_TOKEN), présentateur et critiques indisponibles.</span>`;
+  if (r.statut === "introuvable") return `<span class="doux">API Radio France : aucune diffusion du Masque ce jour-là.</span>`;
+  if (r.statut !== "trouvee" || !r.diffusion) return `<span class="doux">API Radio France indisponible${r.detail ? ` (${esc(r.detail)})` : ""}.</span>`;
+  const d = r.diffusion;
+  return (d.titre ? `<b>${esc(d.titre)}</b>` : "") + (d.resume ? `<div class="doux">${esc(d.resume)}</div>` : "") +
+    (d.equipe.length ? `<div>Équipe : ${nomsRF(d.equipe)}</div>` : "") +
+    (d.invites.length ? `<div>Invités : ${nomsRF(d.invites)}</div>` : "") +
+    `<div class="doux">Données fournies par l'Open API Radio France.</div>`;
+}
+async function chargerDiffusion(id) {
+  if (DIFFUSIONS[id]) return;
+  try {
+    const r = await fetch("/api/radiofrance/" + encodeURIComponent(id));
+    const t = await r.json();
+    DIFFUSIONS[id] = r.ok ? t : { statut: "erreur", detail: t.erreur || r.statusText };
+  } catch (err) { DIFFUSIONS[id] = { statut: "erreur", detail: err.message }; }
+  const bloc = document.querySelector("tr.ecoute .radiofrance .api");
+  if (bloc && vue.ecoute === id) bloc.innerHTML = diffusionRF(DIFFUSIONS[id]);
+}
 function brancherLecteur(id) {
+  chargerDiffusion(id);
   const audio = document.querySelector("tr.ecoute audio");
   document.querySelectorAll("tr.ecoute [data-saut]").forEach(b => b.addEventListener("click", () => {
     audio.currentTime = Math.max(0, audio.currentTime + +b.dataset.saut);
@@ -274,6 +309,7 @@ function preparer(d) {
     etat: etatDe(e),
     echec: e.echec_rapatriement || null,
     fichier: e.fichier_audio || null, ecart: e.ecart || null,
+    pages: e.attestations.filter(a => a.source === "radiofrance" && a.url).map(a => ({ url: a.url, titre: a.titre || "" })),
     depuis: e.maturite_depuis ? Math.max(0, Math.floor((Date.now() - Date.parse(e.maturite_depuis)) / JOUR_MS)) : null,
   }));
   const fin = Math.max(new Date().getFullYear(), ...EMISSIONS.map(e => e.annee));
