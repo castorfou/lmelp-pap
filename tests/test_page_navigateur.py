@@ -619,3 +619,70 @@ def test_la_page_publiee_montre_l_attestation_du_doute_sans_bouton(
         "rapprochable aussi de 2015-01-18"
     )
     assert doute.get_by_role("button").count() == 0
+
+
+def _avec_maturite(dossier: Path) -> dict[str, Any]:
+    """Les données de l'appli avec une base Mongo : la 1re émission
+    téléchargeable, la 2e localisée, les autres sans enregistrement suivi."""
+    emissions = donnees_page(dossier)
+    for e, maturite in zip(emissions, ["telechargeable", "localise"]):
+        e["maturite"] = maturite
+    for e in emissions[2:]:
+        e["maturite"] = None
+    return {"emissions": emissions, "arbitrages": [], "maturite_active": True}
+
+
+def test_dans_l_appli_chaque_emission_porte_sa_maturite_et_se_filtre(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    donnees = _avec_maturite(dossier)
+    page = _ouvrir(navigateur, construire_page(dossier, arbitrage=True), api=donnees)
+    page.locator("#arb-nombre", has_text="0").wait_for()
+
+    premiere = donnees["emissions"][0]["id"]
+    badge = page.locator(f'.ligne[data-id="{premiere}"] .maturite')
+    assert badge.inner_text() == "téléchargeable"
+
+    page.select_option("#maturite", "telechargeable")
+    assert page.locator(".ligne").count() == 1
+    assert "Maturité : téléchargeable" in page.locator("#frise-filtres").inner_text()
+
+    page.select_option("#maturite", "aucune")
+    assert page.locator(".ligne").count() == len(donnees["emissions"]) - 2
+
+
+def test_sans_base_la_page_n_a_ni_maturite_ni_verification(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api={"emissions": donnees_page(dossier), "arbitrages": []},
+    )
+    page.locator("#arb-nombre", has_text="0").wait_for()
+    assert page.locator("#maturite").count() == 0
+    assert page.locator("#arb-verifier").count() == 0
+    assert page.locator(".maturite").count() == 0
+
+
+def test_la_page_publiee_n_a_pas_de_maturite(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    page = _ouvrir(navigateur, construire_page(dossier))
+    assert page.locator("#maturite").count() == 0
+
+
+def test_verifier_les_urls_affiche_le_bilan(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    fin = {"en_cours": False, "faites": 3, "total": 3}
+    fin["bilan"] = {"ok": 2, "net": 1, "passager": 0}  # type: ignore[assignment]
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api=_avec_maturite(dossier),
+        decision=fin,
+    )
+    page.locator("#arb-nombre", has_text="0").wait_for()
+    page.get_by_role("button", name="Vérifier les URL des intégraux").click()
+    page.locator("#arb-statut", has_text="2 téléchargeables").wait_for()

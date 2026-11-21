@@ -26,6 +26,9 @@
 .arb .arb-danger { color: var(--alerte); border-color: var(--alerte); }
 .arb-doute { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .arb-doute button { font: inherit; font-size: 13px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer; }
+.maturite { font-size: 10.5px; padding: 1px 6px; border-radius: 3px; color: #fff; font-weight: 600; }
+.maturite.localise { background: #b07c1e; } .maturite.telechargeable { background: #c8622a; }
+.maturite.rapatrie { background: #3f7fb5; } .maturite.qualifie { background: #2f6fb2; } .maturite.valide { background: #2a9d8f; }
 .arb button:disabled, .arbitrage button:disabled, .arb-doute button:disabled { opacity: .5; cursor: wait; }
 </style>
 <script>
@@ -112,8 +115,59 @@ function journal(arbitrages) {
   ).join("") : `<li class="meta">Aucun arbitrage.</li>`;
 }
 
+// Maturité des enregistrements (avec une base Mongo seulement) : badge, filtre et
+// vérification des URL d'intégral.
+const MATURITES = { localise: "localisé", telechargeable: "téléchargeable", rapatrie: "rapatrié", qualifie: "qualifié", valide: "valide" };
+let maturiteActive = false;
+function badgeMaturite(e) {
+  return maturiteActive && e.maturite ? `<span class="maturite ${esc(e.maturite)}">${MATURITES[e.maturite] || esc(e.maturite)}</span>` : "";
+}
+function passeMaturite(e) {
+  const m = maturiteActive ? $("maturite").value : "";
+  if (!m) return true;
+  return m === "aucune" ? !e.maturite : e.maturite === m;
+}
+function filtreMaturite() {
+  if (!maturiteActive || !$("maturite").value) return [];
+  return [[`Maturité : ${$("maturite").selectedOptions[0].textContent.toLowerCase()}`, () => { $("maturite").value = ""; }]];
+}
+function effacerMaturite() { if (maturiteActive) $("maturite").value = ""; }
+function activerMaturite() {
+  if (maturiteActive) return;
+  maturiteActive = true;
+  $("effacer").insertAdjacentHTML("beforebegin",
+    `<label class="champ" for="maturite">Maturité<select id="maturite"><option value="">Toutes</option>` +
+    Object.entries(MATURITES).map(([v, t]) => `<option value="${v}">${t}</option>`).join("") +
+    `<option value="aucune">Sans enregistrement suivi</option></select></label>`);
+  $("maturite").addEventListener("change", () => { etat.affichees = LOT; rendre(); });
+  $("arb-statut").insertAdjacentHTML("beforebegin",
+    `<div><button type="button" id="arb-verifier">Vérifier les URL des intégraux</button> ` +
+    `<span class="meta">une URL qui répond avec un son rend l'enregistrement téléchargeable</span></div>`);
+  $("arb-verifier").addEventListener("click", verifierUrls);
+}
+const pause = ms => new Promise(r => setTimeout(r, ms));
+async function verifierUrls() {
+  const b = $("arb-verifier"); b.disabled = true;
+  try {
+    let r = await fetch("/api/verifications", { method: "POST" });
+    let v = await r.json();
+    if (!r.ok) throw new Error(v.erreur || r.statusText);
+    while (v.en_cours) {
+      statut(`Vérification des URL : ${v.faites} / ${v.total}…`);
+      await pause(1000);
+      v = await (await fetch("/api/verifications")).json();
+    }
+    appliquer(await (await fetch("/api/donnees")).json());
+    const n = v.bilan || {};
+    statut(`${v.total} URL vérifiées : ${n.ok || 0} téléchargeables, ${n.net || 0} mortes (→ localisé), ${n.passager || 0} échecs passagers.`);
+  } catch (err) {
+    statut(`Échec de la vérification : ${err.message}`, true);
+  } finally { b.disabled = false; }
+}
+
 // Remplace les données de la page par celles que renvoie le serveur.
 function appliquer(d) {
+  if (d.maturite_active) activerMaturite();
   emissions = preparer(d.emissions);
   if (!emissions.some(e => e.id === etat.ouverte)) etat.ouverte = null;
   remplirFiltres(); chiffres(); rendre(); journal(d.arbitrages);
