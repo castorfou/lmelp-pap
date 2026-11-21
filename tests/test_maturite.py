@@ -4,6 +4,8 @@ de passage d'un niveau à l'autre (glossaire, *maturité d'un enregistrement*).
 Le réseau est simulé par une session factice, Mongo par mongomock.
 """
 
+import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,12 +17,16 @@ from lmelp_pap.maturite import (
     NIVEAUX,
     Depot,
     Enregistrement,
+    RapatriementError,
+    RapatriementInterrompuError,
     Verification,
     appliquer,
     classer,
     integraux,
     maturite_emission,
     meilleur,
+    rapatrier,
+    retenu,
     verifier,
 )
 
@@ -263,3 +269,212 @@ def test_meilleur_rend_l_enregistrement_le_plus_avance() -> None:
     assert meilleur([]) is None
     rapatrie = enregistrement("rapatrie")
     assert meilleur([enregistrement("localise"), rapatrie]) == rapatrie
+
+
+# --- rapatrier : télécharger l'intégral sur le NAS --------------------------
+
+M4A = "https://media.radiofrance-podcast.net/podcast09/14007-02.03.2008-27.m4a"
+MP3 = "https://media.radiofrance-podcast.net/podcast09/14007-02.03.2008-22.mp3"
+SON = b"ID3" + bytes(range(256)) * 40
+EMPREINTE = hashlib.sha256(SON).hexdigest()
+
+
+def telechargeable(url: str = M4A) -> Enregistrement:
+    return replace(enregistrement("telechargeable"), url=url)
+
+
+class Flux:
+    """Une réponse ``GET`` en flux : des morceaux, puis éventuellement une
+    coupure."""
+
+    def __init__(
+        self, statut: int = 200, coupure: bool = False, longueur: int | None = None
+    ):
+        self.status_code = statut
+        self.coupure = coupure
+        self.headers = {"Content-Length": str(longueur)} if longueur else {}
+
+    def iter_content(self, chunk_size: int = 1) -> Any:
+        yield SON[:1000]
+        if self.coupure:
+            raise requests.ConnectionError("coupure")
+        yield SON[1000:]
+
+    def close(self) -> None:
+        pass
+
+
+class SessionFlux:
+    def __init__(self, reponse: Flux | None = None):
+        self.reponse = reponse or Flux()
+        self.demandes: list[tuple[str, dict[str, Any]]] = []
+
+    def get(self, url: str, **options: Any) -> Flux:
+        self.demandes.append((url, options))
+        return self.reponse
+
+
+def test_retenu_prefere_le_m4a() -> None:
+    assert retenu([telechargeable(MP3), telechargeable(M4A)]) == telechargeable(M4A)
+    assert retenu([telechargeable(MP3)]) == telechargeable(MP3)
+    assert retenu([]) is None
+    assert retenu([enregistrement("localise")]) is None
+
+
+def test_rapatrier_ecrit_le_fichier_par_annee_et_passe_a_rapatrie(
+    tmp_path: Any,
+) -> None:
+    session = SessionFlux()
+    resultat = rapatrier(telechargeable(), tmp_path, session, AUJOURDHUI)
+
+    fichier = tmp_path / "2008" / "14007-02.03.2008-27.m4a"
+    assert fichier.read_bytes() == SON
+    assert resultat.niveau == "rapatrie"
+    assert resultat.entrees["rapatrie"] == AUJOURDHUI
+    assert resultat.entrees["telechargeable"] == HIER
+    assert resultat.fichier == "2008/14007-02.03.2008-27.m4a"
+    assert resultat.sha256 == EMPREINTE
+    assert resultat.taille == len(SON)
+    assert not list(tmp_path.rglob("*.part"))
+    url, options = session.demandes[0]
+    assert url == M4A
+    assert options["stream"] is True
+    assert "lmelp-pap" in options["headers"]["User-Agent"]
+
+
+def test_un_fichier_deja_la_avec_la_bonne_empreinte_n_est_pas_retelecharge(
+    tmp_path: Any,
+) -> None:
+    (tmp_path / "2008").mkdir()
+    (tmp_path / "2008" / "14007-02.03.2008-27.m4a").write_bytes(SON)
+    deja = replace(
+        telechargeable(), fichier="2008/14007-02.03.2008-27.m4a", sha256=EMPREINTE
+    )
+    session = SessionFlux()
+    resultat = rapatrier(deja, tmp_path, session, AUJOURDHUI)
+    assert session.demandes == []
+    assert resultat.niveau == "rapatrie"
+
+
+def test_un_fichier_a_la_mauvaise_empreinte_est_retelecharge(tmp_path: Any) -> None:
+    (tmp_path / "2008").mkdir()
+    (tmp_path / "2008" / "14007-02.03.2008-27.m4a").write_bytes(b"abime")
+    deja = replace(
+        telechargeable(), fichier="2008/14007-02.03.2008-27.m4a", sha256=EMPREINTE
+    )
+    session = SessionFlux()
+    rapatrier(deja, tmp_path, session, AUJOURDHUI)
+    assert len(session.demandes) == 1
+    assert (tmp_path / "2008" / "14007-02.03.2008-27.m4a").read_bytes() == SON
+
+
+def test_une_coupure_ne_laisse_aucun_fichier(tmp_path: Any) -> None:
+    with pytest.raises(requests.ConnectionError):
+        rapatrier(
+            telechargeable(),
+            tmp_path,
+            SessionFlux(Flux(coupure=True)),
+            AUJOURDHUI,
+            attendre=_sans_pause,
+        )
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+def test_une_url_qui_ne_repond_pas_200_echoue_sans_fichier(tmp_path: Any) -> None:
+    with pytest.raises(RapatriementError, match="404"):
+        rapatrier(telechargeable(), tmp_path, SessionFlux(Flux(404)), AUJOURDHUI)
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+def test_seul_un_telechargeable_se_rapatrie(tmp_path: Any) -> None:
+    with pytest.raises(RapatriementError, match="localise"):
+        rapatrier(enregistrement("localise"), tmp_path, SessionFlux(), AUJOURDHUI)
+
+
+def test_le_depot_garde_fichier_empreinte_et_taille(depot: Depot) -> None:
+    rapatrie = replace(
+        enregistrement("rapatrie"), fichier="2008/a.m4a", sha256="ab", taille=3
+    )
+    depot.enregistrer(rapatrie)
+    assert depot.tous() == [rapatrie]
+
+
+# --- second tour : tentatives, progression, arrêt, échec mémorisé ------------
+
+
+class SessionSuite:
+    """Une réponse (ou une exception à lever) par appel, dans l'ordre."""
+
+    def __init__(self, *reponses: Any):
+        self.reponses = list(reponses)
+        self.appels = 0
+
+    def get(self, url: str, **options: Any) -> Any:
+        self.appels += 1
+        reponse = self.reponses.pop(0)
+        if isinstance(reponse, Exception):
+            raise reponse
+        return reponse
+
+
+def _sans_pause(_: float) -> None:
+    pass
+
+
+def test_un_echec_passager_est_retente(tmp_path: Any) -> None:
+    session = SessionSuite(requests.ReadTimeout("lent"), Flux(coupure=True), Flux())
+    resultat = rapatrier(
+        telechargeable(), tmp_path, session, AUJOURDHUI, attendre=_sans_pause
+    )
+    assert session.appels == 3
+    assert resultat.niveau == "rapatrie"
+    assert (tmp_path / "2008" / "14007-02.03.2008-27.m4a").read_bytes() == SON
+
+
+def test_au_bout_de_trois_essais_l_echec_remonte(tmp_path: Any) -> None:
+    session = SessionSuite(*[requests.ReadTimeout("lent")] * 3)
+    with pytest.raises(requests.ReadTimeout):
+        rapatrier(telechargeable(), tmp_path, session, AUJOURDHUI, attendre=_sans_pause)
+    assert session.appels == 3
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+def test_un_statut_http_n_est_pas_retente(tmp_path: Any) -> None:
+    session = SessionSuite(Flux(404))
+    with pytest.raises(RapatriementError):
+        rapatrier(telechargeable(), tmp_path, session, AUJOURDHUI, attendre=_sans_pause)
+    assert session.appels == 1
+
+
+def test_la_progression_suit_les_octets_recus(tmp_path: Any) -> None:
+    vus: list[tuple[int, int | None]] = []
+    rapatrier(
+        telechargeable(),
+        tmp_path,
+        SessionFlux(Flux(longueur=len(SON))),
+        AUJOURDHUI,
+        progres=lambda recus, total: vus.append((recus, total)),
+    )
+    assert vus[-1] == (len(SON), len(SON))
+    assert vus[0][0] == 1000
+
+
+def test_arreter_coupe_le_telechargement_sans_laisser_de_fichier(
+    tmp_path: Any,
+) -> None:
+    with pytest.raises(RapatriementInterrompuError):
+        rapatrier(
+            telechargeable(), tmp_path, SessionFlux(), AUJOURDHUI, arreter=lambda: True
+        )
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+def test_l_echec_d_un_rapatriement_se_memorise(depot: Depot) -> None:
+    echoue = replace(telechargeable(), echec=Verification(AUJOURDHUI, "net", "lent"))
+    depot.enregistrer(echoue)
+    assert depot.tous() == [echoue]
+
+
+def test_un_rapatriement_reussi_efface_l_echec(tmp_path: Any) -> None:
+    echoue = replace(telechargeable(), echec=Verification(AUJOURDHUI, "net", "lent"))
+    assert rapatrier(echoue, tmp_path, SessionFlux(), AUJOURDHUI).echec is None

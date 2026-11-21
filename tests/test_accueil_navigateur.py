@@ -84,8 +84,14 @@ def navigateur() -> Iterator[Any]:
 
 
 def _ouvrir(
-    navigateur: Any, donnees: dict[str, Any] | None = None, sombre: bool = False
+    navigateur: Any,
+    donnees: dict[str, Any] | None = None,
+    sombre: bool = False,
+    api: dict[str, Any] | None = None,
 ) -> Any:
+    """L'accueil servi hors ligne. ``api`` : des routes de plus, chemin →
+    fonction qui reçoit la requête et rend la réponse JSON ; ``/api/donnees``
+    peut y être remplacé."""
     page = navigateur.new_page(
         viewport={"width": 1280, "height": 1000},
         color_scheme="dark" if sombre else "light",
@@ -97,6 +103,9 @@ def _ouvrir(
         url = route.request.url
         if url.split("#")[0] == ADRESSE:
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
+        elif api and (chemin := "/" + url.split("/", 3)[-1]) in api:
+            reponse = api[chemin](route.request)
+            route.fulfill(body=json.dumps(reponse), content_type="application/json")
         elif url.endswith("/api/donnees"):
             route.fulfill(body=corps, content_type="application/json")
         else:
@@ -210,7 +219,7 @@ def test_la_page_dans_lmelp_n_a_ni_sources_ni_anciennete(navigateur: Any) -> Non
 
 def test_sans_action_pas_de_colonne_action(navigateur: Any) -> None:
     page = _ouvrir(navigateur)
-    page.locator('.compteur[data-etat="telechargeable"]').click()
+    page.locator('.compteur[data-etat="localise"]').click()
     entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
     assert "Action" not in entetes
 
@@ -238,3 +247,219 @@ def test_en_sombre_le_fond_est_sombre_et_les_etats_gardent_leur_couleur(
         )
 
     assert couleur(sombre) == couleur(clair)
+
+
+def test_la_page_telechargeable_propose_telecharger(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
+    assert entetes[-1] == "Action"
+    lignes = page.locator("tbody tr")
+    assert lignes.first.get_by_role("button", name="Télécharger").count() == 1
+    assert lignes.first.locator("input[type=checkbox]").count() == 1
+    assert page.get_by_role("button", name="Télécharger : sélection (0)").count() == 1
+    total = _comptes(_donnees())["telechargeable"]
+    assert page.get_by_role("button", name=f"Télécharger : tout ({total})").count()
+
+
+def test_telecharger_envoie_les_emissions_et_notifie(navigateur: Any) -> None:
+    donnees = _donnees()
+    envoyees: list[Any] = []
+    apres = json.loads(json.dumps(donnees))
+    rapatriee = next(e for e in apres["emissions"] if e["maturite"] == "telechargeable")
+    rapatriee["maturite"] = "rapatrie"
+    lectures = {"n": 0}
+
+    def donnees_api(requete: Any) -> Any:
+        lectures["n"] += 1
+        return donnees if lectures["n"] == 1 else apres
+
+    def rapatriements(requete: Any) -> Any:
+        if requete.method == "POST":
+            envoyees.append(json.loads(requete.post_data))
+            return {
+                "en_cours": True,
+                "faites": 0,
+                "total": 1,
+                "bilan": None,
+                "en_cours_sur": None,
+                "erreurs": [],
+            }
+        return {
+            "en_cours": False,
+            "faites": 1,
+            "total": 1,
+            "en_cours_sur": None,
+            "bilan": {"rapatries": 1, "deja_la": 0, "echecs": 0},
+            "erreurs": [],
+        }
+
+    page = _ouvrir(
+        navigateur,
+        api={"/api/donnees": donnees_api, "/api/rapatriements": rapatriements},
+    )
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{rapatriee["id"]}"]')
+    ligne.get_by_role("button", name="Télécharger").click()
+
+    page.locator("#toast", has_text="1 rapatrié").wait_for()
+    assert envoyees == [{"emissions": [rapatriee["id"]]}]
+    assert "rapatrié 1→2" in page.locator("#toast").inner_text()
+    assert page.locator(f'tbody tr[data-id="{rapatriee["id"]}"]').count() == 0
+
+
+def test_telecharger_la_selection(navigateur: Any) -> None:
+    envoyees: list[Any] = []
+
+    def rapatriements(requete: Any) -> Any:
+        if requete.method == "POST":
+            envoyees.append(json.loads(requete.post_data))
+        return {
+            "en_cours": False,
+            "faites": 2,
+            "total": 2,
+            "en_cours_sur": None,
+            "bilan": {"rapatries": 2, "deja_la": 0, "echecs": 0},
+            "erreurs": [],
+        }
+
+    page = _ouvrir(navigateur, api={"/api/rapatriements": rapatriements})
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    cases = page.locator("tbody input[type=checkbox]")
+    cases.nth(0).check()
+    cases.nth(1).check()
+    page.get_by_role("button", name="Télécharger : sélection (2)").click()
+    page.locator("#toast", has_text="2 rapatriés").wait_for()
+    assert page.get_by_role("button", name="Télécharger : sélection (0)").count()
+    assert page.locator("tbody input[type=checkbox]:checked").count() == 0
+    assert len(envoyees[0]["emissions"]) == 2
+
+
+EN_COURS = {
+    "en_cours": True,
+    "faites": 3,
+    "total": 12,
+    "en_cours_sur": "2008-03-02",
+    "octets": 210_000_000,
+    "fichier_octets": 35_000_000,
+    "fichier_total": 70_000_000,
+    "debut": "2026-11-21T09:00:00+01:00",
+    "arrete": False,
+    "bilan": None,
+    "erreurs": [],
+}
+FINI_AVEC_ECHEC = {
+    **EN_COURS,
+    "en_cours": False,
+    "faites": 12,
+    "en_cours_sur": None,
+    "bilan": {"rapatries": 11, "deja_la": 0, "echecs": 1},
+    "erreurs": [{"emission": "1980-02-24", "detail": "Read timed out."}],
+}
+
+
+def test_un_lot_en_cours_s_affiche_dans_un_bandeau_sur_toutes_les_pages(
+    navigateur: Any,
+) -> None:
+    arrets: list[str] = []
+
+    def arret(requete: Any) -> Any:
+        arrets.append(requete.method)
+        return {**EN_COURS, "arrete": True}
+
+    page = _ouvrir(
+        navigateur,
+        api={
+            "/api/rapatriements": lambda r: EN_COURS,
+            "/api/rapatriements/arret": arret,
+        },
+    )
+    bandeau = page.locator("#bandeau")
+    bandeau.wait_for()
+    texte = bandeau.inner_text()
+    assert "3 / 12" in texte
+    assert "2008-03-02" in texte
+    assert "50 %" in texte
+    assert "210 Mo" in texte
+
+    page.locator('.compteur[data-etat="localise"]').click()
+    assert page.locator("#bandeau").is_visible()
+
+    page.get_by_role("button", name="Arrêter").click()
+    page.locator("#bandeau", has_text="arrêt demandé").wait_for()
+    assert arrets == ["POST"]
+
+
+def test_un_lot_fini_garde_ses_erreurs_jusqu_a_fermeture(navigateur: Any) -> None:
+    page = _ouvrir(navigateur, api={"/api/rapatriements": lambda r: FINI_AVEC_ECHEC})
+    bandeau = page.locator("#bandeau")
+    bandeau.wait_for()
+    texte = bandeau.inner_text()
+    assert "11 rapatriés" in texte
+    assert "1980-02-24" in texte
+    assert "Read timed out." in texte
+
+    page.get_by_role("button", name="Fermer").click()
+    assert page.locator("#bandeau").count() == 0
+    page.reload()
+    page.locator(".compteur").first.wait_for()
+    page.wait_for_timeout(300)
+    assert page.locator("#bandeau").count() == 0
+
+
+def test_l_echec_d_une_emission_s_affiche_sur_sa_ligne(navigateur: Any) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "telechargeable")
+    cible["echec_rapatriement"] = {
+        "date": "2026-11-21T09:23:00+01:00",
+        "detail": "Read timed out.",
+    }
+    page = _ouvrir(navigateur, donnees)
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    assert "échec" in ligne.inner_text()
+    assert "Read timed out." in ligne.inner_text()
+
+
+def test_pendant_un_lot_la_selection_est_videe(navigateur: Any) -> None:
+    page = _ouvrir(navigateur, api={"/api/rapatriements": lambda r: EN_COURS})
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    page.locator("tbody input[type=checkbox]").nth(0).check()
+    page.get_by_role("button", name="Télécharger : sélection (1)").click()
+    page.get_by_role("button", name="Télécharger : sélection (0)").wait_for(
+        timeout=3000
+    )
+    assert page.locator("tbody input[type=checkbox]:checked").count() == 0
+
+
+def test_le_suivi_flotte_en_haut_a_droite_sans_decaler_la_page(
+    navigateur: Any,
+) -> None:
+    sans = _ouvrir(navigateur)
+    haut_sans = sans.locator(".compteurs").bounding_box()["y"]
+    page = _ouvrir(navigateur, api={"/api/rapatriements": lambda r: EN_COURS})
+    panneau = page.locator("#bandeau")
+    panneau.wait_for()
+
+    assert panneau.evaluate("b => getComputedStyle(b).position") == "fixed"
+    boite = panneau.bounding_box()
+    assert boite["x"] + boite["width"] >= 1280 - 40
+    assert boite["width"] <= 420
+    assert boite["y"] < 120
+    assert page.locator(".compteurs").bounding_box()["y"] == haut_sans
+
+    page.get_by_role("button", name="Replier").click()
+    assert "50 %" not in panneau.inner_text()
+    assert "3 / 12" in panneau.inner_text()
+    page.get_by_role("button", name="Déplier").click()
+    assert "50 %" in panneau.inner_text()
+
+
+def test_pap_en_haut_a_gauche_ramene_a_l_accueil(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('#histo rect.zone[data-annee="1987"]').click()
+    page.locator('.compteur[data-etat="localise"]').click()
+    page.get_by_role("link", name="pap").click()
+    page.locator("#frise").wait_for()
+    assert page.locator("#frise .annee").count() == 2026 - 1955 + 1
+    assert "etat=" not in page.url
