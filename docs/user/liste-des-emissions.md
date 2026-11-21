@@ -386,7 +386,7 @@ Pour vérifier ce qu'on entend, le lecteur montre aussi :
 - **page radiofrance.fr ↗**, un lien par fiche radiofrance.fr de l'émission, qui s'ouvre dans un nouvel onglet ; sans fiche connue, pas de lien ;
 - la diffusion vue par l'**Open API Radio France**, lue à l'ouverture du lecteur : titre, chapô, présentation (animateur), équipe (critiques) et invités. Il faut la clé `RADIOFRANCE_API_TOKEN` dans l'environnement de l'appli (`.env`). Sans clé, sans diffusion du Masque ce jour-là ou si l'API ne répond pas, une ligne le dit ; l'écoute et la qualification restent possibles.
 
-Les données de l'API ne sont gardées que dans la page ouverte : rien n'est écrit sur disque, en base ni dans les logs, qui ne notent que l'appel, sa durée et son résultat (`api radiofrance 2024-02-11 : trouvée (0 s)`, `introuvable`, `pas de clé`, `erreur HTTP 403`). Chaque ouverture coûte une à trois requêtes, sur un quota de 1 000 par jour.
+Les données de l'API ne sont gardées que dans la page ouverte et, une heure au plus, dans la mémoire de l'appli : rien n'est écrit sur disque, en base ni dans les logs, qui ne notent que l'appel, sa durée et son résultat (`api radiofrance 2024-02-11 : trouvée (0 s)`, `introuvable`, `pas de clé`, `erreur HTTP 403`), ou « cache » quand la diffusion était déjà en mémoire (`trouvée (cache)`). Une lecture coûte une à trois requêtes, sur un quota de 1 000 par jour ; écouter puis mettre à disposition la même émission dans l'heure n'en coûte qu'une. Les URL que rend l'API sont sous `www.franceinter.fr` : la diffusion se reconnaît au chemin de sa page, quel que soit le domaine.
 
 La **qualification** juge l'enregistrement, pas l'émission : elle ne change ni l'émission ni son thème.
 
@@ -421,13 +421,15 @@ lmelp prend ensuite l'enregistrement à son rythme. Dès que la collection `epis
 
 Une mise à disposition est **refusée**, sans rien écrire, quand :
 
-- un fichier de même nom existe déjà dans le dossier de lmelp (rien n'est écrasé) ;
+- un fichier de même nom, mais d'un autre contenu (autre empreinte SHA-256), existe déjà dans le dossier de lmelp (rien n'est écrasé) ;
 - l'émission est déjà dans lmelp ;
 - l'émission n'a pas d'enregistrement qualifié, ou son fichier manque ou a changé depuis le rapatriement.
 
+Un fichier de même nom et de même empreinte que l'enregistrement est celui d'une mise à disposition interrompue après la copie (panne, redémarrage) : relancer la mise à disposition la termine, sans recopier le fichier (fiche écrite, passage à valide), et le journal le signale (« …, reprise : fichier déjà copié, même sha256 »).
+
 Les refus s'affichent en haut de la page, en rouge, avec l'émission et la raison, jusqu'à **✕** ; la notification donne le bilan et les compteurs changés (« 1 mis à disposition · 1 refus — qualifié 2→1 · valide 0→1 »).
 
-La **description** de la fiche suit le format de la description des épisodes de lmelp : « durée : 00:54:12 - Le Masque et la Plume - par : Jérôme Garcin - résumé - équipe : … - invités : … ». Chaque morceau vient de la première source qui le donne : la page radiofrance.fr de l'émission, puis l'API Radio France, puis la notice INA, sinon l'animateur déduit de la date. La durée est lue dans le fichier m4a, sinon dans les sources. L'API Radio France n'est interrogée que si `RADIOFRANCE_API_TOKEN` est défini (environnement ou `.env`), au moment de la mise à disposition ; ses données ne vont que dans la fiche, et son absence ou son échec n'empêche pas la mise à disposition. Le titre est « Le Masque et la Plume du 28 septembre 2014 » ; le type, `livres`.
+La **description** de la fiche suit le format des descriptions du flux RSS du Masque, que lmelp reprend dans ses épisodes : « durée : 00:54:12  - Le Masque et la Plume - par : Jérôme Garcin - résumé - équipe : … - invités : Arnaud Viviant Critique littéraire (Revue Regards), … » (deux espaces après la durée, chaque invité suivi de son rôle quand l'API le donne). Chaque morceau vient de la première source qui le donne : la page radiofrance.fr de l'émission, puis l'API Radio France, puis la notice INA, sinon l'animateur déduit de la date. La durée est lue dans le fichier m4a, sinon dans les sources. L'API Radio France n'est interrogée que si `RADIOFRANCE_API_TOKEN` est défini (environnement ou `.env`), au moment de la mise à disposition (ou reprise du cache d'une heure de l'écoute) ; ses données ne vont que dans la fiche, et son absence ou son échec, tracé dans le journal (`api radiofrance 2014-09-28 (mise à disposition) : erreur HTTP 403 (0 s)`), n'empêche pas la mise à disposition. Le titre est « Le Masque et la Plume du 28 septembre 2014 » ; le type, `livres`.
 
 ### Maturité des enregistrements
 
