@@ -6,7 +6,9 @@ depuis le cache, sans réseau, réécrit ses CSV et renvoie les données à jour
 
 API :
 
-- ``GET /`` : la page en mode arbitrage ;
+- ``GET /`` : l'accueil (histogramme, compteurs et frise par état, pages
+  d'état) ;
+- ``GET /liste`` : la page de la liste en mode arbitrage ;
 - ``GET /api/donnees`` : les données courantes ;
 - ``POST /api/arbitrages`` : enregistre un arbitrage sur une émission
   (``emission_id``, ``sorte`` : ``thème``, ``existence``, ``date``,
@@ -24,7 +26,8 @@ API :
   ``total``) et son ``bilan`` une fois finie.
 
 Avec un dépôt Mongo, chaque émission des données porte sa ``maturite`` (le
-niveau de son enregistrement le plus avancé, ou ``null``) et les données
+niveau de son enregistrement le plus avancé, ou ``null``), ``maturite_depuis``
+(la date d'entrée dans ce niveau) et les données
 ``maturite_active`` ; sans dépôt, la vérification répond 503.
 
 Chaque requête d'écriture renvoie les données à jour, comme ``GET /api/donnees``.
@@ -40,6 +43,7 @@ import threading
 from datetime import date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -66,7 +70,7 @@ from lmelp_pap.liste import (
     construire_liste,
     dates_candidates,
 )
-from lmelp_pap.maturite import Depot, integraux, maturite_emission, verifier
+from lmelp_pap.maturite import Depot, integraux, meilleur, verifier
 from lmelp_pap.page import construire_page, donnees_page
 
 
@@ -317,7 +321,13 @@ class Atelier:
                     enregistrement
                 )
             for e in emissions:
-                e["maturite"] = maturite_emission(par_emission.get(e["id"], []))
+                plus_avance = meilleur(par_emission.get(e["id"], []))
+                e["maturite"] = plus_avance.niveau if plus_avance else None
+                e["maturite_depuis"] = (
+                    plus_avance.entrees[plus_avance.niveau].isoformat()
+                    if plus_avance and plus_avance.niveau in plus_avance.entrees
+                    else None
+                )
             donnees["maturite_active"] = True
         return donnees
 
@@ -386,6 +396,11 @@ class Atelier:
         }
 
 
+def _ressource(nom: str) -> str:
+    """Un fichier livré avec le paquet (la page d'accueil)."""
+    return files("lmelp_pap").joinpath(nom).read_text(encoding="utf-8")
+
+
 def creer_serveur(
     cache: Path,
     sortie: Path,
@@ -407,6 +422,10 @@ def creer_serveur(
             if self.path == "/health":
                 self._json({"status": "ok"})
             elif self.path in ("/", "/index.html"):
+                self._repondre(
+                    _ressource("accueil.html").encode(), "text/html; charset=utf-8"
+                )
+            elif self.path == "/liste":
                 self._repondre(atelier.page().encode(), "text/html; charset=utf-8")
             elif self.path == "/api/donnees":
                 self._json(atelier.donnees())

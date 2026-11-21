@@ -268,8 +268,8 @@ def test_une_demande_invalide_est_refusee_sans_rien_ecrire(
     assert not (sortie / "arbitrages.csv").exists()
 
 
-def test_la_page_servie_porte_les_controles_d_arbitrage(url: str) -> None:
-    with urllib.request.urlopen(url) as r:
+def test_la_liste_servie_porte_les_controles_d_arbitrage(url: str) -> None:
+    with urllib.request.urlopen(f"{url}/liste") as r:
         page = r.read().decode()
 
     assert 'id="arbitrage"' in page

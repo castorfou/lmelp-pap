@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -138,3 +139,26 @@ def test_sans_mongo_la_maturite_est_absente(url_sans_mongo: str) -> None:
     with pytest.raises(urllib.error.HTTPError) as erreur:
         _post(f"{url_sans_mongo}/api/verifications")
     assert erreur.value.code == 503
+
+
+def _texte(url: str) -> str:
+    with urllib.request.urlopen(url) as r:
+        return str(r.read().decode())
+
+
+def test_l_accueil_est_sur_la_racine_et_la_liste_sur_liste(url: str) -> None:
+    assert 'id="accueil"' in _texte(f"{url}/")
+    assert 'id="lignes"' in _texte(f"{url}/liste")
+
+
+def test_sans_mongo_l_accueil_repond_aussi(url_sans_mongo: str) -> None:
+    assert 'id="accueil"' in _texte(f"{url_sans_mongo}/")
+
+
+def test_chaque_emission_porte_la_date_d_entree_dans_sa_maturite(url: str) -> None:
+    _post(f"{url}/api/verifications")
+    _attendre_fin(url)
+    emissions = {e["id"]: e for e in _get(f"{url}/api/donnees")["emissions"]}
+    aujourd_hui = datetime.now(UTC).date().isoformat()
+    assert emissions["2014-09-28"]["maturite_depuis"].startswith(aujourd_hui)
+    assert emissions["1967-01-01"]["maturite_depuis"] is None
