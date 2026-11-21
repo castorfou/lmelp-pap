@@ -3,8 +3,10 @@ la demande (écoute, mise à disposition).
 
 L'API (GraphQL, en-tête ``x-token``) n'a pas de requête par identifiant de
 diffusion : on lit les diffusions de France Inter du jour de l'émission (heure
-de Paris) et on retient celle dont l'URL est une page radiofrance.fr connue de
-l'émission, sinon la première du Masque et la Plume.
+de Paris) et on retient celle dont l'URL a le chemin d'une page radiofrance.fr
+connue de l'émission, sinon la première du Masque et la Plume. Les URL rendues
+par l'API sont sous ``www.franceinter.fr``, les pages connues de pap sous
+``www.radiofrance.fr`` : seuls les chemins sont comparés.
 
 Les CGU de l'API (art. 5.3) interdisent de stocker ou de mettre en cache ses
 données : ce module ne garde rien, ni sur disque ni en mémoire, et ses erreurs
@@ -15,13 +17,16 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import requests
 
 
 POINT = "https://openapi.radiofrance.fr/v1/graphql"
-MASQUE = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume"
+# Le chemin des pages du Masque : l'API les rend sous www.franceinter.fr,
+# pap les connaît sous www.radiofrance.fr ; on compare donc les chemins.
+MASQUE = "/franceinter/podcasts/le-masque-et-la-plume"
 # Les diffusions lues par requête, et le nombre de pages au plus pour un jour.
 PAR_PAGE = 100
 PAGES_MAX = 3
@@ -81,7 +86,7 @@ def lire_diffusion(
     radiofrance.fr de l'émission, de préférence), ou ``None`` ;
     ``ApiRadioFranceError`` si l'API échoue."""
     http: Any = session or requests.Session()
-    connues = set(pages)
+    connues = {_chemin(p) for p in pages}
     debut = int(datetime(jour.year, jour.month, jour.day, tzinfo=PARIS).timestamp())
     variables: dict[str, Any] = {
         "start": debut,
@@ -94,7 +99,7 @@ def lire_diffusion(
         edges = _diffusions(http, jeton, variables)
         for edge in edges:
             noeud = edge.get("node") or {}
-            if noeud.get("url") in connues:
+            if _chemin(noeud.get("url")) in connues:
                 return _diffusion(noeud)
             if du_masque is None and _du_masque(noeud):
                 du_masque = noeud
@@ -127,12 +132,16 @@ def _diffusions(http: Any, jeton: str, variables: dict[str, Any]) -> list[Any]:
     return list(connexion.get("edges") or [])
 
 
+def _chemin(url: str | None) -> str:
+    """Le chemin d'une URL, sans domaine ni « / » final."""
+    return urlsplit(url or "").path.rstrip("/")
+
+
 def _du_masque(noeud: dict[str, Any]) -> bool:
-    """La diffusion appartient au Masque et la Plume."""
-    show = (noeud.get("show") or {}).get("url") or ""
-    return show.rstrip("/") == MASQUE or (noeud.get("url") or "").startswith(
-        MASQUE + "/"
-    )
+    """La diffusion appartient au Masque et la Plume (quel que soit le
+    domaine de ses URL)."""
+    show = _chemin((noeud.get("show") or {}).get("url"))
+    return show == MASQUE or _chemin(noeud.get("url")).startswith(MASQUE + "/")
 
 
 def _diffusion(noeud: dict[str, Any]) -> Diffusion:

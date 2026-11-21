@@ -20,9 +20,9 @@ import pytest
 
 from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.maturite import Depot
-from lmelp_pap.radiofrance_api import MASQUE
 from tests.test_commande import _cache_rempli
 from tests.test_maturite import SON, Flux, Reponse, Session
+from tests.test_radiofrance_api import MASQUE_API
 
 
 class SessionComplete(Session):
@@ -810,9 +810,8 @@ class SessionAvecApi(SessionComplete):
     def post(self, adresse: str, **options: Any) -> Any:
         self.api.append(options)
         noeud = {
-            "url": "https://www.radiofrance.fr/franceinter/podcasts/"
-            "le-masque-et-la-plume/x-1",
-            "show": {"url": MASQUE},
+            "url": f"{MASQUE_API}/x-1",
+            "show": {"url": MASQUE_API},
             "published_date": str(
                 int(datetime(2014, 9, 28, 10, tzinfo=UTC).timestamp())
             ),

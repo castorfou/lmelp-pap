@@ -18,8 +18,13 @@ from lmelp_pap.radiofrance_api import (
 )
 
 
+# Les pages connues de pap sont sous www.radiofrance.fr ; l'API rend les
+# mêmes chemins sous www.franceinter.fr.
 MASQUE = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume"
+MASQUE_API = "https://www.franceinter.fr/franceinter/podcasts/le-masque-et-la-plume"
+AUTRE_API = "https://www.franceinter.fr/franceinter/podcasts/le-7-9"
 PAGE = f"{MASQUE}/aliene-7557327"
+PAGE_API = f"{MASQUE_API}/aliene-7557327"
 JOUR = date(2024, 3, 24)
 
 
@@ -48,7 +53,7 @@ class SessionApi:
 
 
 def _noeud(
-    url: str, show: str = MASQUE, personnalites: list[Any] | None = None
+    url: str, show: str = MASQUE_API, personnalites: list[Any] | None = None
 ) -> dict[str, Any]:
     return {
         "id": url.rsplit("-", 1)[-1],
@@ -71,9 +76,9 @@ def _page(*noeuds: dict[str, Any]) -> ReponseGraphQL:
 
 
 def test_trouve_la_diffusion_par_l_url_de_sa_page() -> None:
-    autre = _noeud("https://www.radiofrance.fr/franceinter/podcasts/le-7-9/x-1", "")
+    autre = _noeud(f"{AUTRE_API}/x-1", f"{AUTRE_API}/")
     voulue = _noeud(
-        PAGE,
+        PAGE_API,
         personnalites=[
             _personne("Jérôme Garcin", "staff", "Producteur"),
             _personne("Arnaud Viviant", "producer"),
@@ -88,7 +93,7 @@ def test_trouve_la_diffusion_par_l_url_de_sa_page() -> None:
     assert diffusion == Diffusion(
         titre="Aliène",
         resume="Le résumé de la diffusion.",
-        url=PAGE,
+        url=PAGE_API,
         animateurs=(Personnalite("Arnaud Viviant", None),),
         equipe=(Personnalite("Jérôme Garcin", "Producteur"),),
         invites=(Personnalite("Une Autrice", None),),
@@ -96,7 +101,7 @@ def test_trouve_la_diffusion_par_l_url_de_sa_page() -> None:
 
 
 def test_la_requete_porte_la_cle_et_le_jour_a_l_heure_de_paris() -> None:
-    session = SessionApi(_page(_noeud(PAGE)))
+    session = SessionApi(_page(_noeud(PAGE_API)))
 
     lire_diffusion(JOUR, [PAGE], "cle", session)
 
@@ -112,32 +117,39 @@ def test_la_requete_porte_la_cle_et_le_jour_a_l_heure_de_paris() -> None:
 
 
 def test_sans_page_connue_prend_la_diffusion_du_masque_du_jour() -> None:
-    autre = _noeud("https://www.radiofrance.fr/franceinter/podcasts/le-7-9/x-1", "")
-    session = SessionApi(_page(autre, _noeud(f"{MASQUE}/autre-2")))
+    autre = _noeud(f"{AUTRE_API}/x-1", f"{AUTRE_API}/")
+    session = SessionApi(_page(autre, _noeud(f"{MASQUE_API}/autre-2")))
 
     diffusion = lire_diffusion(JOUR, [], "cle", session)
 
     assert diffusion is not None
-    assert diffusion.url == f"{MASQUE}/autre-2"
+    assert diffusion.url == f"{MASQUE_API}/autre-2"
+
+
+def test_la_page_connue_l_emporte_sur_une_autre_diffusion_du_masque() -> None:
+    # le même jour, un extrait (podcast d'un livre) précède l'émission entière
+    extrait = _noeud(f"{MASQUE_API}/le-fondateur-1")
+    session = SessionApi(_page(extrait, _noeud(PAGE_API)))
+
+    diffusion = lire_diffusion(JOUR, [PAGE], "cle", session)
+
+    assert diffusion is not None and diffusion.url == PAGE_API
 
 
 def test_aucune_diffusion_du_masque_ce_jour_la() -> None:
-    autre = _noeud("https://www.radiofrance.fr/franceinter/podcasts/le-7-9/x-1", "")
+    autre = _noeud(f"{AUTRE_API}/x-1", f"{AUTRE_API}/")
     session = SessionApi(_page(autre))
 
     assert lire_diffusion(JOUR, [PAGE], "cle", session) is None
 
 
 def test_une_page_pleine_fait_lire_la_suivante() -> None:
-    pleine = [
-        _noeud(f"https://www.radiofrance.fr/franceinter/podcasts/x/y-{i}", "")
-        for i in range(100)
-    ]
-    session = SessionApi(_page(*pleine), _page(_noeud(PAGE)))
+    pleine = [_noeud(f"{AUTRE_API}/y-{i}", f"{AUTRE_API}/") for i in range(100)]
+    session = SessionApi(_page(*pleine), _page(_noeud(PAGE_API)))
 
     diffusion = lire_diffusion(JOUR, [PAGE], "cle", session)
 
-    assert diffusion is not None and diffusion.url == PAGE
+    assert diffusion is not None and diffusion.url == PAGE_API
     assert session.demandes[1]["json"]["variables"]["after"] == "c99"
 
 
