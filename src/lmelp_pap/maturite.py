@@ -106,10 +106,15 @@ def appliquer(
     return replace(existant, niveau=niveau, entrees=entrees, verification=verification)
 
 
+def meilleur(enregistrements: Iterable[Enregistrement]) -> Enregistrement | None:
+    """L'enregistrement le plus avancé, ou ``None`` sans enregistrement."""
+    return max(enregistrements, key=lambda e: NIVEAUX.index(e.niveau), default=None)
+
+
 def maturite_emission(enregistrements: Iterable[Enregistrement]) -> str | None:
     """La maturité d'une émission : celle de son enregistrement le plus avancé."""
-    rangs = [NIVEAUX.index(e.niveau) for e in enregistrements]
-    return NIVEAUX[max(rangs)] if rangs else None
+    plus_avance = meilleur(enregistrements)
+    return plus_avance.niveau if plus_avance else None
 
 
 class Depot:

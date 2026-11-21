@@ -20,6 +20,7 @@ from lmelp_pap.maturite import (
     classer,
     integraux,
     maturite_emission,
+    meilleur,
     verifier,
 )
 
@@ -256,3 +257,9 @@ def test_verifier_deux_fois_ne_duplique_rien(depot: Depot) -> None:
     assert seul.entrees == {"telechargeable": HIER}
     assert seul.verification is not None
     assert seul.verification.date == AUJOURDHUI
+
+
+def test_meilleur_rend_l_enregistrement_le_plus_avance() -> None:
+    assert meilleur([]) is None
+    rapatrie = enregistrement("rapatrie")
+    assert meilleur([enregistrement("localise"), rapatrie]) == rapatrie

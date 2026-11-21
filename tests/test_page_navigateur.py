@@ -714,3 +714,17 @@ def test_une_emission_dans_lmelp_est_dans_lmelp_quelle_que_soit_sa_maturite(
 
     page.select_option("#maturite", "lmelp")
     assert page.locator(".ligne").count() == 1
+
+
+def test_dans_l_appli_la_liste_ramene_a_l_accueil(
+    navigateur: sync_api.Browser, dossier: Path
+) -> None:
+    page = _ouvrir(
+        navigateur,
+        construire_page(dossier, arbitrage=True),
+        api={"emissions": donnees_page(dossier), "arbitrages": []},
+    )
+    lien = page.get_by_role("link", name="← Accueil")
+    assert lien.get_attribute("href") == "/"
+    publiee = _ouvrir(navigateur, construire_page(dossier))
+    assert publiee.get_by_role("link", name="← Accueil").count() == 0
