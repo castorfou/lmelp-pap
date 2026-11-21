@@ -39,6 +39,7 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 """
 
 import json
+import sys
 import threading
 import time
 import traceback
@@ -96,6 +97,14 @@ DOUTES_DE_DATE = ("désaccord de date", "jour inhabituel")
 
 # Période du fil de planification de la vérification des URL, en secondes.
 PLANIFICATION = 3600
+
+
+def journal(message: str) -> None:
+    """Une ligne horodatée dans les logs (sortie d'erreur, ``docker logs``)."""
+    horodatage = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    # un seul write : les lignes de deux fils ne se mêlent pas
+    sys.stderr.write(f"{horodatage} {message}\n")
+    sys.stderr.flush()
 
 
 class DemandeInvalideError(ValueError):
@@ -242,7 +251,9 @@ class Atelier:
         return etat
 
     def lancer_verification(
-        self, a_verifier: list[tuple[str, str]] | None = None
+        self,
+        a_verifier: list[tuple[str, str]] | None = None,
+        origine: str = "manuelle",
     ) -> dict[str, Any]:
         """Lance en fond la vérification des URL d'intégral, sauf si une est
         déjà en cours ; rend son avancement. Sans liste, toutes les URL de la
@@ -254,13 +265,26 @@ class Atelier:
             with self._verrou:
                 a_verifier = integraux(self.sortie)
         urls = a_verifier
+        if self._verification.etat()["en_cours"]:
+            return self._verification.etat()
+        genre = "complète" if complete else "partielle"
+        journal(
+            f"vérification {origine}"
+            f"{'' if '(' in origine else f' ({genre})'} : {len(urls)} URL"
+        )
 
         def travail(t: Tache) -> dict[str, int]:
+            debut = time.monotonic()
             bilan = verifier(
                 urls, depot, self._session, progres=lambda n: t.maj(faites=n)
             )
             if complete:
                 depot.noter_verification(datetime.now(UTC))
+            journal(
+                f"vérification terminée en {round(time.monotonic() - debut)} s : "
+                f"{bilan['ok']} ok, {bilan['net']} mortes, "
+                f"{bilan['passager']} échecs passagers"
+            )
             return bilan
 
         return self._verification.lancer(len(urls), travail)
@@ -273,15 +297,23 @@ class Atelier:
             return None
         with self._verrou:
             a_verifier = integraux(self.sortie)
+        connues = {e.url for e in self.depot.tous()}
+        derniere = self.depot.derniere_verification()
+        maintenant = maintenant or datetime.now(UTC)
         genre, urls = verification_due(
-            a_verifier,
-            {e.url for e in self.depot.tous()},
-            self.depot.derniere_verification(),
-            maintenant or datetime.now(UTC),
-            self.intervalle,
+            a_verifier, connues, derniere, maintenant, self.intervalle
         )
-        if genre is not None:
-            self.lancer_verification(None if genre == "complete" else urls)
+        if genre == "complete":
+            raison = (
+                "jamais vérifiée"
+                if derniere is None
+                else "base vide"
+                if not connues
+                else f"dernière il y a {(maintenant - derniere).days} jours"
+            )
+            self.lancer_verification(None, f"automatique (complète : {raison})")
+        elif genre == "nouvelles":
+            self.lancer_verification(urls, "automatique (nouvelles URL)")
         return genre
 
     def _apres_reconstruction(self) -> None:
