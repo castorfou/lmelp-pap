@@ -18,6 +18,7 @@ from lmelp_pap.maturite import (
     Depot,
     Enregistrement,
     RapatriementError,
+    RapatriementInterrompuError,
     Verification,
     appliquer,
     classer,
@@ -286,9 +287,12 @@ class Flux:
     """Une réponse ``GET`` en flux : des morceaux, puis éventuellement une
     coupure."""
 
-    def __init__(self, statut: int = 200, coupure: bool = False):
+    def __init__(
+        self, statut: int = 200, coupure: bool = False, longueur: int | None = None
+    ):
         self.status_code = statut
         self.coupure = coupure
+        self.headers = {"Content-Length": str(longueur)} if longueur else {}
 
     def iter_content(self, chunk_size: int = 1) -> Any:
         yield SON[:1000]
@@ -367,7 +371,11 @@ def test_un_fichier_a_la_mauvaise_empreinte_est_retelecharge(tmp_path: Any) -> N
 def test_une_coupure_ne_laisse_aucun_fichier(tmp_path: Any) -> None:
     with pytest.raises(requests.ConnectionError):
         rapatrier(
-            telechargeable(), tmp_path, SessionFlux(Flux(coupure=True)), AUJOURDHUI
+            telechargeable(),
+            tmp_path,
+            SessionFlux(Flux(coupure=True)),
+            AUJOURDHUI,
+            attendre=_sans_pause,
         )
     assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
 
@@ -389,3 +397,84 @@ def test_le_depot_garde_fichier_empreinte_et_taille(depot: Depot) -> None:
     )
     depot.enregistrer(rapatrie)
     assert depot.tous() == [rapatrie]
+
+
+# --- second tour : tentatives, progression, arrêt, échec mémorisé ------------
+
+
+class SessionSuite:
+    """Une réponse (ou une exception à lever) par appel, dans l'ordre."""
+
+    def __init__(self, *reponses: Any):
+        self.reponses = list(reponses)
+        self.appels = 0
+
+    def get(self, url: str, **options: Any) -> Any:
+        self.appels += 1
+        reponse = self.reponses.pop(0)
+        if isinstance(reponse, Exception):
+            raise reponse
+        return reponse
+
+
+def _sans_pause(_: float) -> None:
+    pass
+
+
+def test_un_echec_passager_est_retente(tmp_path: Any) -> None:
+    session = SessionSuite(requests.ReadTimeout("lent"), Flux(coupure=True), Flux())
+    resultat = rapatrier(
+        telechargeable(), tmp_path, session, AUJOURDHUI, attendre=_sans_pause
+    )
+    assert session.appels == 3
+    assert resultat.niveau == "rapatrie"
+    assert (tmp_path / "2008" / "14007-02.03.2008-27.m4a").read_bytes() == SON
+
+
+def test_au_bout_de_trois_essais_l_echec_remonte(tmp_path: Any) -> None:
+    session = SessionSuite(*[requests.ReadTimeout("lent")] * 3)
+    with pytest.raises(requests.ReadTimeout):
+        rapatrier(telechargeable(), tmp_path, session, AUJOURDHUI, attendre=_sans_pause)
+    assert session.appels == 3
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+def test_un_statut_http_n_est_pas_retente(tmp_path: Any) -> None:
+    session = SessionSuite(Flux(404))
+    with pytest.raises(RapatriementError):
+        rapatrier(telechargeable(), tmp_path, session, AUJOURDHUI, attendre=_sans_pause)
+    assert session.appels == 1
+
+
+def test_la_progression_suit_les_octets_recus(tmp_path: Any) -> None:
+    vus: list[tuple[int, int | None]] = []
+    rapatrier(
+        telechargeable(),
+        tmp_path,
+        SessionFlux(Flux(longueur=len(SON))),
+        AUJOURDHUI,
+        progres=lambda recus, total: vus.append((recus, total)),
+    )
+    assert vus[-1] == (len(SON), len(SON))
+    assert vus[0][0] == 1000
+
+
+def test_arreter_coupe_le_telechargement_sans_laisser_de_fichier(
+    tmp_path: Any,
+) -> None:
+    with pytest.raises(RapatriementInterrompuError):
+        rapatrier(
+            telechargeable(), tmp_path, SessionFlux(), AUJOURDHUI, arreter=lambda: True
+        )
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+def test_l_echec_d_un_rapatriement_se_memorise(depot: Depot) -> None:
+    echoue = replace(telechargeable(), echec=Verification(AUJOURDHUI, "net", "lent"))
+    depot.enregistrer(echoue)
+    assert depot.tous() == [echoue]
+
+
+def test_un_rapatriement_reussi_efface_l_echec(tmp_path: Any) -> None:
+    echoue = replace(telechargeable(), echec=Verification(AUJOURDHUI, "net", "lent"))
+    assert rapatrier(echoue, tmp_path, SessionFlux(), AUJOURDHUI).echec is None

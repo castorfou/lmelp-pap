@@ -40,7 +40,8 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 
 import json
 import threading
-from datetime import date, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -73,6 +74,10 @@ from lmelp_pap.liste import (
 from lmelp_pap.maturite import (
     Depot,
     Enregistrement,
+    RapatriementError,
+    RapatriementInterrompuError,
+    Resultat,
+    Verification,
     integraux,
     meilleur,
     rapatrier,
@@ -107,6 +112,7 @@ class Tache:
         self._champs = champs
         self._etat: dict[str, Any] = self._repos()
         self._verrou = threading.Lock()
+        self._arret = threading.Event()
 
     def _repos(self) -> dict[str, Any]:
         return {
@@ -125,6 +131,15 @@ class Tache:
         with self._verrou:
             return dict(self._etat)
 
+    def arreter(self) -> dict[str, Any]:
+        """Demande l'arrêt de la tâche en cours ; rend l'avancement."""
+        self._arret.set()
+        return self.etat()
+
+    def arret_demande(self) -> bool:
+        """Vrai si l'arrêt a été demandé."""
+        return self._arret.is_set()
+
     def maj(self, **champs: Any) -> None:
         """Met à jour l'avancement (appelé depuis le fil de la tâche)."""
         with self._verrou:
@@ -138,7 +153,13 @@ class Tache:
                 if refuser:
                     raise TacheEnCoursError("une tâche est déjà en cours")
                 return dict(self._etat)
-            self._etat = {**self._repos(), "en_cours": True, "total": total}
+            self._etat = {
+                **self._repos(),
+                "en_cours": True,
+                "total": total,
+                "debut": datetime.now().astimezone().isoformat(),
+            }
+            self._arret.clear()
 
         def executer() -> None:
             bilan = None
@@ -171,7 +192,15 @@ class Atelier:
         self._session = session
         self.audios = audios or Path("data/raw/audios")
         self._verification = Tache()
-        self._rapatriement = Tache(en_cours_sur=None, erreurs=[])
+        self._rapatriement = Tache(
+            en_cours_sur=None,
+            erreurs=[],
+            octets=0,
+            fichier_octets=0,
+            fichier_total=None,
+            debut=None,
+            arrete=False,
+        )
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
         self.attestations = lire_cache(cache)
@@ -234,24 +263,63 @@ class Atelier:
         def travail(tache: Tache) -> dict[str, int]:
             bilan = {"rapatries": 0, "deja_la": 0, "echecs": 0}
             erreurs: list[dict[str, str]] = []
+            recus = 0  # octets des fichiers finis
             for n, enregistrement in enumerate(a_rapatrier, 1):
-                tache.maj(en_cours_sur=enregistrement.emission_id)
+                if tache.arret_demande():
+                    tache.maj(arrete=True)
+                    break
+                tache.maj(
+                    en_cours_sur=enregistrement.emission_id,
+                    fichier_octets=0,
+                    fichier_total=None,
+                )
+
+                def progres(octets: int, total: int | None, base: int = recus) -> None:
+                    tache.maj(
+                        fichier_octets=octets, fichier_total=total, octets=base + octets
+                    )
+
                 try:
                     avant = enregistrement.sha256
-                    fait = rapatrier(enregistrement, self.audios, self._session)
+                    fait = rapatrier(
+                        enregistrement,
+                        self.audios,
+                        self._session,
+                        progres=progres,
+                        arreter=tache.arret_demande,
+                    )
                     depot.enregistrer(fait)
+                    recus += fait.taille or 0
                     deja = bool(avant) and avant == fait.sha256
                     bilan["deja_la" if deja else "rapatries"] += 1
+                except RapatriementInterrompuError:
+                    tache.maj(arrete=True, octets=recus)
+                    break
                 except Exception as erreur:  # noqa: BLE001 — l'erreur va au bilan
                     bilan["echecs"] += 1
+                    detail = str(erreur) or type(erreur).__name__
                     erreurs.append(
-                        {"emission": enregistrement.emission_id, "detail": str(erreur)}
+                        {"emission": enregistrement.emission_id, "detail": detail}
                     )
-                tache.maj(faites=n, erreurs=list(erreurs))
+                    resultat: Resultat = (
+                        "net" if isinstance(erreur, RapatriementError) else "passager"
+                    )
+                    depot.enregistrer(
+                        replace(
+                            enregistrement,
+                            echec=Verification(datetime.now(UTC), resultat, detail),
+                        )
+                    )
+                tache.maj(faites=n, erreurs=list(erreurs), octets=recus)
             tache.maj(en_cours_sur=None)
             return bilan
 
         return self._rapatriement.lancer(len(a_rapatrier), travail, refuser=True)
+
+    def arreter_rapatriement(self) -> dict[str, Any]:
+        """Arrête le rapatriement en cours : le fichier en cours est abandonné,
+        ceux qui sont finis restent rapatriés."""
+        return self._rapatriement.arreter()
 
     def _depot(self) -> Depot:
         if self.depot is None:
@@ -418,6 +486,13 @@ class Atelier:
             for e in emissions:
                 plus_avance = meilleur(par_emission.get(e["id"], []))
                 e["maturite"] = plus_avance.niveau if plus_avance else None
+                echecs = [x.echec for x in par_emission.get(e["id"], []) if x.echec]
+                dernier = max(echecs, key=lambda v: v.date, default=None)
+                e["echec_rapatriement"] = (
+                    {"date": dernier.date.isoformat(), "detail": dernier.detail}
+                    if dernier
+                    else None
+                )
                 e["maturite_depuis"] = (
                     plus_avance.entrees[plus_avance.niveau].isoformat()
                     if plus_avance and plus_avance.niveau in plus_avance.entrees
@@ -540,6 +615,9 @@ def creer_serveur(
                     self._json(atelier.lancer_verification())
                 except MaturiteIndisponibleError as e:
                     self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+            if self.path == "/api/rapatriements/arret":
+                self._json(atelier.arreter_rapatriement())
                 return
             if self.path == "/api/rapatriements":
                 try:

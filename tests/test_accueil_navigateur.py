@@ -331,3 +331,89 @@ def test_telecharger_la_selection(navigateur: Any) -> None:
     page.get_by_role("button", name="Télécharger : sélection (2)").click()
     page.locator("#toast", has_text="2 rapatriés").wait_for()
     assert len(envoyees[0]["emissions"]) == 2
+
+
+EN_COURS = {
+    "en_cours": True,
+    "faites": 3,
+    "total": 12,
+    "en_cours_sur": "2008-03-02",
+    "octets": 210_000_000,
+    "fichier_octets": 35_000_000,
+    "fichier_total": 70_000_000,
+    "debut": "2026-11-21T09:00:00+01:00",
+    "arrete": False,
+    "bilan": None,
+    "erreurs": [],
+}
+FINI_AVEC_ECHEC = {
+    **EN_COURS,
+    "en_cours": False,
+    "faites": 12,
+    "en_cours_sur": None,
+    "bilan": {"rapatries": 11, "deja_la": 0, "echecs": 1},
+    "erreurs": [{"emission": "1980-02-24", "detail": "Read timed out."}],
+}
+
+
+def test_un_lot_en_cours_s_affiche_dans_un_bandeau_sur_toutes_les_pages(
+    navigateur: Any,
+) -> None:
+    arrets: list[str] = []
+
+    def arret(requete: Any) -> Any:
+        arrets.append(requete.method)
+        return {**EN_COURS, "arrete": True}
+
+    page = _ouvrir(
+        navigateur,
+        api={
+            "/api/rapatriements": lambda r: EN_COURS,
+            "/api/rapatriements/arret": arret,
+        },
+    )
+    bandeau = page.locator("#bandeau")
+    bandeau.wait_for()
+    texte = bandeau.inner_text()
+    assert "3 / 12" in texte
+    assert "2008-03-02" in texte
+    assert "50 %" in texte
+    assert "210 Mo" in texte
+
+    page.locator('.compteur[data-etat="localise"]').click()
+    assert page.locator("#bandeau").is_visible()
+
+    page.get_by_role("button", name="Arrêter").click()
+    page.locator("#bandeau", has_text="arrêt demandé").wait_for()
+    assert arrets == ["POST"]
+
+
+def test_un_lot_fini_garde_ses_erreurs_jusqu_a_fermeture(navigateur: Any) -> None:
+    page = _ouvrir(navigateur, api={"/api/rapatriements": lambda r: FINI_AVEC_ECHEC})
+    bandeau = page.locator("#bandeau")
+    bandeau.wait_for()
+    texte = bandeau.inner_text()
+    assert "11 rapatriés" in texte
+    assert "1980-02-24" in texte
+    assert "Read timed out." in texte
+
+    page.get_by_role("button", name="Fermer").click()
+    assert page.locator("#bandeau").count() == 0
+    page.reload()
+    page.locator(".compteur").first.wait_for()
+    page.wait_for_timeout(300)
+    assert page.locator("#bandeau").count() == 0
+
+
+def test_l_echec_d_une_emission_s_affiche_sur_sa_ligne(navigateur: Any) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "telechargeable")
+    cible["echec_rapatriement"] = {
+        "date": "2026-11-21T09:23:00+01:00",
+        "detail": "Read timed out.",
+    }
+    page = _ouvrir(navigateur, donnees)
+    page.locator('.compteur[data-etat="telechargeable"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    assert "échec" in ligne.inner_text()
+    assert "Read timed out." in ligne.inner_text()

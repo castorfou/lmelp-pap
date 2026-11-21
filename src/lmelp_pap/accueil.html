@@ -70,6 +70,14 @@
 
   /* Page d'un état */
   .retour { margin-bottom: 8px; }
+  #bandeau { background: var(--carte); border-bottom: 2px solid var(--telechargeable); padding: 8px 20px; display: grid; gap: 4px; }
+  .ligne-bandeau { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .ligne-bandeau button { margin-left: auto; }
+  .barre { height: 8px; background: var(--ligne); border-radius: 4px; overflow: hidden; }
+  .barre i { display: block; height: 100%; background: var(--telechargeable); transition: width .5s; }
+  .barre.fine { height: 4px; } .barre.fine i { background: var(--rapatrie); }
+  .erreurs { margin: 4px 0 0; padding-left: 18px; color: #b3261e; font-size: 13px; }
+  .echec { color: #b3261e; font-size: 12px; }
   .lot { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
   button.primaire { background: var(--entete); color: var(--entete-texte); border-color: var(--entete); }
   button:disabled { opacity: .5; cursor: wait; }
@@ -95,33 +103,93 @@ const ETAT = Object.fromEntries(ETATS.map(e => [e.cle, e]));
 // Les actions disponibles, par état : { libelle, lot, executer(emissions) }. La
 // colonne Action et les boutons de lot n'apparaissent que pour un état qui en a une.
 const ACTIONS = {
-  telechargeable: { libelle: "Télécharger", lot: true, executer: ids => tacheDeFond("/api/rapatriements", ids, "Téléchargement", b => `${b.rapatries + b.deja_la} rapatrié${b.rapatries + b.deja_la > 1 ? "s" : ""}`) },
+  telechargeable: { libelle: "Télécharger", lot: true, executer: ids => lancerRapatriement(ids) },
 };
-const pause = ms => new Promise(r => setTimeout(r, ms));
-// Lance une tâche de fond sur des émissions, suit son avancement, puis recharge
-// les données et notifie le changement des compteurs.
-async function tacheDeFond(chemin, ids, verbe, resume) {
-  const avant = compter(EMISSIONS);
-  document.querySelectorAll("#accueil button[data-action], #lot, #lot-selection").forEach(b => { b.disabled = true; });
+
+// ---------- Rapatriements : un lot tourne côté serveur, le bandeau le suit ----------
+// L'état vient de GET /api/rapatriements : le bandeau se retrouve après un
+// rechargement ou depuis un autre poste. Un lot fini garde son bilan et ses
+// erreurs jusqu'à « Fermer » (mémorisé par lot, dans ce navigateur).
+const SUIVI = { etat: null, precedent: null, avant: null, minuterie: null, arret: false };
+const CLE_FERME = "pap-bandeau-ferme";
+function lireFerme() { try { return localStorage.getItem(CLE_FERME); } catch { return null; } }
+function ecrireFerme(v) { try { localStorage.setItem(CLE_FERME, v); } catch { /* sans stockage */ } }
+const mo = n => `${Math.round((n || 0) / 1e6)} Mo`;
+function duree(s) {
+  if (!isFinite(s) || s < 0) return "…";
+  if (s < 90) return `${Math.round(s)} s`;
+  if (s < 5400) return `${Math.round(s / 60)} min`;
+  return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+}
+async function lancerRapatriement(ids) {
+  SUIVI.avant = compter(EMISSIONS);
   try {
-    let r = await fetch(chemin, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emissions: ids }) });
-    let t = await r.json();
+    const r = await fetch("/api/rapatriements", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emissions: ids }) });
+    const t = await r.json();
     if (!r.ok) throw new Error(t.erreur || r.statusText);
-    while (t.en_cours) {
-      toast(`${verbe} ${t.faites} / ${t.total}${t.en_cours_sur ? " : " + t.en_cours_sur : ""}…`, true);
-      await pause(1000);
-      t = await (await fetch(chemin)).json();
-    }
-    preparer(await (await fetch("/api/donnees")).json());
-    vue.choix.clear(); rendre();
-    const b = t.bilan || {};
-    const echecs = (t.erreurs || []).map(e => `${e.emission} (${e.detail})`).join(", ");
-    notifier(resume(b) + (b.echecs ? ` · ${b.echecs} échec(s) : ${echecs}` : ""), avant);
-  } catch (err) {
-    toast(`Échec : ${err.message}`);
+    SUIVI.etat = { en_cours: true }; SUIVI.arret = false;
+    vue.choix.clear();
+    suivre(t);
+  } catch (err) { toast(`Échec : ${err.message}`); }
+}
+async function suivre(t) {
+  if (!t) {
+    try { const r = await fetch("/api/rapatriements"); if (!r.ok) return; t = await r.json(); } catch { return; }
+  }
+  const etaitEnCours = !!(SUIVI.etat && SUIVI.etat.en_cours);
+  SUIVI.precedent = SUIVI.etat && SUIVI.etat.octets !== undefined ? SUIVI.etat : null;
+  SUIVI.etat = { ...t, quand: Date.now() };
+  afficherBandeau();
+  clearTimeout(SUIVI.minuterie);
+  if (t.en_cours) { SUIVI.minuterie = setTimeout(() => suivre(), 1000); return; }
+  SUIVI.arret = false;
+  if (etaitEnCours) {
+    const avant = SUIVI.avant || compter(EMISSIONS);
+    try { preparer(await (await fetch("/api/donnees")).json()); } catch { /* garde les données */ }
     rendre();
+    const b = t.bilan || {}, n = (b.rapatries || 0) + (b.deja_la || 0);
+    notifier(`${n} rapatrié${n > 1 ? "s" : ""}${b.echecs ? ` · ${b.echecs} échec(s)` : ""}`, avant);
+    SUIVI.avant = null;
   }
 }
+function afficherBandeau() {
+  const t = SUIVI.etat;
+  let b = $("bandeau");
+  const visible = t && t.total && (t.en_cours || (t.bilan && lireFerme() !== t.debut));
+  if (!visible) { if (b) { b.remove(); ajusterEcran(); } return; }
+  if (!b) { b = document.createElement("section"); b.id = "bandeau"; b.setAttribute("aria-live", "polite"); document.querySelector("header.app").after(b); }
+  if (t.en_cours) {
+    const fraction = t.fichier_total ? t.fichier_octets / t.fichier_total : 0;
+    const pct = t.fichier_total ? Math.round(fraction * 100) : null;
+    const p = SUIVI.precedent;
+    const debit = p && t.quand > p.quand ? Math.max(0, (t.octets - p.octets) / ((t.quand - p.quand) / 1000)) : null;
+    const ecoule = (Date.now() - Date.parse(t.debut)) / 1000, faits = t.faites + fraction;
+    const reste = faits > 0 ? ecoule / faits * (t.total - faits) : NaN;
+    b.innerHTML = `<div class="ligne-bandeau"><b>Téléchargement : ${t.faites} / ${t.total} émissions</b><span class="doux">${mo(t.octets)} reçus · reste ~${duree(reste)}</span>` +
+      `<button id="arreter" ${SUIVI.arret ? "disabled" : ""}>${SUIVI.arret ? "arrêt demandé…" : "Arrêter"}</button></div>` +
+      `<div class="barre"><i style="width:${Math.round(faits / t.total * 100)}%"></i></div>` +
+      `<div class="ligne-bandeau doux">En cours : ${esc(t.en_cours_sur || "…")}${pct !== null ? ` · ${pct} %` : ` · ${mo(t.fichier_octets)}`}${debit !== null ? ` · ${(debit / 1e6).toFixed(1).replace(".", ",")} Mo/s` : ""}</div>` +
+      `<div class="barre fine"><i style="width:${pct ?? 0}%"></i></div>`;
+    $("arreter").addEventListener("click", arreter);
+  } else {
+    const bl = t.bilan, n = bl.rapatries + bl.deja_la;
+    b.innerHTML = `<div class="ligne-bandeau"><b>Téléchargement terminé : ${n} rapatrié${n > 1 ? "s" : ""}${bl.echecs ? `, ${bl.echecs} échec(s)` : ""}${t.arrete ? " — arrêté" : ""}</b><span class="doux">${mo(t.octets)} reçus</span><button id="fermer-bandeau" aria-label="Fermer">Fermer</button></div>` +
+      (t.erreurs && t.erreurs.length ? `<ul class="erreurs">${t.erreurs.map(e => `<li><b>${esc(e.emission)}</b> : ${esc(e.detail)}</li>`).join("")}</ul>` : "");
+    $("fermer-bandeau").addEventListener("click", () => { ecrireFerme(t.debut); afficherBandeau(); });
+  }
+  ajusterEcran();
+}
+async function arreter() {
+  SUIVI.arret = true; afficherBandeau();
+  try { await fetch("/api/rapatriements/arret", { method: "POST" }); } catch { SUIVI.arret = false; afficherBandeau(); }
+}
+// La frise de l'accueil occupe la hauteur restante : à recalculer quand le
+// bandeau apparaît, change ou disparaît.
+function ajusterEcran() {
+  const ecran = document.querySelector(".ecran");
+  if (ecran) ecran.style.height = Math.max(400, innerHeight - ecran.getBoundingClientRect().top - 12) + "px";
+}
+
 const couleur = c => `var(--${c})`;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -141,6 +209,7 @@ function preparer(d) {
     id: e.id, date: e.date, annee: +e.date.slice(0, 4), titre: e.titre || "Sans titre",
     themes: e.themes || [], sources: [...new Set(e.attestations.map(a => a.source))],
     etat: etatDe(e),
+    echec: e.echec_rapatriement || null,
     depuis: e.maturite_depuis ? Math.max(0, Math.floor((Date.now() - Date.parse(e.maturite_depuis)) / JOUR_MS)) : null,
   }));
   const fin = Math.max(new Date().getFullYear(), ...EMISSIONS.map(e => e.annee));
@@ -211,7 +280,7 @@ function accueil(racine) {
     <div class="compteurs">${ETATS.map(e => `<button class="compteur" data-etat="${e.cle}" style="border-top-color:${couleur(e.cle)}"><span class="n">${n[e.cle]}</span>${e.nom}<br><span class="action">${e.action ? "→ " + e.action : "lecture seule"}</span></button>`).join("")}</div></div>
     <div id="frise"></div></div>`;
   const ecran = racine.querySelector(".ecran"), frise = $("frise");
-  ecran.style.height = Math.max(400, innerHeight - ecran.getBoundingClientRect().top - 12) + "px";
+  ajusterEcran();
   $("effacer-annee")?.addEventListener("click", () => { vue.annee = null; rendre(); });
   const repos = () => vue.annee ? ` — ${vues.length} émission(s) en ${vue.annee}` : " — survoler une année pour s'y rendre, cliquer pour filtrer";
   const dessiner = () => {
@@ -250,7 +319,7 @@ function accueil(racine) {
 function colonnes(cle) {
   const c = [
     { k: "date", t: "Date", v: e => e.date, h: e => e.date },
-    { k: "titre", t: "Titre", v: e => e.titre.toLowerCase(), h: e => esc(e.titre) },
+    { k: "titre", t: "Titre", v: e => e.titre.toLowerCase(), h: e => esc(e.titre) + (e.echec ? `<div class="echec">échec le ${new Date(e.echec.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ")} : ${esc(e.echec.detail)}</div>` : "") },
     { k: "themes", t: "Thèmes", v: e => e.themes.join(","), h: e => `<span class="doux">${esc(e.themes.join(", "))}</span>` },
   ];
   if (cle !== "lmelp") {
@@ -322,7 +391,7 @@ function rendre() {
 addEventListener("resize", () => { if (!vue.etat) rendre(); });
 addEventListener("hashchange", () => { lireAdresse(); rendre(); });
 
-fetch("/api/donnees").then(r => r.json()).then(d => { preparer(d); lireAdresse(); rendre(); })
+fetch("/api/donnees").then(r => r.json()).then(d => { preparer(d); lireAdresse(); rendre(); suivre(); })
   .catch(err => { $("accueil").innerHTML = `<div class="alerte">Serveur injoignable : ${esc(err.message)}</div>`; });
 </script>
 </body>

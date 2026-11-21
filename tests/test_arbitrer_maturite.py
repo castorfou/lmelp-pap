@@ -32,9 +32,11 @@ class SessionComplete(Session):
         self.attente = threading.Event()
         self.attente.set()
 
+        self.statut = 200
+
     def get(self, url: str, **options: Any) -> Flux:
         self.attente.wait(5)
-        return Flux()
+        return Flux(self.statut, longueur=len(SON))
 
 
 INTEGRAL_2014 = (
@@ -264,3 +266,43 @@ def test_sans_mongo_pas_de_rapatriement(url_sans_mongo: str) -> None:
     with pytest.raises(urllib.error.HTTPError) as erreur:
         _post_json(f"{url_sans_mongo}/api/rapatriements", {"emissions": ["x"]})
     assert erreur.value.code == 503
+
+
+def test_l_avancement_donne_les_octets_recus(url: str) -> None:
+    _verifier(url)
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    fin = _attendre_rapatriements(url)
+    assert fin["octets"] == len(SON)
+    assert fin["fichier_octets"] == len(SON)
+    assert fin["fichier_total"] == len(SON)
+    assert fin["debut"]
+    assert fin["arrete"] is False
+
+
+def test_arreter_un_lot(url: str, tmp_path: Path) -> None:
+    _verifier(url)
+    session = _session_du_serveur(url)
+    session.attente.clear()
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28", "2024-02-11"]})
+    _post_json(f"{url}/api/rapatriements/arret", {})
+    session.attente.set()
+
+    fin = _attendre_rapatriements(url)
+
+    assert fin["arrete"] is True
+    assert fin["bilan"]["rapatries"] == 0
+    assert [p for p in (tmp_path / "audios").rglob("*") if p.is_file()] == []
+    assert _maturites(_get(f"{url}/api/donnees"))["2014-09-28"] == "telechargeable"
+
+
+def test_un_echec_reste_visible_sur_l_emission(url: str) -> None:
+    _verifier(url)
+    _session_du_serveur(url).statut = 404
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
+    fin = _attendre_rapatriements(url)
+    assert fin["bilan"]["echecs"] == 1
+    emissions = {e["id"]: e for e in _get(f"{url}/api/donnees")["emissions"]}
+    echec = emissions["2014-09-28"]["echec_rapatriement"]
+    assert "404" in echec["detail"]
+    assert echec["date"]
+    assert emissions["2024-02-11"]["echec_rapatriement"] is None
