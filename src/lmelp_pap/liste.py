@@ -84,6 +84,17 @@ class Emission:
     # l'arbitrage d'existence « existe », qui se cumule avec les précédents
     arbitrage_existence: "Arbitrage | None" = None
 
+    def entieres(self, source: str) -> list[Attestation]:
+        """Les attestations de cette source qui décrivent l'émission entière
+        (pas un extrait)."""
+        return [a for a in self.attestations if a.source == source and not a.extrait]
+
+    @property
+    def pages_radiofrance(self) -> list[str]:
+        """Les pages radiofrance.fr de l'émission entière (attestations
+        ``radiofrance`` qui ne sont pas des extraits)."""
+        return [a.url for a in self.entieres("radiofrance") if a.url]
+
     @property
     def a_ecouter(self) -> bool:
         """L'émission est renvoyée à l'écoute : ses doutes sont « à écouter »."""

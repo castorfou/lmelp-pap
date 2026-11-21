@@ -15,7 +15,7 @@ import pytest
 
 from tests.test_arbitrer_maturite import _demarrer
 from tests.test_radiofrance_api import (
-    MASQUE,
+    MASQUE_API,
     ReponseGraphQL,
     SessionApi,
     _noeud,
@@ -24,7 +24,7 @@ from tests.test_radiofrance_api import (
 )
 
 
-PAGE_2024 = f"{MASQUE}/le-masque-et-la-plume-du-dimanche-11-fevrier-2024-2491269"
+PAGE_2024 = f"{MASQUE_API}/le-masque-et-la-plume-du-dimanche-11-fevrier-2024-2491269"
 
 
 @pytest.fixture(autouse=True)

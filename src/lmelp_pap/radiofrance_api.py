@@ -3,30 +3,47 @@ la demande (écoute, mise à disposition).
 
 L'API (GraphQL, en-tête ``x-token``) n'a pas de requête par identifiant de
 diffusion : on lit les diffusions de France Inter du jour de l'émission (heure
-de Paris) et on retient celle dont l'URL est une page radiofrance.fr connue de
-l'émission, sinon la première du Masque et la Plume.
+de Paris) et on retient celle dont l'URL a le chemin d'une page radiofrance.fr
+connue de l'émission, sinon la première du Masque et la Plume. Les URL rendues
+par l'API sont sous ``www.franceinter.fr``, les pages connues de pap sous
+``www.radiofrance.fr`` : seuls les chemins sont comparés.
 
-Les CGU de l'API (art. 5.3) interdisent de stocker ou de mettre en cache ses
-données : ce module ne garde rien, ni sur disque ni en mémoire, et ses erreurs
-ne disent que leur nature (statut HTTP, exception), jamais le contenu reçu.
+Les CGU de l'API (art. 5.3) interdisent de stocker ses données : rien n'en
+est écrit sur disque, en base ni dans les logs. Pour ménager le quota (1 000
+requêtes par jour), ``LecteurDiffusions`` garde au plus une heure, dans la
+mémoire du processus seulement, la diffusion lue pour une émission ; l'écoute
+et la mise à disposition le partagent. Les erreurs ne disent que leur nature
+(statut HTTP, exception), jamais le contenu reçu.
 """
 
-from collections.abc import Iterable
+import os
+import threading
+import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, NamedTuple
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import requests
 
 
 POINT = "https://openapi.radiofrance.fr/v1/graphql"
-MASQUE = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume"
+# Le chemin des pages du Masque : l'API les rend sous www.franceinter.fr,
+# pap les connaît sous www.radiofrance.fr ; on compare donc les chemins.
+MASQUE = "/franceinter/podcasts/le-masque-et-la-plume"
 # Les diffusions lues par requête, et le nombre de pages au plus pour un jour.
 PAR_PAGE = 100
 PAGES_MAX = 3
 DELAI = 15  # secondes
 PARIS = ZoneInfo("Europe/Paris")
+# La durée de vie d'une diffusion dans le cache en mémoire, en secondes.
+CACHE = 3600.0
+# La variable d'environnement de la clé de l'API.
+CLE = "RADIOFRANCE_API_TOKEN"
+# Les requêtes autorisées par jour.
+QUOTA = 1000
 
 # Les relations de ``personalitiesConnection`` : ``producer`` (l'animateur),
 # ``staff`` (l'équipe : critiques…), ``guest`` (les invités) ; ``tag``
@@ -50,8 +67,18 @@ REQUETE = """query ($start: Int, $end: Int, $first: Int, $after: String) {
 }"""
 
 
+def jeton() -> str | None:
+    """La clé de l'API (``RADIOFRANCE_API_TOKEN``), ou ``None``."""
+    return os.environ.get(CLE) or None
+
+
 class ApiRadioFranceError(RuntimeError):
-    """L'API n'a pas répondu, ou en erreur ; le message n'en dit que la nature."""
+    """L'API n'a pas répondu, ou en erreur ; le message n'en dit que la nature.
+    Levée par ``LecteurDiffusions``, elle porte ``requetes`` (les requêtes de
+    cette lecture) et ``du_jour`` (le compteur du jour)."""
+
+    requetes: int = 0
+    du_jour: int = 0
 
 
 @dataclass(frozen=True)
@@ -74,6 +101,93 @@ class Diffusion:
     invites: tuple[Personnalite, ...]
 
 
+class Lecture(NamedTuple):
+    """Une lecture de ``LecteurDiffusions`` : la diffusion (ou ``None``), vrai
+    si elle vient du cache, les requêtes HTTP faites pour elle et le compteur
+    des requêtes du jour (heure de Paris)."""
+
+    diffusion: Diffusion | None
+    cache: bool
+    requetes: int
+    du_jour: int
+
+
+def _aujourdhui() -> date:
+    return datetime.now(PARIS).date()
+
+
+class LecteurDiffusions:
+    """Lit la diffusion d'une émission, gardée ``duree`` secondes dans la
+    mémoire du processus (jamais ailleurs) ; une erreur n'est pas gardée.
+    Compte les requêtes HTTP faites dans la journée (heure de Paris, en
+    mémoire, remis à zéro au changement de jour), sur ``QUOTA``."""
+
+    def __init__(
+        self,
+        session: Any = None,
+        *,
+        duree: float = CACHE,
+        horloge: Callable[[], float] = time.monotonic,
+        aujourdhui: Callable[[], date] = _aujourdhui,
+    ):
+        self._session = session
+        self._duree = duree
+        self._horloge = horloge
+        self._aujourdhui = aujourdhui
+        self._memoire: dict[str, tuple[float, Diffusion | None]] = {}
+        self._jour: date | None = None
+        self._du_jour = 0
+        self._verrou = threading.Lock()
+
+    def _compter(self, n: int) -> int:
+        """Ajoute ``n`` requêtes au compteur du jour ; le rend."""
+        with self._verrou:
+            jour = self._aujourdhui()
+            if jour != self._jour:
+                self._jour, self._du_jour = jour, 0
+            self._du_jour += n
+            return self._du_jour
+
+    def lire(self, cle: str, jour: date, pages: Iterable[str], jeton: str) -> Lecture:
+        """La diffusion du Masque du ``jour`` pour l'émission ``cle`` (voir
+        ``lire_diffusion``), du cache s'il l'a. ``ApiRadioFranceError`` si
+        l'API échoue."""
+        with self._verrou:
+            maintenant = self._horloge()
+            self._memoire = {
+                c: v
+                for c, v in self._memoire.items()
+                if maintenant - v[0] < self._duree
+            }
+            gardee = self._memoire.get(cle)
+        if gardee is not None:
+            return Lecture(gardee[1], True, 0, self._compter(0))
+        compteur = _SessionComptee(self._session or requests.Session(), self)
+        try:
+            diffusion = lire_diffusion(jour, pages, jeton, compteur)
+        except ApiRadioFranceError as erreur:
+            erreur.requetes, erreur.du_jour = compteur.n, self._compter(0)
+            raise
+        with self._verrou:
+            self._memoire[cle] = (self._horloge(), diffusion)
+        return Lecture(diffusion, False, compteur.n, self._compter(0))
+
+
+class _SessionComptee:
+    """Une session HTTP qui compte ses requêtes, pour la lecture et pour le
+    jour."""
+
+    def __init__(self, http: Any, lecteur: LecteurDiffusions):
+        self._http = http
+        self._lecteur = lecteur
+        self.n = 0
+
+    def post(self, *args: Any, **options: Any) -> Any:
+        self.n += 1
+        self._lecteur._compter(1)
+        return self._http.post(*args, **options)
+
+
 def lire_diffusion(
     jour: date, pages: Iterable[str], jeton: str, session: Any = None
 ) -> Diffusion | None:
@@ -81,7 +195,7 @@ def lire_diffusion(
     radiofrance.fr de l'émission, de préférence), ou ``None`` ;
     ``ApiRadioFranceError`` si l'API échoue."""
     http: Any = session or requests.Session()
-    connues = set(pages)
+    connues = {_chemin(p) for p in pages}
     debut = int(datetime(jour.year, jour.month, jour.day, tzinfo=PARIS).timestamp())
     variables: dict[str, Any] = {
         "start": debut,
@@ -94,7 +208,7 @@ def lire_diffusion(
         edges = _diffusions(http, jeton, variables)
         for edge in edges:
             noeud = edge.get("node") or {}
-            if noeud.get("url") in connues:
+            if _chemin(noeud.get("url")) in connues:
                 return _diffusion(noeud)
             if du_masque is None and _du_masque(noeud):
                 du_masque = noeud
@@ -127,12 +241,16 @@ def _diffusions(http: Any, jeton: str, variables: dict[str, Any]) -> list[Any]:
     return list(connexion.get("edges") or [])
 
 
+def _chemin(url: str | None) -> str:
+    """Le chemin d'une URL, sans domaine ni « / » final."""
+    return urlsplit(url or "").path.rstrip("/")
+
+
 def _du_masque(noeud: dict[str, Any]) -> bool:
-    """La diffusion appartient au Masque et la Plume."""
-    show = (noeud.get("show") or {}).get("url") or ""
-    return show.rstrip("/") == MASQUE or (noeud.get("url") or "").startswith(
-        MASQUE + "/"
-    )
+    """La diffusion appartient au Masque et la Plume (quel que soit le
+    domaine de ses URL)."""
+    show = _chemin((noeud.get("show") or {}).get("url"))
+    return show == MASQUE or _chemin(noeud.get("url")).startswith(MASQUE + "/")
 
 
 def _diffusion(noeud: dict[str, Any]) -> Diffusion:

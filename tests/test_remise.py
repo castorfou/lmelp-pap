@@ -11,19 +11,8 @@ import pytest
 
 from lmelp_pap.liste import Attestation, Emission
 from lmelp_pap.maturite import Enregistrement
-from lmelp_pap.remise import (
-    RemiseError,
-    duree_du_fichier,
-    lire_api,
-    mettre_a_disposition,
-)
-from tests.test_radiofrance_api import (
-    ReponseGraphQL,
-    SessionApi,
-    _noeud,
-    _page,
-    _personne,
-)
+from lmelp_pap.radiofrance_api import Diffusion, Personnalite
+from lmelp_pap.remise import RemiseError, duree_du_fichier, mettre_a_disposition
 
 
 MAINTENANT = datetime(2026, 11, 21, 15, 0, tzinfo=UTC)
@@ -92,7 +81,7 @@ def test_mettre_a_disposition_copie_le_fichier_et_rend_valide(
     audios, lmelp = dossiers
     enregistrement = qualifie(audios)
 
-    valide, fiche = mettre_a_disposition(
+    valide, fiche, _ = mettre_a_disposition(
         enregistrement, emission(RADIOFRANCE), audios, lmelp, MAINTENANT
     )
 
@@ -128,6 +117,38 @@ def test_une_collision_de_nom_est_refusee_sans_rien_ecrire(
 
     assert (lmelp / "2014" / NOM).read_bytes() == b"le fichier de lmelp"
     assert [p.name for p in (lmelp / "2014").iterdir()] == [NOM]
+
+
+def test_apres_une_panne_un_fichier_deja_copie_termine_la_remise(
+    dossiers: tuple[Path, Path],
+) -> None:
+    # la copie a abouti, mais ni la fiche ni le passage à valide n'ont suivi
+    audios, lmelp = dossiers
+    (lmelp / "2014").mkdir(parents=True)
+    (lmelp / "2014" / NOM).write_bytes(SON)
+
+    valide, fiche, reprise = mettre_a_disposition(
+        qualifie(audios), emission(RADIOFRANCE), audios, lmelp, MAINTENANT
+    )
+
+    assert reprise is True
+    assert valide.niveau == "valide"
+    assert fiche["audio_rel_filename"] == f"2014/{NOM}"
+    assert fiche["sha256"] == EMPREINTE
+    assert (lmelp / "2014" / NOM).read_bytes() == SON
+    assert [p.name for p in (lmelp / "2014").iterdir()] == [NOM]
+
+
+def test_une_remise_ordinaire_n_est_pas_une_reprise(
+    dossiers: tuple[Path, Path],
+) -> None:
+    audios, lmelp = dossiers
+
+    *_, reprise = mettre_a_disposition(
+        qualifie(audios), emission(RADIOFRANCE), audios, lmelp, MAINTENANT
+    )
+
+    assert reprise is False
 
 
 @pytest.mark.parametrize("niveau", ["rapatrie", "valide", "telechargeable"])
@@ -180,12 +201,12 @@ def test_la_description_prend_la_page_radiofrance_d_abord(
 ) -> None:
     audios, lmelp = dossiers
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         qualifie(audios), emission(INA, RADIOFRANCE), audios, lmelp, MAINTENANT
     )
 
     assert fiche["description"] == (
-        "durée : 00:54:12 - Le Masque et la Plume - par : Jérôme Garcin"
+        "durée : 00:54:12  - Le Masque et la Plume - par : Jérôme Garcin"
         " - Les critiques parlent de la rentrée."
     )
     assert fiche["sources_description"] == {
@@ -198,20 +219,27 @@ def test_la_description_prend_la_page_radiofrance_d_abord(
 
 def test_sans_page_radiofrance_l_api_puis_l_ina(dossiers: tuple[Path, Path]) -> None:
     audios, lmelp = dossiers
-    api = {
-        "animateur": "Jérôme Garcin",
-        "resume": "Le chapô de l'API.",
-        "equipe": "Ilinca Negulesco",
-        "invites": "Arnaud Viviant, Elisabeth Philippe",
-    }
+    # comme dans le flux RSS : l'équipe par ses noms, les invités avec leur rôle
+    api = Diffusion(
+        titre="Les livres à lire",
+        resume="  Le chapô de l'API.\n",
+        url=None,
+        animateurs=(Personnalite("Jérôme Garcin", "Producteur"),),
+        equipe=(Personnalite("Ilinca Negulesco", "Réalisatrice"),),
+        invites=(
+            Personnalite("Arnaud Viviant", "Critique littéraire (Revue Regards)"),
+            Personnalite("Elisabeth Philippe", None),
+        ),
+    )
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         qualifie(audios), emission(INA), audios, lmelp, MAINTENANT, api=api
     )
 
     assert fiche["description"] == (
         "Le Masque et la Plume - par : Jérôme Garcin - Le chapô de l'API."
-        " - équipe : Ilinca Negulesco - invités : Arnaud Viviant, Elisabeth Philippe"
+        " - équipe : Ilinca Negulesco - invités : Arnaud Viviant Critique"
+        " littéraire (Revue Regards), Elisabeth Philippe"
     )
     assert fiche["sources_description"] == {
         "animateur": "api_radiofrance",
@@ -227,7 +255,7 @@ def test_sans_api_l_ina_donne_resume_et_animateur(
 ) -> None:
     audios, lmelp = dossiers
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         qualifie(audios), emission(INA), audios, lmelp, MAINTENANT
     )
 
@@ -242,7 +270,7 @@ def test_sans_aucune_source_l_animateur_est_deduit_de_la_date(
 ) -> None:
     audios, lmelp = dossiers
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         qualifie(audios),
         emission(animateur="Jérôme Garcin"),
         audios,
@@ -296,49 +324,10 @@ def test_la_duree_du_fichier_l_emporte_sur_celle_des_sources(
     (audios / "2014" / NOM).write_bytes(contenu)
     enregistrement = replace(enregistrement, sha256=hashlib.sha256(contenu).hexdigest())
 
-    _, fiche = mettre_a_disposition(
+    _, fiche, _ = mettre_a_disposition(
         enregistrement, emission(RADIOFRANCE), audios, lmelp, MAINTENANT
     )
 
     assert fiche["duree"] == 3000
-    assert fiche["description"].startswith("durée : 00:50:00 - ")
+    assert fiche["description"].startswith("durée : 00:50:00  - ")
     assert fiche["sources_description"]["duree"] == "fichier"
-
-
-# --- l'API Radio France, lue seulement avec un jeton ------------------------
-# Le client commun (``radiofrance_api``) lit les diffusions du jour ; ses
-# réponses factices viennent de ses tests.
-
-
-def test_lire_api_donne_les_morceaux_de_la_diffusion_du_jour() -> None:
-    noeud = _noeud(
-        PAGE,
-        personnalites=[
-            _personne("Jérôme Garcin", "producer"),
-            _personne("Ilinca Negulesco", "staff"),
-            _personne("Arnaud Viviant", "guest"),
-            _personne("Elisabeth Philippe", "guest"),
-            _personne("Roman", "tag"),
-        ],
-    )
-    session = SessionApi(_page(noeud))
-
-    api = lire_api(session, "jeton", date(2014, 9, 28), [PAGE])
-
-    assert api == {
-        "animateur": "Jérôme Garcin",
-        "resume": "Le résumé de la diffusion.",
-        "equipe": "Ilinca Negulesco",
-        "invites": "Arnaud Viviant, Elisabeth Philippe",
-    }
-    assert len(session.demandes) == 1
-    assert session.demandes[0]["headers"]["x-token"] == "jeton"
-
-
-def test_lire_api_sans_diffusion_ce_jour_rend_none() -> None:
-    assert lire_api(SessionApi(_page()), "jeton", date(2014, 9, 28)) is None
-
-
-def test_une_api_en_erreur_ne_bloque_pas() -> None:
-    session = SessionApi(ReponseGraphQL(403, {"message": "Unauthorized"}))
-    assert lire_api(session, "jeton", date(2014, 9, 28)) is None

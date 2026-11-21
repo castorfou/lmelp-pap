@@ -20,9 +20,9 @@ import pytest
 
 from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.maturite import Depot
-from lmelp_pap.radiofrance_api import MASQUE
 from tests.test_commande import _cache_rempli
 from tests.test_maturite import SON, Flux, Reponse, Session
+from tests.test_radiofrance_api import MASQUE_API
 
 
 class SessionComplete(Session):
@@ -799,6 +799,27 @@ def test_une_collision_est_tracee(
     assert "existe déjà" in logs
 
 
+def test_une_remise_interrompue_apres_la_copie_se_termine_et_est_tracee(
+    url: str, tmp_path: Path, depot: Depot, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _qualifier_2014(url)
+    # une panne a suivi la copie : le fichier est chez lmelp, rien d'autre
+    cible = tmp_path / "audios-lmelp" / FICHIER_2014
+    cible.parent.mkdir(parents=True)
+    cible.write_bytes(SON)
+    capfd.readouterr()
+
+    donnees = _remettre(url, "2014-09-28")
+
+    assert donnees["remise"]["refus"] == []
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "valide"
+    (fiche,) = depot.base["pap_remises"].find()
+    assert fiche["audio_rel_filename"] == FICHIER_2014
+    logs = capfd.readouterr().err
+    assert "mis à disposition 2014-09-28 : " in logs
+    assert "reprise : fichier déjà copié, même sha256" in logs
+
+
 class SessionAvecApi(SessionComplete):
     """La session factice, avec une API Radio France qui connaît le
     28/09/2014."""
@@ -806,13 +827,13 @@ class SessionAvecApi(SessionComplete):
     def __init__(self, reponses: dict[str, Any]):
         super().__init__(reponses)
         self.api: list[dict[str, Any]] = []
+        self.statut_api = 200
 
     def post(self, adresse: str, **options: Any) -> Any:
         self.api.append(options)
         noeud = {
-            "url": "https://www.radiofrance.fr/franceinter/podcasts/"
-            "le-masque-et-la-plume/x-1",
-            "show": {"url": MASQUE},
+            "url": f"{MASQUE_API}/x-1",
+            "show": {"url": MASQUE_API},
             "published_date": str(
                 int(datetime(2014, 9, 28, 10, tzinfo=UTC).timestamp())
             ),
@@ -823,8 +844,10 @@ class SessionAvecApi(SessionComplete):
         }
         donnees = {"data": {"diffusions": {"edges": [{"cursor": "a", "node": noeud}]}}}
 
+        statut = self.statut_api
+
         class R:
-            status_code = 200
+            status_code = statut
 
             def json(self) -> Any:
                 return donnees
@@ -871,3 +894,69 @@ def test_sans_jeton_l_api_n_est_pas_lue(
 
     assert session.api == []
     assert _emissions(donnees)["2014-09-28"]["maturite"] == "valide"
+
+
+def test_une_api_en_erreur_ne_bloque_pas_la_mise_a_disposition(
+    tmp_path: Path,
+    depot: Depot,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "jeton-secret")
+    session = SessionAvecApi(REPONSES)
+    session.statut_api = 403
+    for adresse in _demarrer(
+        tmp_path,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        audios_lmelp=tmp_path / "audios-lmelp",
+    ):
+        _qualifier_2014(adresse)
+        capfd.readouterr()
+        donnees = _remettre(adresse, "2014-09-28")
+
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "valide"
+    (fiche,) = depot.base["pap_remises"].find()
+    assert "api_radiofrance" not in fiche["sources_description"].values()
+    logs = capfd.readouterr().err
+    assert (
+        "api radiofrance 2014-09-28 (mise à disposition) : erreur HTTP 403, "
+        "1 requête (1/1000 aujourd'hui), 0 s"
+    ) in logs
+
+
+def test_l_ecoute_puis_la_remise_ne_lisent_l_api_qu_une_fois(
+    tmp_path: Path,
+    depot: Depot,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "jeton-secret")
+    session = SessionAvecApi(REPONSES)
+    for adresse in _demarrer(
+        tmp_path,
+        depot=depot,
+        session=session,
+        audios=tmp_path / "audios",
+        audios_lmelp=tmp_path / "audios-lmelp",
+    ):
+        _qualifier_2014(adresse)
+        capfd.readouterr()
+        ecoute = _get(f"{adresse}/api/radiofrance/2014-09-28")
+        _remettre(adresse, "2014-09-28")
+
+    assert ecoute["statut"] == "trouvee"
+    assert len(session.api) == 1
+    (fiche,) = depot.base["pap_remises"].find()
+    assert "invités : Arnaud Viviant" in fiche["description"]
+    logs = capfd.readouterr().err
+    # un seul compteur du jour pour l'écoute et la mise à disposition
+    assert (
+        "api radiofrance 2014-09-28 : trouvée, 1 requête (1/1000 aujourd'hui), 0 s"
+    ) in logs
+    assert (
+        "api radiofrance 2014-09-28 (mise à disposition) : trouvée (cache), "
+        "0 requête (1/1000 aujourd'hui)"
+    ) in logs
+    assert "Arnaud Viviant" not in logs

@@ -4,38 +4,36 @@ Mettre à disposition (glossaire, *maturité d'un enregistrement*, niveau
 valide) copie le fichier de l'enregistrement du dossier audio de pap
 (``<année>/<nom>``) vers le dossier audio du back-office lmelp, sous le même
 nom, en passant par un ``.part`` renommé à la fin. Un fichier de même nom déjà
-présent fait refuser la mise à disposition, sans rien écrire.
+présent fait refuser la mise à disposition, sans rien écrire, sauf s'il a
+l'empreinte de l'enregistrement : c'est une mise à disposition interrompue
+après la copie (panne), qui se termine (fiche, passage à valide).
 
 La fiche rendue, écrite dans la collection ``pap_remises``, est prête à
 devenir un document ``episodes`` de lmelp (schéma : ``docs/dev/architecture.md``,
-section « Contrat ``pap_remises`` »). Sa description suit le format du flux
-RSS (« durée : … - Le Masque et la Plume - par : animateur - résumé - équipe :
-… - invités : … ») ; chaque morceau vient de la première source qui le donne :
+section « Contrat ``pap_remises`` »). Sa description suit le format des
+descriptions du flux RSS du Masque (« durée : HH:MM:SS  - Le Masque et la
+Plume - par : animateur - résumé - équipe : noms - invités : nom rôle, … ») ;
+chaque morceau vient de la première source qui le donne :
 page radiofrance.fr, puis API Radio France, puis notice INA, sinon l'animateur
 déduit de la date. La source de chaque morceau est gardée dans
 ``sources_description``.
 
-L'API Radio France n'est lue qu'au moment de la mise à disposition, avec un
-jeton (``RADIOFRANCE_API_TOKEN``) ; ses données ne vont que dans la fiche,
-et son absence ou son échec n'empêche rien.
+La diffusion de l'API Radio France (``radiofrance_api.Diffusion``) est lue
+par l'appelant ; ses données ne vont que dans la fiche, et son absence
+n'empêche rien.
 """
 
 import contextlib
 import hashlib
 import os
-from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from lmelp_pap.liste import Emission
-from lmelp_pap.maturite import MORCEAU, Enregistrement
-from lmelp_pap.radiofrance_api import (
-    ApiRadioFranceError,
-    Personnalite,
-    lire_diffusion,
-)
+from lmelp_pap.maturite import MORCEAU, Enregistrement, empreinte
+from lmelp_pap.radiofrance_api import Diffusion, Personnalite
 
 
 MOIS = (
@@ -60,12 +58,13 @@ class RemiseError(ValueError):
     """Une mise à disposition impossible : niveau, fichier, collision."""
 
 
-def _empreinte(chemin: Path) -> str:
-    h = hashlib.sha256()
-    with chemin.open("rb") as f:
-        for morceau in iter(lambda: f.read(MORCEAU), b""):
-            h.update(morceau)
-    return h.hexdigest()
+class Remise(NamedTuple):
+    """Le résultat d'une mise à disposition : l'enregistrement devenu valide,
+    sa fiche ``pap_remises``, et ``reprise`` si le fichier était déjà copié."""
+
+    enregistrement: Enregistrement
+    fiche: dict[str, Any]
+    reprise: bool
 
 
 def _copier(source: Path, final: Path, sha256: str | None) -> None:
@@ -151,46 +150,64 @@ def _horaire(secondes: int) -> str:
     return f"{secondes // 3600:02d}:{secondes % 3600 // 60:02d}:{secondes % 60:02d}"
 
 
-def _premier(
-    emission: Emission, api: dict[str, str] | None, champ: str, cle_api: str
-) -> tuple[str, str] | None:
-    """La valeur d'un morceau et sa source, dans l'ordre de ``ORDRE``."""
+def _noms(personnes: tuple[Personnalite, ...], roles: bool = False) -> str:
+    """Les noms, séparés par des virgules ; avec ``roles``, chacun suivi de son
+    rôle, comme les invités du flux RSS (« Arnaud Viviant Critique
+    littéraire (Revue Regards) »)."""
+    return ", ".join(
+        f"{p.nom} {p.role.strip()}" if roles and p.role and p.role.strip() else p.nom
+        for p in personnes
+    )
+
+
+def _premier(emission: Emission, api: str | None, champ: str) -> tuple[str, str] | None:
+    """La valeur d'un morceau et sa source, dans l'ordre de ``ORDRE`` :
+    ``api``, la valeur de l'API Radio France pour ce morceau."""
     for source in ORDRE:
         if source == "api_radiofrance":
-            if api and api.get(cle_api):
-                return api[cle_api], source
+            if api:
+                return api, source
             continue
-        for a in emission.attestations:
-            valeur = getattr(a, champ)
-            if a.source == source and not a.extrait and valeur:
+        for a in emission.entieres(source):
+            if valeur := getattr(a, champ):
                 return str(valeur), source
     return None
 
 
 def _composer(
-    emission: Emission, api: dict[str, str] | None, duree: tuple[int, str] | None
+    emission: Emission, api: Diffusion | None, duree: tuple[int, str] | None
 ) -> tuple[str, dict[str, str]]:
-    """La description au format du flux RSS, et la source de chaque morceau."""
+    """La description au format du flux RSS, et la source de chaque morceau.
+
+    Le flux sépare ses morceaux par « - », avec deux espaces après la durée
+    (« durée : 00:48:14  - Le Masque et la Plume - par : … »)."""
     sources: dict[str, str] = {}
     morceaux: list[str] = []
-    if duree:
-        morceaux.append(f"durée : {_horaire(duree[0])}")
-        sources["duree"] = duree[1]
-    morceaux.append("Le Masque et la Plume")
-    animateur = _premier(emission, api, "animateur", "animateur")
+    # les morceaux que donne l'API, vides sans diffusion
+    du_api = {
+        "animateur": _noms(api.animateurs) if api else "",
+        "resume": (api.resume or "").strip() if api else "",
+        "equipe": _noms(api.equipe) if api else "",
+        "invites": _noms(api.invites, roles=True) if api else "",
+    }
+    animateur = _premier(emission, du_api["animateur"], "animateur")
     if animateur is None and emission.animateur:
         animateur = (emission.animateur, "deduit")
     if animateur:
         morceaux.append(f"par : {animateur[0]}")
         sources["animateur"] = animateur[1]
-    if resume := _premier(emission, api, "description", "resume"):
+    if resume := _premier(emission, du_api["resume"], "description"):
         morceaux.append(resume[0])
         sources["resume"] = resume[1]
     for cle, libelle in (("equipe", "équipe"), ("invites", "invités")):
-        if api and api.get(cle):
-            morceaux.append(f"{libelle} : {api[cle]}")
+        if du_api[cle]:
+            morceaux.append(f"{libelle} : {du_api[cle]}")
             sources[cle] = "api_radiofrance"
-    return " - ".join(morceaux), sources
+    description = " - ".join(["Le Masque et la Plume", *morceaux])
+    if duree:
+        description = f"durée : {_horaire(duree[0])}  - {description}"
+        sources = {"duree": duree[1], **sources}
+    return description, sources
 
 
 def _titre(jour: date) -> str:
@@ -204,14 +221,15 @@ def mettre_a_disposition(
     audios: Path,
     audios_lmelp: Path,
     maintenant: datetime,
-    api: dict[str, str] | None = None,
-) -> tuple[Enregistrement, dict[str, Any]]:
+    api: Diffusion | None = None,
+) -> Remise:
     """Copie le fichier d'un enregistrement qualifié dans
     ``audios_lmelp/<année>/<nom>`` et rend l'enregistrement valide et sa fiche
-    pour ``pap_remises``. ``api`` : les morceaux lus dans l'API Radio France
-    (``lire_api``), ou ``None``. ``RemiseError`` sans rien écrire si
+    pour ``pap_remises``. ``api`` : la diffusion lue dans l'API Radio
+    France, ou ``None``. ``RemiseError`` sans rien écrire si
     l'enregistrement n'est pas qualifié, si son fichier manque ou a changé, ou
-    si un fichier de même nom existe chez lmelp."""
+    si un fichier de même nom et d'une autre empreinte existe chez lmelp ; de
+    même empreinte, la copie est tenue pour faite (``reprise``)."""
     if enregistrement.niveau != "qualifie" or not enregistrement.fichier:
         raise RemiseError(
             f"{enregistrement.url} : niveau {enregistrement.niveau}, "
@@ -222,27 +240,30 @@ def mettre_a_disposition(
     if not source.is_file():
         raise RemiseError(f"{relatif} : fichier introuvable dans le dossier de pap")
     final = audios_lmelp / relatif
-    if final.exists():
+    reprise = final.exists()
+    if reprise and not (
+        enregistrement.sha256
+        and final.is_file()
+        and empreinte(final) == enregistrement.sha256
+    ):
         raise RemiseError(f"{relatif} existe déjà dans le dossier de lmelp")
-    _copier(source, final, enregistrement.sha256)
+    if not reprise:
+        _copier(source, final, enregistrement.sha256)
 
     secondes = duree_du_fichier(final)
     duree = (secondes, "fichier") if secondes else None
     if duree is None:
-        for source_duree in ("radiofrance", "ina"):
-            for a in emission.attestations:
-                s = _secondes(a.duree) if a.source == source_duree else None
-                if s and not a.extrait and duree is None:
-                    duree = (s, source_duree)
+        duree = next(
+            (
+                (s, source_duree)
+                for source_duree in ("radiofrance", "ina")
+                for a in emission.entieres(source_duree)
+                if (s := _secondes(a.duree))
+            ),
+            None,
+        )
     description, sources = _composer(emission, api, duree)
-    page = next(
-        (
-            a.url
-            for a in emission.attestations
-            if a.source == "radiofrance" and not a.extrait and a.url
-        ),
-        None,
-    )
+    page = next(iter(emission.pages_radiofrance), None)
     fiche = {
         "_id": enregistrement.url,
         "emission_id": emission.id,
@@ -261,31 +282,5 @@ def mettre_a_disposition(
         "date_remise": maintenant,
     }
     entrees = {**enregistrement.entrees, "valide": maintenant}
-    return replace(enregistrement, niveau="valide", entrees=entrees), fiche
-
-
-def lire_api(
-    session: Any, jeton: str, jour: date, pages: Iterable[str] = ()
-) -> dict[str, str] | None:
-    """Les morceaux de description que l'API Radio France donne pour la
-    diffusion du Masque de ce jour (client ``radiofrance_api`` ; ``pages`` :
-    les pages radiofrance.fr connues de l'émission) : ``animateur``
-    (producteur), ``resume`` (chapô), ``equipe``, ``invites``. ``None`` sans
-    diffusion ce jour-là, ou si l'API échoue. Rien n'est conservé."""
-    try:
-        diffusion = lire_diffusion(jour, pages, jeton, session)
-    except ApiRadioFranceError:
-        return None  # l'API ne bloque jamais la mise à disposition
-    if diffusion is None:
-        return None
-
-    def noms(personnes: tuple[Personnalite, ...]) -> str:
-        return ", ".join(p.nom for p in personnes)
-
-    morceaux = {
-        "animateur": noms(diffusion.animateurs),
-        "resume": (diffusion.resume or "").strip(),
-        "equipe": noms(diffusion.equipe),
-        "invites": noms(diffusion.invites),
-    }
-    return {k: v for k, v in morceaux.items() if v}
+    valide = replace(enregistrement, niveau="valide", entrees=entrees)
+    return Remise(valide, fiche, reprise)
