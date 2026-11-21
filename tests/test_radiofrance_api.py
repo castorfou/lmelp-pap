@@ -187,14 +187,15 @@ def test_le_lecteur_garde_la_diffusion_en_memoire_une_heure() -> None:
     session = SessionApi(_page(_noeud(PAGE_API)), _page(_noeud(PAGE_API)))
     lecteur = LecteurDiffusions(session, horloge=horloge)
 
-    premiere, du_cache_1 = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    premiere = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
     horloge.t += 3599
-    seconde, du_cache_2 = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    seconde = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
     horloge.t += 2
-    _, du_cache_3 = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    troisieme = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
 
-    assert premiere == seconde and premiere is not None
-    assert (du_cache_1, du_cache_2, du_cache_3) == (False, True, False)
+    assert premiere.diffusion == seconde.diffusion
+    assert premiere.diffusion is not None
+    assert (premiere.cache, seconde.cache, troisieme.cache) == (False, True, False)
     assert len(session.demandes) == 2
 
 
@@ -204,9 +205,9 @@ def test_le_lecteur_ne_garde_pas_une_erreur() -> None:
 
     with pytest.raises(ApiRadioFranceError):
         lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
-    diffusion, du_cache = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    lecture = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
 
-    assert diffusion is not None and du_cache is False
+    assert lecture.diffusion is not None and lecture.cache is False
 
 
 def test_la_cle_se_lit_dans_l_environnement(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -214,3 +215,35 @@ def test_la_cle_se_lit_dans_l_environnement(monkeypatch: pytest.MonkeyPatch) -> 
     assert jeton() == "cle"
     monkeypatch.setenv("RADIOFRANCE_API_TOKEN", "")
     assert jeton() is None
+
+
+class Jour:
+    def __init__(self) -> None:
+        self.jour = date(2026, 11, 21)
+
+    def __call__(self) -> date:
+        return self.jour
+
+
+def test_le_lecteur_compte_les_requetes_du_jour() -> None:
+    pleine = [_noeud(f"{AUTRE_API}/y-{i}", f"{AUTRE_API}/") for i in range(100)]
+    session = SessionApi(
+        _page(*pleine),
+        _page(_noeud(PAGE_API)),
+        ReponseGraphQL(403, {}),
+        _page(_noeud(PAGE_API)),
+    )
+    jour = Jour()
+    lecteur = LecteurDiffusions(session, aujourdhui=jour)
+
+    deux_pages = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    du_cache = lecteur.lire("2024-03-24", JOUR, [PAGE], "cle")
+    with pytest.raises(ApiRadioFranceError) as erreur:
+        lecteur.lire("2024-03-31", JOUR, [PAGE], "cle")
+    jour.jour = date(2026, 11, 22)  # minuit, heure de Paris : on repart de zéro
+    lendemain = lecteur.lire("2024-04-07", JOUR, [PAGE], "cle")
+
+    assert (deux_pages.requetes, deux_pages.du_jour) == (2, 2)
+    assert (du_cache.requetes, du_cache.du_jour) == (0, 2)
+    assert (erreur.value.requetes, erreur.value.du_jour) == (1, 3)
+    assert (lendemain.requetes, lendemain.du_jour) == (1, 1)

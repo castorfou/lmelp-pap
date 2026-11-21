@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -42,6 +42,8 @@ PARIS = ZoneInfo("Europe/Paris")
 CACHE = 3600.0
 # La variable d'environnement de la clé de l'API.
 CLE = "RADIOFRANCE_API_TOKEN"
+# Les requêtes autorisées par jour.
+QUOTA = 1000
 
 # Les relations de ``personalitiesConnection`` : ``producer`` (l'animateur),
 # ``staff`` (l'équipe : critiques…), ``guest`` (les invités) ; ``tag``
@@ -71,7 +73,12 @@ def jeton() -> str | None:
 
 
 class ApiRadioFranceError(RuntimeError):
-    """L'API n'a pas répondu, ou en erreur ; le message n'en dit que la nature."""
+    """L'API n'a pas répondu, ou en erreur ; le message n'en dit que la nature.
+    Levée par ``LecteurDiffusions``, elle porte ``requetes`` (les requêtes de
+    cette lecture) et ``du_jour`` (le compteur du jour)."""
+
+    requetes: int = 0
+    du_jour: int = 0
 
 
 @dataclass(frozen=True)
@@ -94,9 +101,26 @@ class Diffusion:
     invites: tuple[Personnalite, ...]
 
 
+class Lecture(NamedTuple):
+    """Une lecture de ``LecteurDiffusions`` : la diffusion (ou ``None``), vrai
+    si elle vient du cache, les requêtes HTTP faites pour elle et le compteur
+    des requêtes du jour (heure de Paris)."""
+
+    diffusion: Diffusion | None
+    cache: bool
+    requetes: int
+    du_jour: int
+
+
+def _aujourdhui() -> date:
+    return datetime.now(PARIS).date()
+
+
 class LecteurDiffusions:
     """Lit la diffusion d'une émission, gardée ``duree`` secondes dans la
-    mémoire du processus (jamais ailleurs) ; une erreur n'est pas gardée."""
+    mémoire du processus (jamais ailleurs) ; une erreur n'est pas gardée.
+    Compte les requêtes HTTP faites dans la journée (heure de Paris, en
+    mémoire, remis à zéro au changement de jour), sur ``QUOTA``."""
 
     def __init__(
         self,
@@ -104,18 +128,30 @@ class LecteurDiffusions:
         *,
         duree: float = CACHE,
         horloge: Callable[[], float] = time.monotonic,
+        aujourdhui: Callable[[], date] = _aujourdhui,
     ):
         self._session = session
         self._duree = duree
         self._horloge = horloge
+        self._aujourdhui = aujourdhui
         self._memoire: dict[str, tuple[float, Diffusion | None]] = {}
+        self._jour: date | None = None
+        self._du_jour = 0
         self._verrou = threading.Lock()
 
-    def lire(
-        self, cle: str, jour: date, pages: Iterable[str], jeton: str
-    ) -> tuple[Diffusion | None, bool]:
+    def _compter(self, n: int) -> int:
+        """Ajoute ``n`` requêtes au compteur du jour ; le rend."""
+        with self._verrou:
+            jour = self._aujourdhui()
+            if jour != self._jour:
+                self._jour, self._du_jour = jour, 0
+            self._du_jour += n
+            return self._du_jour
+
+    def lire(self, cle: str, jour: date, pages: Iterable[str], jeton: str) -> Lecture:
         """La diffusion du Masque du ``jour`` pour l'émission ``cle`` (voir
-        ``lire_diffusion``), et vrai si elle vient du cache."""
+        ``lire_diffusion``), du cache s'il l'a. ``ApiRadioFranceError`` si
+        l'API échoue."""
         with self._verrou:
             maintenant = self._horloge()
             self._memoire = {
@@ -123,12 +159,33 @@ class LecteurDiffusions:
                 for c, v in self._memoire.items()
                 if maintenant - v[0] < self._duree
             }
-            if cle in self._memoire:
-                return self._memoire[cle][1], True
-        diffusion = lire_diffusion(jour, pages, jeton, self._session)
+            gardee = self._memoire.get(cle)
+        if gardee is not None:
+            return Lecture(gardee[1], True, 0, self._compter(0))
+        compteur = _SessionComptee(self._session or requests.Session(), self)
+        try:
+            diffusion = lire_diffusion(jour, pages, jeton, compteur)
+        except ApiRadioFranceError as erreur:
+            erreur.requetes, erreur.du_jour = compteur.n, self._compter(0)
+            raise
         with self._verrou:
             self._memoire[cle] = (self._horloge(), diffusion)
-        return diffusion, False
+        return Lecture(diffusion, False, compteur.n, self._compter(0))
+
+
+class _SessionComptee:
+    """Une session HTTP qui compte ses requêtes, pour la lecture et pour le
+    jour."""
+
+    def __init__(self, http: Any, lecteur: LecteurDiffusions):
+        self._http = http
+        self._lecteur = lecteur
+        self.n = 0
+
+    def post(self, *args: Any, **options: Any) -> Any:
+        self.n += 1
+        self._lecteur._compter(1)
+        return self._http.post(*args, **options)
 
 
 def lire_diffusion(

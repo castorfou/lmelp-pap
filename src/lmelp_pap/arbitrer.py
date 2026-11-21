@@ -117,6 +117,7 @@ from lmelp_pap.maturite import (
 )
 from lmelp_pap.page import construire_page, donnees_page
 from lmelp_pap.radiofrance_api import (
+    QUOTA,
     ApiRadioFranceError,
     Diffusion,
     LecteurDiffusions,
@@ -609,20 +610,31 @@ class Atelier:
             journal(f"{prefixe} pas de clé")
             return "sans_cle", None, None
         debut = time.monotonic()
+
+        def requetes(n: int, du_jour: int) -> str:
+            return f"{n} requête{_s(n)} ({du_jour}/{QUOTA} aujourd'hui)"
+
         try:
-            diffusion, du_cache = self._radiofrance.lire(
+            lecture = self._radiofrance.lire(
                 emission.id, emission.date, emission.pages_radiofrance, cle
             )
         except ApiRadioFranceError as erreur:
-            duree = _duree(time.monotonic() - debut)
-            journal(f"{prefixe} erreur {erreur} ({duree})")
+            journal(
+                f"{prefixe} erreur {erreur}, "
+                f"{requetes(erreur.requetes, erreur.du_jour)}, "
+                f"{_duree(time.monotonic() - debut)}"
+            )
             return "erreur", None, str(erreur)
-        quand = "cache" if du_cache else _duree(time.monotonic() - debut)
-        if diffusion is None:
-            journal(f"{prefixe} introuvable ({quand})")
-            return "introuvable", None, None
-        journal(f"{prefixe} trouvée ({quand})")
-        return "trouvee", diffusion, None
+        statut = "trouvee" if lecture.diffusion else "introuvable"
+        libelle = "trouvée" if lecture.diffusion else "introuvable"
+        compte = requetes(lecture.requetes, lecture.du_jour)
+        if lecture.cache:
+            journal(f"{prefixe} {libelle} (cache), {compte}")
+        else:
+            journal(
+                f"{prefixe} {libelle}, {compte}, {_duree(time.monotonic() - debut)}"
+            )
+        return statut, lecture.diffusion, None
 
     @staticmethod
     def _rapatrie(depot: Depot, emission_id: str, url: object) -> Enregistrement:

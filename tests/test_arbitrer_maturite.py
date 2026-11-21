@@ -920,7 +920,10 @@ def test_une_api_en_erreur_ne_bloque_pas_la_mise_a_disposition(
     (fiche,) = depot.base["pap_remises"].find()
     assert "api_radiofrance" not in fiche["sources_description"].values()
     logs = capfd.readouterr().err
-    assert "api radiofrance 2014-09-28 (mise à disposition) : erreur HTTP 403" in logs
+    assert (
+        "api radiofrance 2014-09-28 (mise à disposition) : erreur HTTP 403, "
+        "1 requête (1/1000 aujourd'hui), 0 s"
+    ) in logs
 
 
 def test_l_ecoute_puis_la_remise_ne_lisent_l_api_qu_une_fois(
@@ -948,5 +951,12 @@ def test_l_ecoute_puis_la_remise_ne_lisent_l_api_qu_une_fois(
     (fiche,) = depot.base["pap_remises"].find()
     assert "invités : Arnaud Viviant" in fiche["description"]
     logs = capfd.readouterr().err
-    assert "api radiofrance 2014-09-28 : trouvée (" in logs
-    assert "api radiofrance 2014-09-28 (mise à disposition) : trouvée (cache)" in logs
+    # un seul compteur du jour pour l'écoute et la mise à disposition
+    assert (
+        "api radiofrance 2014-09-28 : trouvée, 1 requête (1/1000 aujourd'hui), 0 s"
+    ) in logs
+    assert (
+        "api radiofrance 2014-09-28 (mise à disposition) : trouvée (cache), "
+        "0 requête (1/1000 aujourd'hui)"
+    ) in logs
+    assert "Arnaud Viviant" not in logs
