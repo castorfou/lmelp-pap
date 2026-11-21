@@ -1,6 +1,6 @@
 # L'appli pap en conteneur et sur le NAS
 
-L'appli web de lmelp-pap (la liste en mode arbitrage, `lmelp-pap arbitrer`) est publiée en image Docker : `ghcr.io/castorfou/lmelp-pap`. Sur le NAS, elle tourne comme service `pap` de la stack [docker-lmelp](https://github.com/castorfou/docker-lmelp).
+L'appli web de lmelp-pap (`lmelp-pap arbitrer` : l'accueil par état sur `/`, la liste en mode arbitrage sur `/liste`) est publiée en image Docker : `ghcr.io/castorfou/lmelp-pap`. Sur le NAS, elle tourne comme service `pap` de la stack [docker-lmelp](https://github.com/castorfou/docker-lmelp).
 
 ## Le volume `/data`
 

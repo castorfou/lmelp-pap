@@ -311,6 +311,7 @@ Le serveur expose une petite API JSON, utilisée par la page :
 
 | Requête | Effet |
 |---|---|
+| `GET /` | L'accueil. `GET /liste` : la liste en mode arbitrage. |
 | `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
@@ -318,6 +319,19 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
 
 Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, date absente des dates candidates ou émission sans doute de date, attestation sans rapprochement ambigu ou émission qui n'est pas rivale, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
+
+### Accueil et pages d'état
+
+L'appli s'ouvre sur l'**accueil** (`/`) ; la liste et ses arbitrages sont sur `/liste` (bouton « Liste et arbitrages », retour par « ← Accueil »).
+
+Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste, sinon la maturité de son enregistrement le plus avancé (localisé, téléchargeable, rapatrié, qualifié, valide), sinon « sans enregistrement ».
+
+- **En haut, fixes** : l'histogramme des émissions par année, empilé par état, et un compteur par état avec l'action qu'il annonce.
+- **Dessous, la frise** des émissions par année, de la plus récente à la plus ancienne, dans son propre ascenseur : chaque ligne donne la date, le titre, l'état et, pour un état qui attend une action, l'ancienneté dans cet état (« 12 j », en ambre à partir de 21 jours, en rouge à partir de 45).
+- **Survoler une année** affiche ses chiffres dans le titre du graphique et place la frise sur cette année. **Cliquer une année** filtre tout sur elle : compteurs, frise et page d'état ouverte ensuite ; le bouton « 1987 × » lève le filtre.
+- **Survoler un compteur** fait ressortir son état dans le graphique et la frise ; **cliquer** ouvre la **page de l'état** : son histogramme (un clic sur une année filtre la liste) et le tableau de ses émissions, trié par ancienneté (ou par date pour un état sans action) ; un clic sur un en-tête trie la colonne, un second inverse le sens. L'adresse garde l'état et l'année (`/#etat=telechargeable&annee=2008`).
+
+L'accueil suit le thème clair ou sombre du système. Sans base Mongo, il n'affiche que « sans enregistrement » et « dans lmelp », avec un bandeau.
 
 ### Maturité des enregistrements
 
