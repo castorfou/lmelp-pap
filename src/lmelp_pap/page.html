@@ -387,6 +387,8 @@ function passe(e, f, annee = true) {
   if (doute === "a-ecouter" && !e.aEcouter) return false;
   if (doute && !FILTRES_DOUTE.includes(doute) && !e.doutes.some(([t]) => t === doute)) return false;
   if (q && !q.split(/\s+/).every(m => e.texte.includes(m))) return false;
+  // L'appli ajoute le filtre de maturité, absent de la page publiée.
+  if (typeof passeMaturite === "function" && !passeMaturite(e)) return false;
   return true;
 }
 
@@ -400,6 +402,7 @@ function filtresActifs() {
   if (f.avecEnreg) r.push(["Avec enregistrement", () => { $("avec-enregistrement").checked = false; }]);
   if (f.doute) r.push([f.doute === "tout" ? texte("doute") : `Doute : ${texte("doute")}`, vider("doute")]);
   if (f.q) r.push([`« ${$("q").value.trim()} »`, () => { $("q").value = ""; }]);
+  if (typeof filtreMaturite === "function") r.push(...filtreMaturite());
   return r;
 }
 let actifs = [];
@@ -459,7 +462,7 @@ function ligne(e) {
     `<div class="themes">${puces(e)}</div>` +
     `<div class="duree">${esc(e.duree ? e.duree.replace(/^00:/, "") : "")}</div>` +
     `<div class="sources">${e.sources.map(s => `<span class="src${s === "lmelp" ? " verifiee" : ""}">${NOMS[s] || esc(s)}</span>`).join("")}` +
-    `${e.enreg.length ? `<span class="son">enregistrement</span>` : ""}${e.aEcouter ? `<span class="drap">à écouter</span>` : e.doutes.length ? `<span class="drap">doute</span>` : ""}</div></div>`;
+    `${e.enreg.length ? `<span class="son">enregistrement</span>` : ""}${typeof badgeMaturite === "function" ? badgeMaturite(e) : ""}${e.aEcouter ? `<span class="drap">à écouter</span>` : e.doutes.length ? `<span class="drap">doute</span>` : ""}</div></div>`;
   if (ouverte) h += detail(e);
   return h;
 }
@@ -503,6 +506,7 @@ function rendre() {
 
 function effacerFiltres() {
   $("q").value = ""; $("theme").value = ""; $("source").value = ""; $("avec-enregistrement").checked = false; $("doute").value = "";
+  if (typeof effacerMaturite === "function") effacerMaturite();
   etat.annee = null; etat.affichees = LOT; rendre();
 }
 

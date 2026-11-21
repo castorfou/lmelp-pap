@@ -17,7 +17,15 @@ API :
   ``source_id``) et ``vers``, l'identifiant de l'émission rivale où la
   déplacer, ou ``null`` pour la garder ici ;
 - ``POST /api/annulations`` : annule les arbitrages d'une émission
-  (``emission_id``) ou d'une attestation (``source`` et ``source_id``).
+  (``emission_id``) ou d'une attestation (``source`` et ``source_id``) ;
+- ``POST /api/verifications`` : lance, en fond, la vérification des URL
+  d'intégral (maturité des enregistrements, module ``maturite``) ;
+- ``GET /api/verifications`` : son avancement (``en_cours``, ``faites``,
+  ``total``) et son ``bilan`` une fois finie.
+
+Avec un dépôt Mongo, chaque émission des données porte sa ``maturite`` (le
+niveau de son enregistrement le plus avancé, ou ``null``) et les données
+``maturite_active`` ; sans dépôt, la vérification répond 503.
 
 Chaque requête d'écriture renvoie les données à jour, comme ``GET /api/donnees``.
 Une émission y porte en plus, pour l'arbitrage de date, ses ``dates_candidates``
@@ -58,6 +66,7 @@ from lmelp_pap.liste import (
     construire_liste,
     dates_candidates,
 )
+from lmelp_pap.maturite import Depot, integraux, maturite_emission, verifier
 from lmelp_pap.page import construire_page, donnees_page
 
 
@@ -69,11 +78,32 @@ class DemandeInvalideError(ValueError):
     """Une requête d'arbitrage invalide."""
 
 
+class MaturiteIndisponibleError(RuntimeError):
+    """La maturité des enregistrements demande une base Mongo."""
+
+
 class Atelier:
     """La liste en cours d'arbitrage : le cache lu une fois, les CSV réécrits."""
 
-    def __init__(self, cache: Path, sortie: Path, fichier: Path | None = None):
-        """Lit le cache et construit une première fois la liste."""
+    def __init__(
+        self,
+        cache: Path,
+        sortie: Path,
+        fichier: Path | None = None,
+        depot: Depot | None = None,
+        session: Any = None,
+    ):
+        """Lit le cache et construit une première fois la liste. ``depot`` :
+        la maturité des enregistrements (Mongo), ``session`` : le client HTTP
+        de la vérification des URL (``requests`` par défaut)."""
+        self.depot = depot
+        self._session = session
+        self._verification: dict[str, Any] = {
+            "en_cours": False,
+            "faites": 0,
+            "total": 0,
+            "bilan": None,
+        }
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
         self.attestations = lire_cache(cache)
@@ -92,6 +122,42 @@ class Atelier:
         """Les émissions de la liste et les arbitrages, pour la page."""
         with self._verrou:
             return self._donnees()
+
+    def etat_verification(self) -> dict[str, Any]:
+        """L'avancement de la vérification des URL d'intégral."""
+        return dict(self._verification)
+
+    def lancer_verification(self) -> dict[str, Any]:
+        """Lance en fond la vérification des URL d'intégral, sauf si une est
+        déjà en cours ; rend son avancement."""
+        if self.depot is None:
+            raise MaturiteIndisponibleError("MONGO_URI absent")
+        with self._verrou:
+            if not self._verification["en_cours"]:
+                a_verifier = integraux(self.sortie)
+                self._verification = {
+                    "en_cours": True,
+                    "faites": 0,
+                    "total": len(a_verifier),
+                    "bilan": None,
+                }
+                threading.Thread(
+                    target=self._verifier, args=(a_verifier,), daemon=True
+                ).start()
+            return dict(self._verification)
+
+    def _verifier(self, a_verifier: list[tuple[str, str]]) -> None:
+        assert self.depot is not None
+        bilan: dict[str, int] | None = None
+        try:
+            bilan = verifier(
+                a_verifier,
+                self.depot,
+                self._session,
+                progres=lambda n: self._verification.update(faites=n),
+            )
+        finally:
+            self._verification.update(en_cours=False, bilan=bilan)
 
     def page(self) -> str:
         """La page de la liste en mode arbitrage."""
@@ -237,12 +303,23 @@ class Atelier:
 
     def _donnees(self) -> dict[str, Any]:
         """Les données de la page et les arbitrages, du plus récent au plus ancien."""
-        return {
-            "emissions": [self._pour_arbitrer(e) for e in donnees_page(self.sortie)],
+        emissions = [self._pour_arbitrer(e) for e in donnees_page(self.sortie)]
+        donnees: dict[str, Any] = {
+            "emissions": emissions,
             "arbitrages": [
                 self._arbitrage(a) for a in reversed(lire_arbitrages(self.fichier))
             ],
         }
+        if self.depot is not None:
+            par_emission: dict[str, list[Any]] = {}
+            for enregistrement in self.depot.tous():
+                par_emission.setdefault(enregistrement.emission_id, []).append(
+                    enregistrement
+                )
+            for e in emissions:
+                e["maturite"] = maturite_emission(par_emission.get(e["id"], []))
+            donnees["maturite_active"] = True
+        return donnees
 
     def _pour_arbitrer(self, donnees: dict[str, Any]) -> dict[str, Any]:
         """Une émission de la page, avec ce qu'il faut pour arbitrer sa date et
@@ -315,9 +392,12 @@ def creer_serveur(
     port: int = 8765,
     hote: str = "127.0.0.1",
     arbitrages: Path | None = None,
+    depot: Depot | None = None,
+    session: Any = None,
 ) -> ThreadingHTTPServer:
-    """Le serveur de l'outil, prêt à servir (``serve_forever``)."""
-    atelier = Atelier(cache, sortie, arbitrages)
+    """Le serveur de l'outil, prêt à servir (``serve_forever``). Sans
+    ``depot``, la maturité des enregistrements est absente."""
+    atelier = Atelier(cache, sortie, arbitrages, depot, session)
 
     class Requetes(BaseHTTPRequestHandler):
         """Les routes de la page et de l'API JSON."""
@@ -330,11 +410,20 @@ def creer_serveur(
                 self._repondre(atelier.page().encode(), "text/html; charset=utf-8")
             elif self.path == "/api/donnees":
                 self._json(atelier.donnees())
+            elif self.path == "/api/verifications":
+                self._json(atelier.etat_verification())
             else:
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
-            """Un arbitrage ou une annulation ; erreur 400 si invalide."""
+            """Un arbitrage, une annulation ou une vérification ; erreur 400 si
+            la demande est invalide, 503 sans base pour la maturité."""
+            if self.path == "/api/verifications":
+                try:
+                    self._json(atelier.lancer_verification())
+                except MaturiteIndisponibleError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
             actions = {
                 "/api/arbitrages": atelier.arbitrer,
                 "/api/annulations": atelier.annuler,

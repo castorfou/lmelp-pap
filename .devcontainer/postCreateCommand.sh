@@ -333,12 +333,29 @@ config_zsh() {
 }
 
 
+# Navigateur de Playwright (tests de pages HTML, captures) : la révision de Chromium
+# attendue par la version de playwright du venv, dans ~/.cache/ms-playwright (HOME
+# persistant, donc rapide après le premier rebuild). Les bibliothèques système
+# viennent du Dockerfile.
+install_playwright_browser() {
+    if ! command -v playwright &> /dev/null; then
+        echo "ℹ️  playwright absent du venv : navigateur non installé"
+        return 0
+    fi
+    echo "Installation du Chromium de Playwright ($(playwright --version))..."
+    playwright install chromium \
+        && echo "✅ Chromium de Playwright prêt" \
+        || echo "⚠️  'playwright install chromium' a échoué ; à relancer à la main"
+}
+
+
 # Exécution des étapes
 seed_home
 update_system
 setup_timezone
 ensure_uv
 create_python_environment
+install_playwright_browser
 setup_node
 setup_git
 setup_github

@@ -261,7 +261,7 @@ Un arbitrage n'atteste aucune émission : il tranche entre ce que disent les sou
 uv run --active lmelp-pap arbitrer
 ```
 
-La commande lit le cache, reconstruit la liste et lance un serveur local qui sert la page de la liste en **mode arbitrage**. Elle ouvre la page dans le navigateur : dans le devcontainer, VS Code redirige le port vers la machine hôte. Le serveur tourne jusqu'à `Ctrl+C`. Il n'accède jamais au réseau : la liste est reconstruite depuis le cache.
+La commande lit le cache, reconstruit la liste et lance un serveur local qui sert la page de la liste en **mode arbitrage**. Elle ouvre la page dans le navigateur : dans le devcontainer, VS Code redirige le port vers la machine hôte. Le serveur tourne jusqu'à `Ctrl+C`. La liste est reconstruite depuis le cache, sans réseau ; seule la vérification des URL d'intégral (voir « Maturité des enregistrements ») interroge radiofrance.fr, à la demande.
 
 La page garde la frise et les filtres de la page publiée (année, thème, source, type de doute). Sous le détail de chaque émission s'ajoutent :
 
@@ -313,9 +313,27 @@ Le serveur expose une petite API JSON, utilisée par la page :
 |---|---|
 | `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
+| `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
+| `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, et `bilan` (`ok`, `net`, `passager`) une fois finie. |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
 
 Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, date absente des dates candidates ou émission sans doute de date, attestation sans rapprochement ambigu ou émission qui n'est pas rivale, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
+
+### Maturité des enregistrements
+
+Avec une base Mongo (`MONGO_URI` et `MONGO_DB`, dans l'environnement ou le fichier `.env`), l'appli suit la **maturité** de chaque enregistrement intégral, c'est-à-dire le niveau atteint sur le chemin qui le mène à lmelp : localisé, téléchargeable, rapatrié, qualifié, valide. Elle la conserve dans la collection `pap_enregistrements`, un document par URL d'intégral, avec la date d'entrée dans chaque niveau. Sans base, la page n'a ni badge, ni filtre, ni bouton de vérification.
+
+- Le bouton **Vérifier les URL des intégraux** du bandeau interroge chaque URL d'intégral de `enregistrements.csv` (requête `HEAD`, quatre à la fois) et affiche l'avancement, puis le bilan.
+
+  | Réponse | Effet |
+  |---|---|
+  | 200 avec un type audio | l'enregistrement est **téléchargeable** |
+  | 404, 410, ou 200 sans son (échec net) | un enregistrement téléchargeable redevient **localisé** : Radio France détient toujours le fichier |
+  | délai dépassé, erreur réseau, 5xx (échec passager) | noté, niveau inchangé |
+
+  Un enregistrement rapatrié, qualifié ou valide ne change plus de niveau, même si son URL ne répond plus. Une URL jamais vue qui échoue entre au niveau localisé.
+- Chaque émission porte un badge : le niveau de son enregistrement le plus avancé, ou **dans lmelp** si lmelp l'atteste, état qui l'emporte sur la maturité.
+- Le filtre **Maturité** retient un niveau, « dans lmelp », ou les émissions sans enregistrement suivi.
 
 ## Règles de construction
 

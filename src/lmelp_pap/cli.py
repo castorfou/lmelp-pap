@@ -13,6 +13,7 @@ from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import construire_liste
+from lmelp_pap.maturite import depot_depuis_env
 from lmelp_pap.page import construire_page
 
 
@@ -133,6 +134,9 @@ def _arbitrer(args: argparse.Namespace) -> int:
         port=args.port,
         hote=args.hote,
         arbitrages=args.arbitrages,
+        # La maturité des enregistrements vit dans Mongo (MONGO_URI) ; sans
+        # base, l'appli sert la liste sans elle.
+        depot=depot_depuis_env(),
     )
     # VS Code redirige le port vers la machine hôte et y ouvre l'adresse.
     url = f"http://localhost:{serveur.server_address[1]}/"

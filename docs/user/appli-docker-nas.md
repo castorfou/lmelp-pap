@@ -25,6 +25,7 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `PAP_DONNEES` | `/data/processed` | CSV de la liste et arbitrages |
 | `PAP_ARBITRAGES` | `arbitrages.csv` dans `PAP_DONNEES` | fichier des arbitrages |
 | `PUID` / `PGID` | `1000` / `1000` | propriétaire des fichiers créés dans `/data` |
+| `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité |
 
 Le conteneur démarre en root, attribue à son utilisateur `appuser` l'UID et le GID `PUID`/`PGID`, reprend la propriété de tout `/data` (y compris les fichiers d'un déploiement précédent), puis sert l'appli sous cet utilisateur. Les fichiers restent ainsi lisibles et supprimables depuis l'hôte.
 

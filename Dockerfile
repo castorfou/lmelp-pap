@@ -21,8 +21,10 @@ RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.12-slim
 
+# libatomic1 : le Node embarqué par playwright (>= 1.65) en a besoin pour
+# « playwright install », avant même --with-deps.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl gosu \
+    && apt-get install -y --no-install-recommends curl gosu libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 ARG APP_UID=1000
