@@ -404,7 +404,8 @@ def test_la_verification_automatique_laisse_une_trace_dans_les_logs(
     serveur_planifie: Any, depot: Depot, capfd: pytest.CaptureFixture[str]
 ) -> None:
     _attendre_bilan(serveur_planifie.url)
-    depot.noter_verification(datetime.now(UTC) - timedelta(days=8))
+    il_y_a_8_jours = datetime.now(UTC) - timedelta(days=8)
+    depot.noter_verification(il_y_a_8_jours)
     capfd.readouterr()  # oublie le démarrage
 
     serveur_planifie.atelier.planifier()
@@ -412,9 +413,9 @@ def test_la_verification_automatique_laisse_une_trace_dans_les_logs(
     time.sleep(0.1)
 
     logs = capfd.readouterr().err
-    assert (
-        "vérification automatique (complète : dernière il y a 8 jours) : 3 URL" in logs
-    )
+    date = il_y_a_8_jours.astimezone().strftime("%d/%m/%Y")
+    assert f"vérification automatique (complète : dernière le {date} à " in logs
+    assert ") : 3 URL" in logs
     assert "vérification terminée" in logs
     assert "2 ok, 1 mortes, 0 échecs passagers" in logs
 

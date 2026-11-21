@@ -309,7 +309,7 @@ class Atelier:
                 if derniere is None
                 else "base vide"
                 if not connues
-                else f"dernière il y a {(maintenant - derniere).days} jours"
+                else "dernière le " + derniere.astimezone().strftime("%d/%m/%Y à %H:%M")
             )
             self.lancer_verification(None, f"automatique (complète : {raison})")
         elif genre == "nouvelles":
