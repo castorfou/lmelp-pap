@@ -27,7 +27,7 @@ dependencies = [
     "numpy",
     "matplotlib",
     "requests>=2.33.1",
-    "playwright>=1.60.0",
+    "playwright>=1.65.2",
     "pymongo>=4.19.0",
 ]
 
@@ -54,7 +54,8 @@ dev = [
     "mkdocs-awesome-nav",
     "pymdown-extensions",
     "mkdocs-rtd-dropdown",
-    "nbdev>=2.4.6"
+    "nbdev>=2.4.6",
+    "mongomock>=4.3.0",
 ]
 
 [project.urls]
