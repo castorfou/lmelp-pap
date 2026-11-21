@@ -302,6 +302,7 @@ Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans l
 | `--arbitrages FICHIER` | Fichier des arbitrages (par défaut `arbitrages.csv` dans le dossier de sortie). |
 | `--verification-jours N` | Jours entre deux vérifications complètes des URL (par défaut 7, ou `PAP_VERIFICATION_JOURS`). |
 | `--audios DOSSIER` | Dossier des enregistrements rapatriés (par défaut `data/raw/audios`, ou `PAP_AUDIOS`). |
+| `--audios-lmelp DOSSIER` | Dossier audio du back-office lmelp, où vont les enregistrements mis à disposition (par défaut `data/raw/audios-lmelp`, ou `PAP_AUDIOS_LMELP`). |
 | `--port PORT` | Port du serveur (par défaut 8765). |
 | `--sans-navigateur` | N'ouvre pas la page ; l'adresse s'affiche dans le terminal. |
 
@@ -319,9 +320,12 @@ L'appli écrit sur la sortie d'erreur (dans le conteneur : `docker logs lmelp-pa
 2026-11-21 11:04:53 rapatriement terminé en 7 s : 1 rapatrié, 0 déjà là, 0 échec
 2026-11-21 11:20:12 écarté 2006-04-23 (2006/14007-23.04.2006-ITEMA_20025254-2006F4007E0016-27.m4a) : « coupé à 40 min »
 2026-11-21 11:31:40 qualifié 2014-09-28 (2014/14007-28.09.2014-ITEMA_20674220-2014F4007S0271-27.m4a) : favorable
+2026-11-21 11:40:02 mis à disposition 2014-09-28 : /data/audios/2014/14007-28.09.2014-….m4a → /audios-lmelp/2014/14007-28.09.2014-….m4a (sha256 3f1c0e9a77b2)
+2026-11-21 11:40:02 mise à disposition refusée 2006-04-23 (niveau qualifie) : 2006/14007-23.04.2006-….m4a existe déjà dans le dossier de lmelp
+2026-11-21 11:40:02 mise à disposition : 1 mise à disposition, 1 refus
 ```
 
-Une vérification lancée par le bouton est « manuelle ». La raison d'une vérification automatique est indiquée : jamais vérifiée, base vide, date de la précédente, nouvelles URL. Un rapatriement trace aussi chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »), comme une demande de fichier audio introuvable (« audio introuvable : /audios/… »).
+Une vérification lancée par le bouton est « manuelle ». La raison d'une vérification automatique est indiquée : jamais vérifiée, base vide, date de la précédente, nouvelles URL. Un rapatriement trace aussi chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »), comme une demande de fichier audio introuvable (« audio introuvable : /audios/… »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »).
 
 #### API
 
@@ -330,12 +334,13 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | Requête | Effet |
 |---|---|
 | `GET /` | L'accueil. `GET /liste` : la liste en mode arbitrage. |
-| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. Avec une base Mongo, chaque émission porte aussi `maturite`, `maturite_depuis`, `echec_rapatriement`, `fichier_audio` (le fichier écoutable, relatif au dossier audio, ou `null`) et `ecart` (`date` et `motif` de l'écart, ou `null`). |
+| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. Avec une base Mongo, chaque émission porte aussi `maturite`, `maturite_depuis`, `echec_rapatriement`, `fichier_audio` (le fichier écoutable, relatif au dossier audio, ou `null`) `ecart` (`date` et `motif` de l'écart, ou `null`) et `dans_lmelp` (vrai si un épisode de lmelp porte le fichier d'un de ses enregistrements valides, ou si lmelp l'atteste). |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
 | `POST /api/rapatriements` | Lance en fond le rapatriement des émissions `{"emissions": ["2007-01-14", …]}`, l'une après l'autre. Erreurs : 400 (liste vide, émission sans intégral téléchargeable), 409 (un lot tourne déjà), 503 (sans base Mongo). |
 | `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `rapatriees` (dates des émissions rapatriées), `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
 | `POST /api/rapatriements/arret` | Arrête le lot en cours. |
 | `POST /api/qualifications` | Qualifie l'enregistrement rapatrié d'une émission : `{"emission_id": "2014-09-28", "verdict": "favorable"}`, ou `"verdict": "ecarte"` avec `"motif": "…"` ; `"enregistrement"` (son URL) choisit l'enregistrement quand l'émission en a plusieurs. Renvoie les données à jour. Erreurs : 400 (verdict inconnu, écart sans motif, aucun enregistrement rapatrié pour cette émission), 503 (sans base Mongo). |
+| `POST /api/remises` | Met à disposition de lmelp l'enregistrement qualifié de chaque émission : `{"emissions": ["2014-09-28", …]}`, l'une après l'autre. Renvoie les données à jour et `remise` : `mises` (`emission`, `fichier`) et `refus` (`emission`, `detail`). Une émission refusée (déjà dans lmelp, sans enregistrement qualifié, fichier de même nom chez lmelp) ne change rien et n'arrête pas les suivantes. Erreurs : 400 (liste vide), 503 (sans base Mongo). |
 | `GET /audios/<fichier>` | Un fichier du dossier audio (`fichier_audio` d'une émission), entier ou par plage (`Range: bytes=…`, réponse 206 ; 416 hors du fichier). Rien n'est servi hors du dossier audio (404). |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
 | `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, `bilan` (`ok`, `net`, `passager`) une fois finie, `derniere` et `prochaine` (dates de la dernière vérification complète et de la suivante). |
@@ -347,7 +352,7 @@ Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnee
 
 L'appli s'ouvre sur l'**accueil** (`/`) ; la liste et ses arbitrages sont sur `/liste` (bouton « Liste et arbitrages », retour par « ← Accueil »).
 
-Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste, sinon la maturité de son enregistrement le plus avancé (localisé, téléchargeable, rapatrié, qualifié, valide), sinon « sans enregistrement ».
+Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste ou si un épisode de lmelp porte le fichier (`audio_rel_filename`) d'un de ses enregistrements valides, sinon la maturité de son enregistrement le plus avancé (localisé, téléchargeable, rapatrié, qualifié, valide), sinon « sans enregistrement ».
 
 - **En haut, fixes** : l'histogramme des émissions par année, empilé par état, et un compteur par état avec l'action qu'il annonce.
 - **Dessous, la frise** des émissions par année, de la plus récente à la plus ancienne, dans son propre ascenseur : chaque ligne donne la date, le titre, l'état et, pour un état qui attend une action, l'ancienneté dans cet état (« 12 j », en ambre à partir de 21 jours, en rouge à partir de 45).
@@ -394,6 +399,28 @@ Chaque qualification est conservée dans la collection `pap_qualifications` (enr
 | `date` | Date et heure de la qualification (ISO 8601, UTC). |
 
 Une ligne par qualification, de la plus ancienne à la plus récente : un enregistrement écarté puis retenu a deux lignes.
+
+### Mettre à disposition de lmelp
+
+La page **qualifié** propose **Mettre à disposition de lmelp** sur chaque ligne, sur une sélection (cases à cocher) ou sur toutes les émissions de la page. Chaque fois, une confirmation est demandée : une mise à disposition ne se retire pas.
+
+Pour chaque émission :
+
+1. le fichier de l'enregistrement qualifié est copié du dossier audio de pap vers le dossier audio du back-office lmelp (`--audios-lmelp`, variable `PAP_AUDIOS_LMELP` ; par défaut `data/raw/audios-lmelp`), sous le même chemin `<année>/<nom>`, en passant par un fichier `.part` renommé à la fin ; l'empreinte SHA-256 de la copie doit être celle du rapatriement ;
+2. une fiche est écrite dans la collection Mongo `pap_remises`, que lit le back-office (titre, date, type, durée, description, page radiofrance.fr, fichier, empreinte) ;
+3. l'enregistrement passe à **valide** (date d'entrée notée) : l'émission quitte la page qualifié pour la page « valide (attend lmelp) ».
+
+lmelp prend ensuite l'enregistrement à son rythme. Dès que la collection `episodes` de lmelp contient un épisode de même `audio_rel_filename`, l'émission passe à « dans lmelp ».
+
+Une mise à disposition est **refusée**, sans rien écrire, quand :
+
+- un fichier de même nom existe déjà dans le dossier de lmelp (rien n'est écrasé) ;
+- l'émission est déjà dans lmelp ;
+- l'émission n'a pas d'enregistrement qualifié, ou son fichier manque ou a changé depuis le rapatriement.
+
+Les refus s'affichent en haut de la page, en rouge, avec l'émission et la raison, jusqu'à **✕** ; la notification donne le bilan et les compteurs changés (« 1 mis à disposition · 1 refus — qualifié 2→1 · valide 0→1 »).
+
+La **description** de la fiche suit le format de la description des épisodes de lmelp : « durée : 00:54:12 - Le Masque et la Plume - par : Jérôme Garcin - résumé - équipe : … - invités : … ». Chaque morceau vient de la première source qui le donne : la page radiofrance.fr de l'émission, puis l'API Radio France, puis la notice INA, sinon l'animateur déduit de la date. La durée est lue dans le fichier m4a, sinon dans les sources. L'API Radio France n'est interrogée que si `RADIOFRANCE_API_TOKEN` est défini (environnement ou `.env`), au moment de la mise à disposition ; ses données ne vont que dans la fiche, et son absence ou son échec n'empêche pas la mise à disposition. Le titre est « Le Masque et la Plume du 28 septembre 2014 » ; le type, `livres`.
 
 ### Maturité des enregistrements
 
