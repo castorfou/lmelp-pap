@@ -231,6 +231,7 @@ class Atelier:
             fichier_total=None,
             debut=None,
             arrete=False,
+            rapatriees=[],  # émissions rapatriées (ou déjà là) pendant le lot
         )
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
@@ -375,6 +376,7 @@ class Atelier:
             bilan = {"rapatries": 0, "deja_la": 0, "echecs": 0}
             erreurs: list[dict[str, str]] = []
             recus = 0  # octets des fichiers finis
+            rapatriees: list[str] = []
             debut_lot = time.monotonic()
             n_demandes = len(a_rapatrier)
             journal(
@@ -423,6 +425,8 @@ class Atelier:
                     recus += fait.taille or 0
                     deja = bool(avant) and avant == fait.sha256
                     bilan["deja_la" if deja else "rapatries"] += 1
+                    rapatriees.append(enregistrement.emission_id)
+                    tache.maj(rapatriees=list(rapatriees))
                     journal(
                         f"{'déjà là' if deja else 'rapatrié'} "
                         f"{enregistrement.emission_id} : {fait.fichier}, "

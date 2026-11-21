@@ -286,6 +286,7 @@ def test_l_avancement_donne_les_octets_recus(url: str) -> None:
     _post_json(f"{url}/api/rapatriements", {"emissions": ["2014-09-28"]})
     fin = _attendre_rapatriements(url)
     assert fin["octets"] == len(SON)
+    assert fin["rapatriees"] == ["2014-09-28"]
     assert fin["fichier_octets"] == len(SON)
     assert fin["fichier_total"] == len(SON)
     assert fin["debut"]

@@ -350,6 +350,7 @@ EN_COURS = {
 }
 FINI_AVEC_ECHEC = {
     **EN_COURS,
+    "rapatriees": ["2008-03-02", "2008-03-09"],
     "en_cours": False,
     "faites": 12,
     "en_cours_sur": None,
@@ -463,3 +464,13 @@ def test_pap_en_haut_a_gauche_ramene_a_l_accueil(navigateur: Any) -> None:
     page.locator("#frise").wait_for()
     assert page.locator("#frise .annee").count() == 2026 - 1955 + 1
     assert "etat=" not in page.url
+
+
+def test_survoler_les_rapatries_liste_leurs_dates(navigateur: Any) -> None:
+    page = _ouvrir(navigateur, api={"/api/rapatriements": lambda r: FINI_AVEC_ECHEC})
+    rapatries = page.locator("#bandeau .rapatriees")
+    rapatries.wait_for()
+    assert "11 rapatriés" in rapatries.inner_text()
+    detail = rapatries.get_attribute("title")
+    assert "2008-03-02" in detail
+    assert "2008-03-09" in detail

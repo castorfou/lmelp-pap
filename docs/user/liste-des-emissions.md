@@ -331,7 +331,7 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
 | `POST /api/rapatriements` | Lance en fond le rapatriement des émissions `{"emissions": ["2007-01-14", …]}`, l'une après l'autre. Erreurs : 400 (liste vide, émission sans intégral téléchargeable), 409 (un lot tourne déjà), 503 (sans base Mongo). |
-| `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
+| `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `rapatriees` (dates des émissions rapatriées), `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
 | `POST /api/rapatriements/arret` | Arrête le lot en cours. |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
 | `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, `bilan` (`ok`, `net`, `passager`) une fois finie, `derniere` et `prochaine` (dates de la dernière vérification complète et de la suivante). |
@@ -366,7 +366,7 @@ Un **panneau flottant**, en haut à droite, suit le lot sur toutes les pages, et
 - replié : « Téléchargement 3 / 12 » et la barre du lot ;
 - déplié : les Mo reçus, le temps restant estimé, l'émission en cours avec son pourcentage, son débit et sa barre ;
 - **Arrêter** coupe aussitôt le fichier en cours (le `.part` est supprimé) ; les fichiers finis restent rapatriés ;
-- à la fin, le bilan (rapatriés, échecs et leurs erreurs) reste affiché jusqu'à ✕.
+- à la fin, le bilan (rapatriés, échecs et leurs erreurs) reste affiché jusqu'à ✕ ; survoler « N rapatriés » liste les dates des émissions rapatriées pendant le lot.
 
 ### Maturité des enregistrements
 
