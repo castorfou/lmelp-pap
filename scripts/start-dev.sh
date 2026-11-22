@@ -165,6 +165,25 @@ statut() {
     fi
 }
 
+# Les adresses du serveur : locale, puis réseau quand il écoute sur toutes
+# les interfaces (PAP_HOTE=0.0.0.0).
+liens() {
+    echo
+    echo "  ➜  Accueil : $URL/"
+    echo "  ➜  Liste :   $URL/liste"
+    echo "  ➜  Santé :   $URL/health"
+    if [[ "$HOTE" == 0.0.0.0 ]]; then
+        local ip
+        for ip in $(hostname -I 2>/dev/null); do
+            [[ "$ip" == *:* ]] && continue  # IPv6
+            echo "  ➜  Réseau :  http://$ip:$PORT/"
+        done
+    else
+        echo "  ➜  Réseau :  PAP_HOTE=0.0.0.0 pour exposer pap au-delà de $HOTE"
+    fi
+    echo
+}
+
 ACTION=demarrer
 OPTIONS=()
 while [[ $# -gt 0 ]]; do
@@ -241,7 +260,8 @@ if ! vivant "$SERVEUR"; then
     exit 1
 fi
 ecrire_fichier "$SERVEUR"
-log "pap prêt : $URL/ (pid $SERVEUR, décrit dans $FICHIER)"
+log "pap prêt (pid $SERVEUR, décrit dans $FICHIER)"
+liens
 log "Ctrl+C ou $0 --stop pour l'arrêter"
 
 set +e
@@ -251,4 +271,6 @@ code=$?
 # retiré que s'il le décrit encore.
 [[ "$(champ pid)" == "$SERVEUR" ]] && rm -f "$FICHIER"
 log "le serveur s'est arrêté (code $code)"
+# 143 : arrêté par SIGTERM (--stop, --restart), un arrêt normal.
+[[ "$code" == 143 ]] && code=0
 exit "$code"

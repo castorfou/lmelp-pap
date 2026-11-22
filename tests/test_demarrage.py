@@ -278,4 +278,7 @@ def test_second_demarrage_prend_le_port_suivant_et_stop_arrete_les_deux(env_plag
         second.wait(timeout=30)
         premier.wait(timeout=30)
     assert second.stdout is not None
-    assert "un autre serveur pap tourne déjà" in second.stdout.read()
+    sortie = second.stdout.read()
+    assert "un autre serveur pap tourne déjà" in sortie
+    assert f"http://localhost:{debut + 1}/liste" in sortie
+    assert second.returncode == 0

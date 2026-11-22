@@ -273,7 +273,7 @@ scripts/start-dev.sh --status    # URL, pid, ancienneté, /health, commit servi
 scripts/start-dev.sh -- --verification-jours 1   # options passées à arbitrer
 ```
 
-Le port est `PAP_PORT` s'il est défini, et le démarrage est refusé s'il est pris ; sinon, le premier port libre de 8765 à 8799 (plage modifiable par `PAP_PLAGE_PORTS`, par exemple `8765-8799`). L'adresse d'écoute vient de `PAP_HOTE` (127.0.0.1 par défaut).
+Le port est `PAP_PORT` s'il est défini, et le démarrage est refusé s'il est pris ; sinon, le premier port libre de 8765 à 8799 (plage modifiable par `PAP_PLAGE_PORTS`, par exemple `8765-8799`). L'adresse d'écoute vient de `PAP_HOTE` (127.0.0.1 par défaut). Une fois le serveur prêt, le script affiche les liens de l'accueil, de la liste et de `/health`, et, avec `PAP_HOTE=0.0.0.0`, une adresse réseau par interface de la machine.
 
 Le serveur démarré est décrit dans `.dev-ports.json`, à la racine du dépôt (à ne pas commiter) : `pid`, `port`, `host`, `url`, `started_at`, `commit` et `branche` du code servi. `--stop`, `--restart` et `--status` le relisent, et retrouvent aussi par leur port les serveurs pap qui n'y figurent pas (lancés à la main, ou par un second démarrage) : `--stop` les arrête tous. Un second démarrage prend le port libre suivant et prévient qu'un serveur pap tourne déjà, car les deux écrivent les mêmes CSV et la même base Mongo. `--status` signale quand le dépôt a changé de commit depuis le démarrage.
 
