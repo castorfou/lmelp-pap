@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import requests
+from bson import ObjectId
 from dotenv import find_dotenv, load_dotenv
 
 
@@ -432,14 +433,18 @@ class Depot:
         d'une mise à disposition)."""
         self.base[REMISES].delete_one({"_id": url})
 
-    def dans_lmelp(self, fichiers: Iterable[str]) -> set[str]:
+    def dans_lmelp(self, fichiers: Iterable[str]) -> dict[str, datetime | None]:
         """Ceux des fichiers (``<année>/<nom>``) qu'un épisode de lmelp porte
-        en ``audio_rel_filename`` (collection ``episodes`` de la même base)."""
+        en ``audio_rel_filename`` (collection ``episodes`` de la même base),
+        avec l'heure où le back-office a créé cet épisode : celle de son
+        ``_id`` ObjectId (``None`` pour un autre type d'identifiant)."""
         noms = sorted(set(fichiers))
         if not noms:
-            return set()
+            return {}
         return {
-            d["audio_rel_filename"]
+            d["audio_rel_filename"]: (
+                d["_id"].generation_time if isinstance(d["_id"], ObjectId) else None
+            )
             for d in self.base[EPISODES_LMELP].find(
                 {"audio_rel_filename": {"$in": noms}}, {"audio_rel_filename": True}
             )

@@ -52,7 +52,8 @@ niveau de son enregistrement le plus avancé, ou ``null``), ``maturite_depuis``
 (la date d'entrée dans ce niveau), ``fichier_audio`` (le fichier écoutable,
 relatif au dossier audio), ``ecart`` (``date``, ``motif``), ``dans_lmelp``
 (attestée par lmelp, ou un épisode de lmelp porte le fichier d'un de ses
-enregistrements valides) et les données ``maturite_active`` ; sans dépôt, la
+enregistrements valides), ``integration_lmelp`` (l'heure de création de cet
+épisode, ou ``null``) et les données ``maturite_active`` ; sans dépôt, la
 vérification, le rapatriement, la qualification et la mise à disposition
 répondent 503.
 
@@ -200,6 +201,16 @@ class Maturites:
             e.niveau == "valide" and e.fichier in self._presents
             for e in self.de(emission.id)
         )
+
+    def integration_lmelp(self, emission_id: str) -> datetime | None:
+        """L'heure où le back-office a fait un épisode d'un enregistrement
+        valide de l'émission (création de l'épisode), ou ``None``."""
+        heures = [
+            self._presents.get(e.fichier)
+            for e in self.de(emission_id)
+            if e.niveau == "valide" and e.fichier
+        ]
+        return min((h for h in heures if h), default=None)
 
 
 class DemandeInvalideError(ValueError):
@@ -991,6 +1002,10 @@ class Atelier:
             for e in emissions:
                 plus_avance = meilleur(maturites.de(e["id"]))
                 e["dans_lmelp"] = maturites.dans_lmelp(self._emissions[e["id"]])
+                integration = maturites.integration_lmelp(e["id"])
+                e["integration_lmelp"] = (
+                    integration.isoformat() if integration else None
+                )
                 e["maturite"] = plus_avance.niveau if plus_avance else None
                 echecs = [x.echec for x in maturites.de(e["id"]) if x.echec]
                 dernier = max(echecs, key=lambda v: v.date, default=None)
