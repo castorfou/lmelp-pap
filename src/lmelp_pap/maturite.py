@@ -16,6 +16,21 @@ URL) et le fait évoluer selon la vérification de son URL :
 
 Chaque entrée dans un niveau est datée (``entrees``).
 
+Le champ ``url`` (``_id`` du document) identifie l'enregistrement : l'URL du
+fichier audio pour radiofrance, l'URL de la notice pour l'INA, ``piste:<uuid>``
+pour une piste saisie à la main. Seules les URL d'intégral de la liste
+(``integraux``) se vérifient et se rapatrient.
+
+Le niveau localisé a deux autres entrées que le recul d'une URL :
+
+- chaque notice INA des Archives Radio Pro d'une émission sans intégral
+  (``localisations_ina``) crée un enregistrement localisé de source ``ina`` ;
+  celles du Dépôt légal n'en créent aucun. La création n'ajoute que les
+  enregistrements absents (``Depot.ajouter_absents``) : la relancer ne change
+  rien, et n'écrase ni une piste ni un niveau plus avancé ;
+- une piste saisie à la main (``piste``) : une source en texte libre (un
+  passionné, les archives de Radio France après leur réponse) et une note.
+
 Rapatrier un enregistrement téléchargeable télécharge son fichier dans le
 dossier audio de pap (``<année>/<nom d'origine>``), en passant par un
 ``.part`` renommé à la fin : il devient rapatrié, avec le chemin du fichier,
@@ -33,6 +48,7 @@ import hashlib
 import logging
 import os
 import time
+import uuid
 from collections import Counter
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -44,6 +60,10 @@ from typing import Any, Literal
 import requests
 from bson import ObjectId
 from dotenv import find_dotenv, load_dotenv
+
+from lmelp_pap.liste import Emission
+from lmelp_pap.sources.ina import SOURCE as SOURCE_INA
+from lmelp_pap.sources.ina import archives_radio_pro
 
 
 log = logging.getLogger(__name__)
@@ -109,6 +129,51 @@ class Enregistrement:
     taille: int | None = None
     echec: Verification | None = None  # dernier échec de rapatriement
     ecart: Qualification | None = None  # rapatrié, mais écarté à l'écoute
+    note: str | None = None  # ce qu'on sait d'une piste saisie à la main
+
+
+class PisteError(ValueError):
+    """Une piste impossible : sans source."""
+
+
+def piste(
+    emission_id: str, source: str, note: str, maintenant: datetime
+) -> Enregistrement:
+    """Un enregistrement localisé saisi à la main : ``source`` en texte libre
+    (obligatoire : qui le détient, par quel canal, ce qu'il détient), ``note``
+    facultative."""
+    source = source.strip()
+    if not source:
+        raise PisteError("une piste demande une source")
+    return Enregistrement(
+        url=f"piste:{uuid.uuid4().hex}",
+        emission_id=emission_id,
+        source=source,
+        niveau="localise",
+        entrees={"localise": maintenant},
+        note=note.strip() or None,
+    )
+
+
+def localisations_ina(
+    emissions: Iterable[Emission], maintenant: datetime
+) -> list[Enregistrement]:
+    """Un enregistrement localisé par notice INA des Archives Radio Pro, pour
+    chaque émission sans intégral, identifié par l'URL de sa notice. Une
+    émission connue seulement par le Dépôt légal n'en reçoit aucun."""
+    return [
+        Enregistrement(
+            url=a.url,
+            emission_id=e.id,
+            source=SOURCE_INA,
+            niveau="localise",
+            entrees={"localise": maintenant},
+        )
+        for e in emissions
+        if not any(x.type == "intégral" for x in e.enregistrements)
+        for a in e.attestations
+        if a.source == SOURCE_INA and a.url and archives_radio_pro(a.source_id)
+    ]
 
 
 class QualificationError(ValueError):
@@ -395,6 +460,18 @@ class Depot:
         document = _en_document(enregistrement)
         self._collection.replace_one({"_id": document["_id"]}, document, upsert=True)
 
+    def ajouter_absents(self, enregistrements: Iterable[Enregistrement]) -> int:
+        """Écrit les enregistrements dont l'identifiant est absent, sans
+        toucher aux autres ; rend le nombre de créations."""
+        creations = 0
+        for e in enregistrements:
+            document = _en_document(e)
+            resultat = self._collection.update_one(
+                {"_id": document["_id"]}, {"$setOnInsert": document}, upsert=True
+            )
+            creations += resultat.upserted_id is not None
+        return creations
+
     def ajouter_qualification(self, qualification: Qualification) -> None:
         """Conserve une qualification (collection ``pap_qualifications``)."""
         self.base[QUALIFICATIONS].insert_one(_qualification_en_document(qualification))
@@ -567,6 +644,7 @@ def _en_document(e: Enregistrement) -> dict[str, Any]:
             else None
         ),
         "ecart": _qualification_en_document(e.ecart) if e.ecart else None,
+        "note": e.note,
     }
 
 
@@ -617,4 +695,5 @@ def _depuis_document(d: dict[str, Any]) -> Enregistrement:
             else None
         ),
         ecart=_qualification_depuis_document(d["ecart"]) if d.get("ecart") else None,
+        note=d.get("note"),
     )

@@ -73,7 +73,9 @@ def _demarrer(tmp_path: Path, **options: Any) -> Iterator[str]:
     _cache_rempli(cache)
     serveur = creer_serveur(cache, tmp_path / "sortie", port=0, **options)
     threading.Thread(target=serveur.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{serveur.server_address[1]}"
+    adresse = f"http://127.0.0.1:{serveur.server_address[1]}"
+    ATELIERS[adresse] = serveur.atelier  # type: ignore[attr-defined]
+    yield adresse
     serveur.shutdown()
     serveur.server_close()
 
@@ -101,6 +103,12 @@ def url(tmp_path: Path, depot: Depot) -> Iterator[str]:
 
 # La session factice de chaque serveur démarré, par adresse.
 SESSIONS: dict[str, SessionComplete] = {}
+# L'atelier de chaque serveur démarré, par adresse.
+ATELIERS: dict[str, Any] = {}
+
+
+def _atelier(url: str) -> Any:
+    return ATELIERS[url]
 
 
 def _session_du_serveur(url: str) -> SessionComplete:
@@ -1129,3 +1137,95 @@ def test_un_episode_lmelp_d_une_autre_semaine_ne_bloque_rien(
     donnees = _remettre(url, "2014-09-28")
 
     assert donnees["remise"]["refus"] == []
+
+
+# ---------- Niveau localisé ----------
+
+
+def _post_erreur(url: str, corps: dict[str, Any]) -> int:
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post_json(url, corps)
+    return erreur.value.code
+
+
+def test_une_piste_saisie_a_la_main_localise_l_emission(url: str) -> None:
+    donnees = _post_json(
+        f"{url}/api/localisations",
+        {"emission_id": "1967-01-01", "source": "Jean D., forum", "note": "face B"},
+    )
+    emission = next(e for e in donnees["emissions"] if e["id"] == "1967-01-01")
+    aujourd_hui = datetime.now(UTC).date().isoformat()
+    assert emission["maturite"] == "localise"
+    assert emission["maturite_depuis"].startswith(aujourd_hui)
+    (localisation,) = emission["localisations"]
+    assert localisation["source"] == "Jean D., forum"
+    assert localisation["note"] == "face B"
+    assert localisation["notice"] is None
+    assert localisation["depuis"].startswith(aujourd_hui)
+
+
+def test_une_piste_sans_source_est_refusee(url: str) -> None:
+    corps = {"emission_id": "1967-01-01", "source": "  ", "note": ""}
+    assert _post_erreur(f"{url}/api/localisations", corps) == 400
+
+
+def test_une_piste_sur_une_emission_inconnue_est_refusee(url: str) -> None:
+    corps = {"emission_id": "1900-01-01", "source": "Jean D."}
+    assert _post_erreur(f"{url}/api/localisations", corps) == 400
+
+
+def test_sans_mongo_pas_de_piste(url_sans_mongo: str) -> None:
+    corps = {"emission_id": "1967-01-01", "source": "Jean D."}
+    assert _post_erreur(f"{url_sans_mongo}/api/localisations", corps) == 503
+
+
+def test_une_piste_laisse_une_trace_dans_les_logs(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    corps = {"emission_id": "1967-01-01", "source": "Jean D., forum"}
+    _post_json(f"{url}/api/localisations", corps)
+    time.sleep(0.1)
+    assert (
+        "enregistrement localisé ajouté : 1967-01-01 (source « Jean D., forum »)"
+        in capfd.readouterr().err
+    )
+
+
+def test_les_notices_ina_localisent_les_emissions_au_demarrage(
+    serveur_planifie: Any, depot: Depot
+) -> None:
+    for _ in range(100):
+        if any(e.source == "ina" for e in depot.tous()):
+            break
+        time.sleep(0.05)
+    emissions = {
+        e["id"]: e for e in _get(f"{serveur_planifie.url}/api/donnees")["emissions"]
+    }
+    assert emissions["1956-01-22"]["maturite"] == "localise"
+    (localisation,) = emissions["1956-01-22"]["localisations"]
+    assert localisation["source"] == "ina"
+    assert localisation["notice"] == (
+        "https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021484/theatre-et-litterature"
+    )
+
+
+def test_relancer_la_localisation_ina_ne_cree_rien(
+    url: str, depot: Depot, capfd: pytest.CaptureFixture[str]
+) -> None:
+    atelier = _atelier(url)
+    premiere = atelier.localiser_ina()
+    avant = depot.tous()
+    assert premiere > 0
+    assert atelier.localiser_ina() == 0
+    assert depot.tous() == avant
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert logs.count("localisation INA : ") == 1
+    assert f"localisation INA : {premiere} enregistrement" in logs
+
+
+def test_sans_planification_la_localisation_ina_n_a_pas_lieu(
+    url: str, depot: Depot
+) -> None:
+    time.sleep(0.2)
+    assert depot.tous() == []

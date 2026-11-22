@@ -117,6 +117,8 @@
   dialog.boite p { margin: 0; color: var(--doux); }
   dialog.boite .choix { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
   dialog.boite .choix button { padding: 6px 14px; }
+  dialog.boite .champ { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; font-size: 13px; }
+  dialog.boite .champ input, dialog.boite .champ textarea { font: inherit; padding: 6px 8px; border: 1px solid var(--trait); border-radius: 6px; background: var(--fond, transparent); color: var(--texte); }
   dialog.boite .attente { display: flex; gap: 10px; align-items: center; }
   .rouet { flex: none; width: 18px; height: 18px; border: 2px solid var(--trait); border-top-color: var(--qualifie); border-radius: 50%; animation: tourner 1s linear infinite; }
   @keyframes tourner { to { transform: rotate(360deg); } }
@@ -143,6 +145,8 @@ const ETAT = Object.fromEntries(ETATS.map(e => [e.cle, e]));
 // Les actions disponibles, par état : { libelle, lot, executer(emissions) }. La
 // colonne Action et les boutons de lot n'apparaissent que pour un état qui en a une.
 const ACTIONS = {
+  // une piste (un passionné, les archives de Radio France…) : source libre et note
+  sans: { libelle: "Ajouter un enregistrement localisé", lot: false, executer: ids => saisirPiste(ids[0]) },
   telechargeable: { libelle: "Télécharger", lot: true, executer: ids => lancerRapatriement(ids) },
   // ouvre (ou referme) le lecteur sous la ligne de l'émission
   rapatrie: { libelle: "Écouter et qualifier", lot: false, executer: ids => { vue.ecoute = vue.ecoute === ids[0] ? null : ids[0]; rendre(); } },
@@ -318,6 +322,39 @@ async function qualifier(id, demande) {
   }
 }
 
+// ---------- Piste : un enregistrement localisé saisi à la main ----------
+// POST /api/localisations ; la source (texte libre) est obligatoire.
+function saisirPiste(id) {
+  const d = $("boite");
+  d.innerHTML = `<h3 id="boite-titre">Ajouter un enregistrement localisé</h3>
+    <p>Émission du ${esc(id)} : qui la détient, et ce qu'on en sait.</p>
+    <label class="champ">Source<input id="piste-source" placeholder="ex. Jean D., forum, cassettes 1978-1982" autocomplete="off"></label>
+    <label class="champ">Note<textarea id="piste-note" rows="3"></textarea></label>
+    <p class="echec" id="piste-erreur" hidden></p>
+    <div class="choix"><button value="non">Annuler</button><button class="primaire" value="oui" disabled>Ajouter</button></div>`;
+  const source = $("piste-source"), note = $("piste-note"), ajouter = d.querySelector(".primaire");
+  const fermer = () => { d.oncancel = null; if (d.open) d.close(); };
+  source.addEventListener("input", () => { ajouter.disabled = !source.value.trim(); });
+  source.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ajouter.disabled) ajouter.click(); });
+  d.querySelector('button[value="non"]').addEventListener("click", fermer);
+  d.oncancel = ev => { ev.preventDefault(); fermer(); };
+  ajouter.addEventListener("click", async () => {
+    const avant = compter(EMISSIONS);
+    ajouter.disabled = true;
+    try {
+      const r = await fetch("/api/localisations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emission_id: id, source: source.value.trim(), note: note.value.trim() }) });
+      const t = await r.json();
+      if (!r.ok) throw new Error(t.erreur || r.statusText);
+      fermer(); preparer(t); rendre();
+      notifier(`${id} localisé`, avant);
+    } catch (err) {
+      const e = $("piste-erreur"); e.textContent = `Échec : ${err.message}`; e.hidden = false;
+      ajouter.disabled = !source.value.trim();
+    }
+  });
+  d.showModal(); source.focus();
+}
+
 // ---------- Rapatriements : un lot tourne côté serveur, le bandeau le suit ----------
 // L'état vient de GET /api/rapatriements : le bandeau se retrouve après un
 // rechargement ou depuis un autre poste. Un lot fini garde son bilan et ses
@@ -432,6 +469,8 @@ function preparer(d) {
     fichier: e.fichier_audio || null, ecart: e.ecart || null,
     pages: e.attestations.filter(a => a.source === "radiofrance" && a.url).map(a => ({ url: a.url, titre: a.titre || "" })),
     integration: e.integration_lmelp || null,
+    localisations: e.localisations || [],
+    entree: e.maturite_depuis || null,
     depuis: e.maturite_depuis ? Math.max(0, Math.floor((Date.now() - Date.parse(e.maturite_depuis)) / JOUR_MS)) : null,
   }));
   const fin = Math.max(new Date().getFullYear(), ...EMISSIONS.map(e => e.annee));
@@ -480,7 +519,8 @@ const depuis = e => {
   if (e.depuis === null) return "";
   // les couleurs d'alerte valent pour une file de travail (un état à action)
   const c = !ETAT[e.etat].action ? "var(--doux)" : e.depuis >= 45 ? "#b3261e" : e.depuis >= 21 ? "#9a6700" : "var(--doux)";
-  return `<span style="color:${c};white-space:nowrap">${e.depuis} j</span>`;
+  const titre = e.entree ? ` title="depuis le ${esc(new Date(e.entree).toLocaleDateString("fr-FR"))}"` : "";
+  return `<span style="color:${c};white-space:nowrap"${titre}>${e.depuis} j</span>`;
 };
 
 // Histogramme par année. Empilé par état, ou une seule couleur (page d'un état).
@@ -563,6 +603,9 @@ function accueil(racine) {
 // Les thèmes n'ont pas de colonne (presque toutes les émissions sont « livres ») :
 // seule une émission qui n'est pas que « livres » les montre après son titre.
 const themesMixtes = e => e.themes.length && e.themes.join() !== "livres" ? ` <span class="doux">· ${esc(e.themes.join(", "))}</span>` : "";
+const detenteurs = e => e.localisations.map(l =>
+  `<div>${l.notice ? `<a href="${esc(l.notice)}" target="_blank" rel="noopener noreferrer">${esc(l.source)}</a>` : esc(l.source)}${l.note ? `<div class="doux">${esc(l.note)}</div>` : ""}</div>`).join("")
+  || `<span class="doux">${esc(e.sources.join(", "))}</span>`;
 function colonnes(cle) {
   const c = [
     { k: "date", t: "Date", v: e => e.date, h: e => e.date },
@@ -571,8 +614,10 @@ function colonnes(cle) {
   // dans lmelp : l'heure où le back-office a fait un épisode d'un enregistrement remis par pap
   if (cle === "lmelp") c.push({ k: "integration", t: "Intégrée", v: e => e.integration || "",
     h: e => e.integration ? new Date(e.integration).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ") : '<span class="doux">—</span>' });
+  // localisé : qui détient l'enregistrement (la notice INA, ou la source d'une piste), et la note
+  if (cle === "localise") c.push({ k: "sources", t: "Sources", v: e => e.localisations.map(l => l.source).join(","), h: detenteurs });
+  else if (cle !== "lmelp") c.push({ k: "sources", t: "Sources", v: e => e.sources.join(","), h: e => `<span class="doux">${esc(e.sources.join(", "))}</span>` });
   if (cle !== "lmelp") {
-    c.push({ k: "sources", t: "Sources", v: e => e.sources.join(","), h: e => `<span class="doux">${esc(e.sources.join(", "))}</span>` });
     c.push({ k: "depuis", t: "Depuis", v: e => e.depuis ?? -1, h: depuis });
   }
   return c;

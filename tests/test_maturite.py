@@ -13,10 +13,12 @@ import mongomock
 import pytest
 import requests
 
+from lmelp_pap import liste
 from lmelp_pap.maturite import (
     NIVEAUX,
     Depot,
     Enregistrement,
+    PisteError,
     Qualification,
     QualificationError,
     RapatriementError,
@@ -26,8 +28,10 @@ from lmelp_pap.maturite import (
     classer,
     ecrire_qualifications,
     integraux,
+    localisations_ina,
     maturite_emission,
     meilleur,
+    piste,
     qualifier,
     rapatrier,
     retenu,
@@ -641,3 +645,122 @@ def test_les_qualifications_s_exportent_en_csv(tmp_path: Any) -> None:
         f'2008-03-02,{URL},ecarte,"coupé, à 40 min",2026-11-20T09:00:00+00:00\n'
         f"2008-03-02,{URL},favorable,,2026-11-21T09:00:00+00:00\n"
     )
+
+
+# ---------- Niveau localisé : notices INA et pistes saisies à la main ----------
+
+NOTICE_PH = (
+    "https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021484/theatre-et-litterature"
+)
+NOTICE_PH_BIS = "https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021485/rediffusion"
+NOTICE_RD = "https://catalogue.ina.fr/doc/TV-RADIO/RD_1098450.001/le-masque"
+
+
+def _notice(url: str) -> liste.Attestation:
+    source_id = url.split("/")[-2]
+    return liste.Attestation("ina", source_id, HIER.date(), url=url)
+
+
+def _emission(id_: str, *notices: str, integral: bool = False) -> liste.Emission:
+    return liste.Emission(
+        id=id_,
+        date=HIER.date(),
+        themes=frozenset({"livres"}),
+        attestations=[_notice(u) for u in notices],
+        enregistrements=[liste.Enregistrement(URL, "intégral")] if integral else [],
+    )
+
+
+def test_une_notice_des_archives_radio_pro_localise_l_emission() -> None:
+    (localise,) = localisations_ina([_emission("1956-01-22", NOTICE_PH)], AUJOURDHUI)
+    assert localise == Enregistrement(
+        url=NOTICE_PH,
+        emission_id="1956-01-22",
+        source="ina",
+        niveau="localise",
+        entrees={"localise": AUJOURDHUI},
+    )
+
+
+def test_une_notice_du_depot_legal_ne_localise_rien() -> None:
+    assert localisations_ina([_emission("2005-03-06", NOTICE_RD)], AUJOURDHUI) == []
+
+
+def test_une_emission_qui_a_un_integral_n_est_pas_localisee_par_l_ina() -> None:
+    emission = _emission("1985-08-25", NOTICE_PH, integral=True)
+    assert localisations_ina([emission], AUJOURDHUI) == []
+
+
+def test_chaque_notice_des_archives_radio_pro_donne_un_enregistrement() -> None:
+    emission = _emission("1956-01-22", NOTICE_PH, NOTICE_PH_BIS, NOTICE_RD)
+    urls = [e.url for e in localisations_ina([emission], AUJOURDHUI)]
+    assert urls == [NOTICE_PH, NOTICE_PH_BIS]
+
+
+def test_une_notice_sans_url_ne_localise_rien() -> None:
+    emission = _emission("1956-01-22")
+    emission.attestations.append(liste.Attestation("ina", "PH_X", HIER.date()))
+    assert localisations_ina([emission], AUJOURDHUI) == []
+
+
+def test_relancer_la_localisation_ne_change_rien(depot: Depot) -> None:
+    emissions = [_emission("1956-01-22", NOTICE_PH)]
+    assert depot.ajouter_absents(localisations_ina(emissions, HIER)) == 1
+    assert depot.ajouter_absents(localisations_ina(emissions, AUJOURDHUI)) == 0
+    (localise,) = depot.tous()
+    assert localise.entrees == {"localise": HIER}
+
+
+def test_la_localisation_n_ecrase_pas_un_niveau_plus_avance(depot: Depot) -> None:
+    avance = Enregistrement(
+        url=NOTICE_PH,
+        emission_id="1956-01-22",
+        source="ina",
+        niveau="rapatrie",
+        entrees={"localise": HIER, "rapatrie": HIER},
+        fichier="1956/a.mp3",
+    )
+    depot.enregistrer(avance)
+    emissions = [_emission("1956-01-22", NOTICE_PH)]
+    assert depot.ajouter_absents(localisations_ina(emissions, AUJOURDHUI)) == 0
+    assert depot.tous() == [avance]
+
+
+def test_une_piste_cree_un_enregistrement_localise_de_source_libre() -> None:
+    e = piste("1978-04-02", "  Jean D., forum, cassettes 1978  ", " face B ", HIER)
+    assert e.url.startswith("piste:")
+    assert e.emission_id == "1978-04-02"
+    assert e.source == "Jean D., forum, cassettes 1978"
+    assert e.note == "face B"
+    assert e.niveau == "localise"
+    assert e.entrees == {"localise": HIER}
+
+
+def test_deux_pistes_ont_chacune_leur_identifiant() -> None:
+    assert (
+        piste("1978-04-02", "a", "", HIER).url != piste("1978-04-02", "a", "", HIER).url
+    )
+
+
+def test_une_piste_sans_note_n_en_porte_pas() -> None:
+    assert piste("1978-04-02", "Jean D.", "  ", HIER).note is None
+
+
+def test_une_piste_demande_une_source() -> None:
+    with pytest.raises(PisteError, match="source"):
+        piste("1978-04-02", "   ", "note", HIER)
+
+
+def test_le_depot_garde_la_note_d_une_piste(depot: Depot) -> None:
+    e = piste("1978-04-02", "Jean D.", "face B", HIER)
+    depot.enregistrer(e)
+    depot.ajouter_absents([e])
+    assert depot.tous() == [e]
+
+
+def test_la_localisation_ne_touche_pas_une_piste(depot: Depot) -> None:
+    e = piste("1956-01-22", "Jean D.", "", HIER)
+    depot.enregistrer(e)
+    depot.ajouter_absents(localisations_ina([_emission("1956-01-22", NOTICE_PH)], HIER))
+    assert e in depot.tous()
+    assert len(depot.tous()) == 2

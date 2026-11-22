@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from lmelp_pap.liste import Attestation
-from lmelp_pap.sources.ina import lire_notices
+from lmelp_pap.sources.ina import archives_radio_pro, lire_notices
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "ina"
@@ -220,3 +220,12 @@ def test_sans_generique_ni_equipe_ni_invites() -> None:
     notice = _notice_avec('<td id="DE" class="v">littérature</td>')
     assert notice.equipe == ()
     assert notice.invites == ()
+
+
+def test_seules_les_notices_des_archives_radio_pro_se_demandent() -> None:
+    # PH_ : Archives Radio Pro (INA mediapro) ; RD_ : Dépôt légal (InaTHÈQUE)
+    assert archives_radio_pro("PH_PHD88021484")
+    assert archives_radio_pro("PH_PHY02000980")
+    assert archives_radio_pro("PH_00523817.001")
+    assert not archives_radio_pro("RD_1098450.001")
+    assert not archives_radio_pro("DA_CPC76050736")

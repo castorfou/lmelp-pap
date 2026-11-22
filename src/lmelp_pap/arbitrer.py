@@ -29,6 +29,9 @@ API :
 - ``POST /api/qualifications`` : qualifie l'enregistrement rapatrié d'une
   émission (``emission_id``, ``verdict`` : ``favorable`` ou ``ecarte``,
   ``motif``, obligatoire pour un écart) ;
+- ``POST /api/localisations`` : ajoute à une émission un enregistrement
+  localisé saisi à la main (``emission_id``, ``source`` en texte libre,
+  obligatoire, ``note``) ;
 - ``GET /api/radiofrance/<emission_id>`` : la diffusion de l'émission dans
   l'Open API Radio France, lue à la demande (module ``radiofrance_api``) :
   ``statut`` (``trouvee``, ``introuvable``, ``sans_cle``, ``erreur`` avec son
@@ -53,7 +56,9 @@ niveau de son enregistrement le plus avancé, ou ``null``), ``maturite_depuis``
 relatif au dossier audio), ``ecart`` (``date``, ``motif``), ``dans_lmelp``
 (attestée par lmelp, ou un épisode de lmelp porte le fichier d'un de ses
 enregistrements valides), ``integration_lmelp`` (l'heure de création de cet
-épisode, ou ``null``) et les données ``maturite_active`` ; sans dépôt, la
+épisode, ou ``null``), ``localisations`` (ses enregistrements localisés, du
+plus ancien au plus récent : ``source``, ``note``, ``notice``, l'URL de la
+notice INA, et ``depuis``, la date d'entrée dans le niveau) et les données ``maturite_active`` ; sans dépôt, la
 vérification, le rapatriement, la qualification et la mise à disposition
 répondent 503.
 
@@ -108,6 +113,7 @@ from lmelp_pap.maturite import (
     ESSAIS,
     Depot,
     Enregistrement,
+    PisteError,
     QualificationError,
     RapatriementError,
     RapatriementInterrompuError,
@@ -115,7 +121,9 @@ from lmelp_pap.maturite import (
     Verification,
     ecrire_qualifications,
     integraux,
+    localisations_ina,
     meilleur,
+    piste,
     qualifier,
     rapatrier,
     retenu,
@@ -446,9 +454,54 @@ class Atelier:
         return genre
 
     def _apres_reconstruction(self) -> None:
-        """Une reconstruction peut apporter des URL d'intégral nouvelles."""
+        """Une reconstruction peut apporter des URL d'intégral nouvelles, ou
+        des notices INA à localiser."""
         if self.planification:
+            self.localiser_ina()
             self.planifier()
+
+    def localiser_ina(self) -> int:
+        """Crée un enregistrement localisé pour chaque notice INA des Archives
+        Radio Pro d'une émission sans intégral, s'il n'existe pas encore ;
+        rend le nombre de créations."""
+        if self.depot is None:
+            return 0
+        with self._verrou:
+            candidats = localisations_ina(self._emissions.values(), datetime.now(UTC))
+        creations = self.depot.ajouter_absents(candidats)
+        if creations:
+            log.info(
+                f"localisation INA : {creations} enregistrement{_s(creations)} "
+                f"localisé{_s(creations)} créé{_s(creations)} "
+                f"({len(candidats)} notice{_s(len(candidats))} des Archives "
+                "Radio Pro)"
+            )
+        return creations
+
+    def ajouter_localise(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Ajoute à une émission un enregistrement localisé saisi à la main
+        (``emission_id``, ``source`` en texte libre, ``note``)."""
+        depot = self._depot()
+        emission_id = demande.get("emission_id")
+        source = str(demande.get("source") or "")
+        try:
+            with self._verrou:
+                emission = self._emission(emission_id)
+                localise = piste(
+                    emission.id,
+                    source,
+                    str(demande.get("note") or ""),
+                    datetime.now(UTC),
+                )
+                depot.enregistrer(localise)
+        except (DemandeInvalideError, PisteError) as erreur:
+            log.info(f"piste refusée {emission_id or '?'} : {erreur}")
+            raise DemandeInvalideError(str(erreur)) from erreur
+        log.info(
+            f"enregistrement localisé ajouté : {localise.emission_id} "
+            f"(source « {localise.source} »)"
+        )
+        return self.donnees()
 
     def planifier_en_continu(self, periode: float = PLANIFICATION) -> None:
         """Vérifie au démarrage, puis toutes les ``periode`` secondes, si une
@@ -457,6 +510,7 @@ class Atelier:
         def boucle() -> None:
             while True:
                 try:
+                    self.localiser_ina()
                     self.planifier()
                 except Exception:
                     log.exception("planification de la vérification en échec")
@@ -1007,6 +1061,7 @@ class Atelier:
                     integration.isoformat() if integration else None
                 )
                 e["maturite"] = plus_avance.niveau if plus_avance else None
+                e["localisations"] = _localisations(maturites.de(e["id"]))
                 echecs = [x.echec for x in maturites.de(e["id"]) if x.echec]
                 dernier = max(echecs, key=lambda v: v.date, default=None)
                 e["echec_rapatriement"] = (
@@ -1094,6 +1149,25 @@ class Atelier:
         }
 
 
+def _localisations(enregistrements: list[Enregistrement]) -> list[dict[str, Any]]:
+    """Les enregistrements localisés d'une émission, du plus ancien au plus
+    récent : leur source, leur note, l'URL de leur notice INA et leur date
+    d'entrée dans le niveau (toujours notée en y entrant)."""
+    localises = sorted(
+        (x for x in enregistrements if x.niveau == "localise"),
+        key=lambda x: x.entrees["localise"],
+    )
+    return [
+        {
+            "source": x.source,
+            "note": x.note,
+            "notice": x.url if x.url.startswith("http") else None,
+            "depuis": x.entrees["localise"].isoformat(),
+        }
+        for x in localises
+    ]
+
+
 def _episode(document: dict[str, Any]) -> str:
     """Un épisode de lmelp dans un message : sa date et son titre."""
     quand = document.get("date")
@@ -1115,6 +1189,7 @@ ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/rapatriements": Atelier.lancer_rapatriement,
     "/api/rapatriements/arret": lambda atelier, _: atelier.arreter_rapatriement(),
     "/api/qualifications": Atelier.qualifier,
+    "/api/localisations": Atelier.ajouter_localise,
     "/api/remises": Atelier.mettre_a_disposition,
     "/api/remises/annulation": Atelier.annuler_mise_a_disposition,
 }

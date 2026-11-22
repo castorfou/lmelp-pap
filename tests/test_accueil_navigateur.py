@@ -996,3 +996,81 @@ def test_cliquer_une_emission_valide_deplie_sa_fiche(navigateur: Any) -> None:
         assert attendu in texte
     ligne.locator("td").first.click()
     assert page.locator("tr.fiche").count() == 0
+
+
+# ---------- Niveau localisé : piste saisie à la main ----------
+
+PISTE = {"source": "Jean D., forum, cassettes 1987", "note": "face B abîmée"}
+
+
+def _ajouter_piste(navigateur: Any) -> tuple[Any, str, list[Any]]:
+    """L'accueil sur la page sans enregistrement, la boîte d'ajout ouverte
+    sur l'émission sans enregistrement de 1987."""
+    donnees = _donnees()
+    cible = next(
+        e["id"]
+        for e in donnees["emissions"]
+        if e["date"].startswith("1987") and e["maturite"] is None
+    )
+    envoyees: list[Any] = []
+
+    def localisations(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        if not envoyees[-1]["source"].strip():
+            return {"erreur": "une piste demande une source"}
+        apres = json.loads(json.dumps(donnees))
+        e = next(x for x in apres["emissions"] if x["id"] == cible)
+        e["maturite"] = "localise"
+        e["maturite_depuis"] = "2026-11-22T10:00:00+00:00"
+        e["localisations"] = [
+            {**PISTE, "notice": None, "depuis": "2026-11-22T10:00:00+00:00"}
+        ]
+        return apres
+
+    page = _ouvrir(navigateur, donnees, api={"/api/localisations": localisations})
+    page.locator('.compteur[data-etat="sans"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible}"]')
+    ligne.get_by_role("button", name="Ajouter un enregistrement localisé").click()
+    return page, cible, envoyees
+
+
+def test_ajouter_une_piste_localise_l_emission(navigateur: Any) -> None:
+    page, cible, envoyees = _ajouter_piste(navigateur)
+    page.get_by_label("Source").fill(PISTE["source"])
+    page.get_by_label("Note").fill(PISTE["note"])
+    page.get_by_role("button", name="Ajouter", exact=True).click()
+
+    page.locator("#toast", has_text="localisé").wait_for()
+    assert envoyees == [{"emission_id": cible, **PISTE}]
+    assert page.locator(f'tbody tr[data-id="{cible}"]').count() == 0
+
+    page.get_by_role("button", name="← Accueil").click()
+    page.locator('.compteur[data-etat="localise"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible}"]')
+    assert PISTE["source"] in ligne.inner_text()
+    assert PISTE["note"] in ligne.inner_text()
+
+
+def test_une_piste_sans_source_ne_part_pas(navigateur: Any) -> None:
+    page, _, envoyees = _ajouter_piste(navigateur)
+    page.get_by_label("Note").fill("rien")
+    assert page.get_by_role("button", name="Ajouter", exact=True).is_disabled()
+    assert envoyees == []
+
+
+def test_la_page_localise_lie_la_notice_ina(navigateur: Any) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "localise")
+    notice = "https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD88021484/theatre"
+    cible["localisations"] = [
+        {
+            "source": "ina",
+            "note": None,
+            "notice": notice,
+            "depuis": cible["maturite_depuis"],
+        }
+    ]
+    page = _ouvrir(navigateur, donnees)
+    page.locator('.compteur[data-etat="localise"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    assert ligne.get_by_role("link", name="ina").get_attribute("href") == notice
