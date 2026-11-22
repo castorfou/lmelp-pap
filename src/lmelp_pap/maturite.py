@@ -30,6 +30,7 @@ s'exporte dans ``qualifications.csv``.
 import contextlib
 import csv
 import hashlib
+import logging
 import os
 import time
 from collections import Counter
@@ -42,6 +43,9 @@ from typing import Any, Literal
 
 import requests
 from dotenv import find_dotenv, load_dotenv
+
+
+log = logging.getLogger(__name__)
 
 
 NIVEAUX = ("localise", "telechargeable", "rapatrie", "qualifie", "valide")
@@ -398,6 +402,18 @@ class Depot:
         une par enregistrement)."""
         self.base[REMISES].replace_one({"_id": fiche["_id"]}, fiche, upsert=True)
 
+    def remise_de(self, emission_id: str) -> dict[str, Any] | None:
+        """La fiche ``pap_remises`` d'une émission, ou ``None``."""
+        fiche: dict[str, Any] | None = self.base[REMISES].find_one(
+            {"emission_id": emission_id}
+        )
+        return fiche
+
+    def retirer_remise(self, url: str) -> None:
+        """Retire la fiche ``pap_remises`` d'un enregistrement (annulation
+        d'une mise à disposition)."""
+        self.base[REMISES].delete_one({"_id": url})
+
     def dans_lmelp(self, fichiers: Iterable[str]) -> set[str]:
         """Ceux des fichiers (``<année>/<nom>``) qu'un épisode de lmelp porte
         en ``audio_rel_filename`` (collection ``episodes`` de la même base)."""
@@ -494,6 +510,9 @@ def verifier(
             depot.enregistrer(
                 appliquer(existants.get(url), verification, url, emission_id)
             )
+            if verification.resultat == "passager":
+                # un échec réseau ou serveur : l'URL sera revérifiée
+                log.warning(f"vérification {emission_id} {url} : {verification.detail}")
             bilan[verification.resultat] += 1
             faites += 1
             if progres:

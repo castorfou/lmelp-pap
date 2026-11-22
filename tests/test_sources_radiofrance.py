@@ -109,3 +109,55 @@ def test_la_fiche_du_dimanche_decrit_l_emission_entiere() -> None:
 
 def test_une_archive_e_est_un_extrait() -> None:
     assert _fiche("louis-aragon-4684213").extrait
+
+
+def test_les_entites_html_du_json_ld_sont_decodees() -> None:
+    """radiofrance.fr échappe « & » en « &amp; » dans son JSON-LD (#102)."""
+    attestation = _fiche("saint-lucky-luke-de-jul-achde-5909820")
+
+    assert attestation.titre == (
+        '"Saint Lucky Luke" de Jul & Achdé : que penser de cette nouvelle '
+        "aventure du cow-boy qui tire plus vite que son ombre ?"
+    )
+
+
+def test_toutes_les_entites_html_du_json_ld_sont_decodees() -> None:
+    page = (
+        '<script type="application/ld+json">{"@graph": ['
+        '{"@type": "RadioEpisode", "url": "https://x/fiche-1",'
+        ' "dateCreated": "2026-11-15T10:00:00+01:00",'
+        ' "name": "Titre", "director": [{"name": "J&#39;&amp;B"}]},'
+        '{"@type": "NewsArticle", "headline": "L&#39;an &quot;un&quot; &amp; deux",'
+        ' "description": "Le Masque &amp; la Plume"}]}</script>'
+    )
+    attestation = lire_fiche(page)
+
+    assert attestation is not None
+    assert attestation.titre == 'L\'an "un" & deux'
+    assert attestation.description == "Le Masque & la Plume"
+    assert attestation.animateur == "J'&B"
+
+
+def _fiche_aux_animateurs(*noms: str) -> Attestation | None:
+    """Une fiche minimale dont le JSON-LD donne ces noms d'animateurs."""
+    directeurs = ", ".join(f'{{"name": "{n}"}}' for n in noms)
+    return lire_fiche(
+        '<script type="application/ld+json">{"@graph": ['
+        '{"@type": "RadioEpisode", "url": "https://x/fiche-1",'
+        ' "dateCreated": "2026-11-15T10:00:00+01:00",'
+        f' "name": "Titre", "director": [{directeurs}]}}]}}</script>'
+    )
+
+
+def test_un_nom_d_animateur_vide_est_ignore() -> None:
+    attestation = _fiche_aux_animateurs("Jérôme Garcin", "", " . ", "Rebecca Manzoni")
+
+    assert attestation is not None
+    assert attestation.animateur == "Jérôme Garcin, Rebecca Manzoni"
+
+
+def test_sans_nom_d_animateur_l_animateur_est_absent() -> None:
+    attestation = _fiche_aux_animateurs("", " ")
+
+    assert attestation is not None
+    assert attestation.animateur is None

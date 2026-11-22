@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pap · accueil</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <!-- Accueil de l'appli pap (servi sur « / » par lmelp-pap arbitrer) : histogramme
      des émissions par année empilé par état, compteurs par état, frise des
      émissions dans son propre ascenseur, et une page de travail par état
@@ -89,7 +92,14 @@
   .alerte.refus { border-color: #b3261e; border-width: 2px; }
   .alerte.refus .tete { display: flex; gap: 8px; align-items: center; justify-content: space-between; color: #b3261e; }
   /* Lecteur d'un enregistrement rapatrié, sous sa ligne */
-  tr.ecoute td { background: var(--ligne); }
+  tr.ecoute td, tr.fiche td { background: var(--ligne); }
+  tbody tr.depliable { cursor: pointer; }
+  tbody tr.depliable:hover td { background: var(--ligne); }
+  tr.fiche dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 4px 0; }
+  tr.fiche dt { color: var(--doux); }
+  tr.fiche dd { margin: 0; overflow-wrap: anywhere; }
+  tr.fiche dd.description { white-space: pre-wrap; }
+  tr.fiche a { color: var(--qualifie); }
   tr.ecoute .lecteur, tr.ecoute .verdict { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
   tr.ecoute audio { flex: 1; min-width: 280px; height: 36px; }
   tr.ecoute .radiofrance { margin: 6px 0; display: grid; gap: 2px; }
@@ -98,12 +108,25 @@
   .lot { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
   button.primaire { background: var(--entete); color: var(--entete-texte); border-color: var(--entete); }
   button:disabled { opacity: .5; cursor: wait; }
+  button.discret { border-color: transparent; background: none; color: var(--doux); font-size: 12px; padding: 2px 6px; }
+  button.discret:hover { color: var(--texte); border-color: var(--trait); }
+  /* Boîte de la page : confirmation d'une action, puis attente de son résultat */
+  dialog.boite { width: min(460px, calc(100vw - 32px)); padding: 18px 20px; border: 1px solid var(--trait); border-radius: 10px; background: var(--carte); color: var(--texte); box-shadow: 0 12px 36px #0006; }
+  dialog.boite::backdrop { background: #0008; }
+  dialog.boite h3 { margin: 0 0 8px; font-size: 15px; }
+  dialog.boite p { margin: 0; color: var(--doux); }
+  dialog.boite .choix { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  dialog.boite .choix button { padding: 6px 14px; }
+  dialog.boite .attente { display: flex; gap: 10px; align-items: center; }
+  .rouet { flex: none; width: 18px; height: 18px; border: 2px solid var(--trait); border-top-color: var(--qualifie); border-radius: 50%; animation: tourner 1s linear infinite; }
+  @keyframes tourner { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <header class="app"><a class="logo" href="/" id="logo">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><a class="vers-liste" href="/liste">Liste et arbitrages</a></header>
 <main id="accueil"></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog class="boite" id="boite" aria-labelledby="boite-titre"></dialog>
 <script>
 // Les états d'une émission, dans l'ordre du chemin vers lmelp. « action » : ce que
 // le compteur annonce ; l'action elle-même vit dans ACTIONS.
@@ -125,8 +148,14 @@ const ACTIONS = {
   rapatrie: { libelle: "Écouter et qualifier", lot: false, executer: ids => { vue.ecoute = vue.ecoute === ids[0] ? null : ids[0]; rendre(); } },
   // « confirmer » : la question posée avant d'agir, par ligne comme en lot
   qualifie: {
-    libelle: "Mettre à disposition de lmelp", lot: true, executer: ids => mettreADisposition(ids),
-    confirmer: ids => `Mettre à disposition de lmelp ${ids.length > 1 ? `les ${ids.length} émissions` : `l'émission ${ids[0]}`} ? Le fichier est copié dans le dossier audio de lmelp ; une mise à disposition ne se retire pas.`,
+    libelle: "Mettre à disposition de lmelp", oui: "Mettre à disposition", lot: true, executer: ids => mettreADisposition(ids),
+    confirmer: ids => `Mettre à disposition de lmelp ${ids.length > 1 ? `les ${ids.length} émissions` : `l'émission ${ids[0]}`} ? Le fichier est copié dans le dossier audio de lmelp ; tant que lmelp ne l'a pas importée, la mise à disposition s'annule depuis la page valide.`,
+  },
+  // « discret » : un petit bouton, pour revenir en arrière (retour à qualifié)
+  valide: {
+    libelle: "Annuler", titre: "Annuler la mise à disposition", oui: "Annuler la mise à disposition", discret: true, lot: false,
+    executer: ids => annulerMiseADisposition(ids[0]),
+    confirmer: ids => `Annuler la mise à disposition de l'émission ${ids[0]} ? Sa fiche pap_remises et sa copie dans le dossier audio de lmelp sont retirées, et elle revient à qualifié.`,
   },
 };
 
@@ -137,16 +166,71 @@ const ACTIONS = {
 async function mettreADisposition(ids) {
   const avant = compter(EMISSIONS);
   document.querySelectorAll("button[data-action], .lot button").forEach(b => { b.disabled = true; });
+  patienter("Mise à disposition en cours…",
+    "Lecture des métadonnées (API Radio France, quelques secondes si elles ne sont pas en cache), puis copie du fichier dans le dossier audio de lmelp.");
   try {
     const r = await fetch("/api/remises", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emissions: ids }) });
     const t = await r.json();
     if (!r.ok) throw new Error(t.erreur || r.statusText);
     const { mises, refus } = t.remise;
+    ids.forEach(id => delete FICHES[id]);
     preparer(t); vue.choix.clear(); vue.refus = refus; rendre();
     notifier(`${mises.length} mis à disposition${refus.length ? ` · ${refus.length} refus` : ""}`, avant);
   } catch (err) {
     toast(`Échec : ${err.message}`); rendre();
+  } finally {
+    $("boite").close();
   }
+}
+// POST /api/remises/annulation : l'émission valide (pas encore dans lmelp)
+// revient à qualifié ; sa fiche et sa copie chez lmelp sont retirées.
+async function annulerMiseADisposition(id) {
+  const avant = compter(EMISSIONS);
+  document.querySelectorAll("button[data-action]").forEach(b => { b.disabled = true; });
+  try {
+    const r = await fetch("/api/remises/annulation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emission: id }) });
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.erreur || r.statusText);
+    delete FICHES[id];
+    preparer(t); rendre();
+    notifier(`Mise à disposition annulée : ${id}`, avant);
+  } catch (err) {
+    toast(`Échec : ${err.message}`); rendre();
+  }
+}
+// ---------- Fiche d'une émission valide : ce que lmelp reçoit ----------
+// GET /api/remises/<id> à l'ouverture, gardée dans la mémoire de la page.
+const FICHES = {};
+const horaire = s => [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map(n => String(n).padStart(2, "0")).join(":");
+const quand = d => d ? new Date(d).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" }) : "";
+const lien = u => u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>` : "";
+function fiche(e, colonnesN) {
+  const f = FICHES[e.id];
+  let corps;
+  if (!f) corps = `<span class="doux">lecture de la fiche… (l'API Radio France peut prendre quelques secondes)</span>`;
+  else if (f.erreur) corps = `<span class="echec">${esc(f.erreur)}</span>`;
+  else {
+    const sources = Object.entries(f.sources_description || {}).map(([k, v]) => `${k} : ${v}`).join(", ");
+    const lignes = [
+      ["Titre", esc(f.titre)], ["Date", esc((f.date || "").slice(0, 10))], ["Type", esc(f.type)],
+      ["Durée", f.duree ? horaire(f.duree) : ""], ["Description", esc(f.description), "description"],
+      ["Sources de la description", esc(sources)], ["Page radiofrance.fr", lien(f.episode_page_url)],
+      ["URL de l'intégral", lien(f.url)], ["Fichier (audio_rel_filename)", esc(f.audio_rel_filename)],
+      ["SHA-256", `<code>${esc(f.sha256 || "")}</code>`], ["Mise à disposition", esc(quand(f.date_remise))],
+    ];
+    corps = (f.apercu ? `<div class="doux">Aperçu : ce que lmelp recevra à la mise à disposition (rien n'est encore écrit).</div>` : "") + `<dl>${lignes.map(([t, v, c]) => `<dt>${t}</dt><dd${c ? ` class="${c}"` : ""}>${v || `<span class="doux">—</span>`}</dd>`).join("")}</dl>`;
+  }
+  return `<tr class="fiche"><td colspan="${colonnesN}">${corps}</td></tr>`;
+}
+async function ouvrirFiche(id) {
+  vue.fiche = vue.fiche === id ? null : id; rendre();
+  if (!vue.fiche || FICHES[id]) return;
+  try {
+    const r = await fetch("/api/remises/" + encodeURIComponent(id));
+    const t = await r.json();
+    FICHES[id] = r.ok ? t : { erreur: t.erreur || r.statusText };
+  } catch (err) { FICHES[id] = { erreur: err.message }; }
+  if (vue.fiche === id) rendre();
 }
 function afficherRefus(racine) {
   if (!vue.refus.length) return;
@@ -330,7 +414,7 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const JOUR_MS = 86400000;
 
 let EMISSIONS = [], ANNEES = [], maturiteActive = false;
-const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set(), ecoute: null, refus: [] };
+const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set(), ecoute: null, fiche: null, refus: [] };
 
 // Une émission attestée par lmelp, ou dont un enregistrement valide y est entré
 // (dans_lmelp), y est déjà : cet état l'emporte sur la maturité.
@@ -363,6 +447,27 @@ function parAnnee(liste) {
   return m;
 }
 // Un message bref ; « tenir » le garde affiché (avancement d'une tâche).
+// ---------- Boîte de la page (à la place des boîtes natives du navigateur) ----------
+// demander : la question avant une action ; rend une promesse, vraie si
+// l'utilisateur confirme (Annuler ou Échap : fausse).
+function demander(titre, texte, oui) {
+  const d = $("boite");
+  d.innerHTML = `<h3 id="boite-titre">${esc(titre)}</h3><p>${esc(texte)}</p>
+    <div class="choix"><button value="non">Annuler</button><button class="primaire" value="oui">${esc(oui)}</button></div>`;
+  return new Promise(resoudre => {
+    const fin = ok => { d.oncancel = null; if (d.open) d.close(); resoudre(ok); };
+    d.querySelectorAll(".choix button").forEach(b => b.addEventListener("click", () => fin(b.value === "oui")));
+    d.oncancel = ev => { ev.preventDefault(); fin(false); };
+    d.showModal(); d.querySelector(".primaire").focus();
+  });
+}
+// patienter : la boîte reste ouverte, sans bouton ni Échap, jusqu'à close().
+function patienter(titre, texte) {
+  const d = $("boite");
+  d.innerHTML = `<div class="attente"><span class="rouet" aria-hidden="true"></span><h3 id="boite-titre" style="margin:0">${esc(titre)}</h3></div><p style="margin-top:8px">${esc(texte)}</p>`;
+  d.oncancel = ev => ev.preventDefault();
+  if (!d.open) d.showModal();
+}
 function toast(t, tenir = false) { const el = $("toast"); el.textContent = t; el.classList.add("vu"); clearTimeout(toast.t); if (!tenir) toast.t = setTimeout(() => el.classList.remove("vu"), 6000); }
 // Après une action : les compteurs qui ont changé (« rapatrié 12→15 »).
 function notifier(message, avant) {
@@ -371,8 +476,9 @@ function notifier(message, avant) {
   toast(message + (delta ? " — " + delta : ""));
 }
 const depuis = e => {
-  if (e.depuis === null || !ETAT[e.etat].action) return "";
-  const c = e.depuis >= 45 ? "#b3261e" : e.depuis >= 21 ? "#9a6700" : "var(--doux)";
+  if (e.depuis === null) return "";
+  // les couleurs d'alerte valent pour une file de travail (un état à action)
+  const c = !ETAT[e.etat].action ? "var(--doux)" : e.depuis >= 45 ? "#b3261e" : e.depuis >= 21 ? "#9a6700" : "var(--doux)";
   return `<span style="color:${c};white-space:nowrap">${e.depuis} j</span>`;
 };
 
@@ -453,11 +559,13 @@ function accueil(racine) {
 }
 
 // ---------- Page de travail d'un état ----------
+// Les thèmes n'ont pas de colonne (presque toutes les émissions sont « livres ») :
+// seule une émission qui n'est pas que « livres » les montre après son titre.
+const themesMixtes = e => e.themes.length && e.themes.join() !== "livres" ? ` <span class="doux">· ${esc(e.themes.join(", "))}</span>` : "";
 function colonnes(cle) {
   const c = [
     { k: "date", t: "Date", v: e => e.date, h: e => e.date },
-    { k: "titre", t: "Titre", v: e => e.titre.toLowerCase(), h: e => esc(e.titre) + (e.echec ? `<div class="echec">échec le ${new Date(e.echec.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ")} : ${esc(e.echec.detail)}</div>` : "") + (e.ecart ? `<div class="ecart" title="écarté le ${esc(new Date(e.ecart.date).toLocaleDateString("fr-FR"))}">écarté : ${esc(e.ecart.motif)}</div>` : "") },
-    { k: "themes", t: "Thèmes", v: e => e.themes.join(","), h: e => `<span class="doux">${esc(e.themes.join(", "))}</span>` },
+    { k: "titre", t: "Titre", v: e => e.titre.toLowerCase(), h: e => esc(e.titre) + themesMixtes(e) + (e.echec ? `<div class="echec">échec le ${new Date(e.echec.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ")} : ${esc(e.echec.detail)}</div>` : "") + (e.ecart ? `<div class="ecart" title="écarté le ${esc(new Date(e.ecart.date).toLocaleDateString("fr-FR"))}">écarté : ${esc(e.ecart.motif)}</div>` : "") },
   ];
   if (cle !== "lmelp") {
     c.push({ k: "sources", t: "Sources", v: e => e.sources.join(","), h: e => `<span class="doux">${esc(e.sources.join(", "))}</span>` });
@@ -485,25 +593,37 @@ function pageEtat(racine) {
   $("h").append(histogramme({ liste: tous, hauteur: 90, empile: false, surligne: vue.etat, annee: vue.annee,
     clic: a => { vue.annee = vue.annee === a ? null : a; rendre(); } }));
   // une action qui a « confirmer » pose sa question avant d'agir, par ligne comme en lot
-  const confirme = ids => !action.confirmer || confirm(action.confirmer(ids));
-  $("lot")?.addEventListener("click", () => {
+  const question = (ids, toujours) => action.confirmer || toujours
+    ? demander(action.titre || action.libelle, action.confirmer ? action.confirmer(ids) : `${action.libelle} : les ${ids.length} émissions ?`, action.oui || action.libelle)
+    : Promise.resolve(true);
+  $("lot")?.addEventListener("click", async () => {
     const ids = liste.map(e => e.id);
-    if (confirm(action.confirmer ? action.confirmer(ids) : `${action.libelle} : les ${liste.length} émissions ?`)) action.executer(ids);
+    if (await question(ids, true)) action.executer(ids);
   });
-  $("lot-selection")?.addEventListener("click", () => { if (vue.choix.size && confirme([...vue.choix])) action.executer([...vue.choix]); });
+  $("lot-selection")?.addEventListener("click", async () => { const ids = [...vue.choix]; if (ids.length && await question(ids)) action.executer(ids); });
   $("tous")?.addEventListener("change", ev => { liste.forEach(e => ev.target.checked ? vue.choix.add(e.id) : vue.choix.delete(e.id)); rendre(); });
   const tb = racine.querySelector("tbody");
   const lot = action && action.lot;
-  tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}">${lot ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
+  // qualifié et valide : un clic sur la ligne déplie ce que lmelp reçoit
+  const depliable = vue.etat === "valide" || vue.etat === "qualifie";
+  tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}"${depliable ? ' class="depliable" title="Voir la fiche remise à lmelp"' : ""}>${lot ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action${action.discret ? ' class="discret"' : ""}>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
     (liste.length > 300 ? `<tr><td colspan="6" class="doux">… ${liste.length - 300} de plus</td></tr>` : "");
   const ecoutee = vue.etat === "rapatrie" && liste.find(e => e.id === vue.ecoute);
   if (ecoutee) {
     const tr = tb.querySelector(`tr[data-id="${CSS.escape(ecoutee.id)}"]`);
     if (tr) { tr.insertAdjacentHTML("afterend", lecteur(ecoutee, tr.children.length)); brancherLecteur(ecoutee.id); }
   }
-  if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", () => {
+  const ouverte = depliable && liste.find(e => e.id === vue.fiche);
+  if (ouverte) {
+    const tr = tb.querySelector(`tr[data-id="${CSS.escape(ouverte.id)}"]`);
+    if (tr) tr.insertAdjacentHTML("afterend", fiche(ouverte, tr.children.length));
+  }
+  if (depliable) tb.querySelectorAll("tr.depliable").forEach(tr => tr.addEventListener("click", ev => {
+    if (!ev.target.closest("button, a, input")) ouvrirFiche(tr.dataset.id);
+  }));
+  if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", async () => {
     const ids = [b.closest("tr").dataset.id];
-    if (confirme(ids)) action.executer(ids);
+    if (await question(ids)) action.executer(ids);
   }));
   if (lot) tb.querySelectorAll("input[type=checkbox]").forEach(c => c.addEventListener("change", () => {
     const id = c.closest("tr").dataset.id;
@@ -531,7 +651,7 @@ function appliquerTri(etat) {
   vue.tri = m ? m.tri : triParDefaut(etat); vue.sens = m ? m.sens : -1;
 }
 function ouvrir(etat) {
-  vue.etat = etat; vue.choix.clear(); vue.ecoute = null; appliquerTri(etat);
+  vue.etat = etat; vue.choix.clear(); vue.ecoute = null; vue.fiche = null; appliquerTri(etat);
   rendre(); scrollTo(0, 0);
 }
 function lireAdresse() {

@@ -50,7 +50,11 @@ def lire_fiche(page: str) -> Attestation | None:
         titre=titre,
         description=_texte(article.get("description")),
         duree=duree,
-        animateur=", ".join(p["name"] for p in episode.get("director", [])) or None,
+        # un nom vide (ou « . ») est sauté : pas de virgule orpheline
+        animateur=", ".join(
+            nom for p in episode.get("director", []) if (nom := _texte(p["name"]))
+        )
+        or None,
         url=url,
         enregistrements=tuple(
             replace(e, type="extrait") if extrait else e for e in enregistrements
@@ -72,10 +76,12 @@ def _json_ld(page: str) -> dict[str, dict[str, Any]]:
 
 
 def _texte(valeur: str | None) -> str | None:
-    """Texte nettoyé : espaces insécables normalisées, vide ou « . » → None."""
+    """Texte nettoyé : entités HTML décodées (le JSON-LD de radiofrance.fr
+    écrit « & » en « &amp; »), espaces insécables normalisées, vide ou « . »
+    → None."""
     if valeur is None:
         return None
-    texte = re.sub(r"[\u00a0\u202f\s]+", " ", valeur).strip()
+    texte = re.sub(r"[\u00a0\u202f\s]+", " ", html_lib.unescape(valeur)).strip()
     return texte if texte.strip(" .") else None
 
 

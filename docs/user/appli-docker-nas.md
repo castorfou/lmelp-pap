@@ -28,10 +28,26 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `PAP_AUDIOS_LMELP` | `/audios-lmelp` | dossier audio du back-office lmelp, où vont les enregistrements mis à disposition |
 | `RADIOFRANCE_API_TOKEN` | aucune | jeton de l'API Radio France, lue seulement au moment d'une mise à disposition pour compléter la description |
 | `PAP_VERIFICATION_JOURS` | `7` | jours entre deux vérifications complètes des URL d'intégral (la première part seule au démarrage sur une base neuve) |
+| `PAP_URL_PUBLIQUE` | aucune | adresse publique de l'appli (par exemple `https://pap.lmelp.ascot63.synology.me`), donnée dans les logs de démarrage |
 | `PUID` / `PGID` | `1000` / `1000` | propriétaire des fichiers créés dans `/data` |
 | `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité |
 
 Le conteneur démarre en root, attribue à son utilisateur `appuser` l'UID et le GID `PUID`/`PGID`, reprend la propriété de tout `/data` (y compris les fichiers d'un déploiement précédent), puis sert l'appli sous cet utilisateur. Les fichiers restent ainsi lisibles et supprimables depuis l'hôte.
+
+## Logs
+
+L'appli écrit ses logs sur la sortie d'erreur du conteneur : `docker logs lmelp-pap` (ou `docker logs -f` pour les suivre). Le dossier `/data/logs` reste vide. Chaque ligne porte l'horodatage local, le niveau (`INFO`, `WARNING`, `ERROR`), le module et le message. Au démarrage :
+
+```
+2026-11-21 10:53:40 INFO    cli : lecture du cache et construction de la liste…
+2026-11-21 10:53:49 INFO    cli : lmelp-pap 0.1.0 : écoute sur 0.0.0.0:8090
+2026-11-21 10:53:49 INFO    cli : Mongo : connecté (base masque_et_la_plume)
+2026-11-21 10:53:49 INFO    cli : liste : 2123 émissions
+2026-11-21 10:53:49 INFO    cli : dossiers : cache /data/cache, données /data/processed, arbitrages /data/processed/arbitrages.csv, audios /data/audios, audios lmelp /audios-lmelp
+2026-11-21 10:53:49 INFO    cli : page publique : https://pap.lmelp.ascot63.synology.me
+```
+
+L'adresse d'écoute est celle du conteneur (`0.0.0.0:8090`) ; l'adresse vue depuis le réseau est celle de `PAP_URL_PUBLIQUE`, ligne absente sans cette variable. Mongo est `connecté`, `absent (MONGO_URI non défini)` ou `injoignable (base …) : <erreur>` : le démarrage tente un `ping` et compte les émissions sans lire la base : l'appli démarre dans tous les cas. Les lignes qui suivent (requêtes, actions, erreurs) sont décrites dans [la liste des émissions](liste-des-emissions.md#logs).
 
 ## Lancer l'image sur un poste
 

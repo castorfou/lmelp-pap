@@ -12,7 +12,7 @@ L'image `ghcr.io/castorfou/lmelp-pap` sert l'appli web (`lmelp-pap arbitrer`). S
 | `scripts/fumee_image.sh` | test de fumée d'une image : la démarre avec un `mongo` à côté et interroge ses routes |
 | `.github/workflows/docker.yml` | construit l'image et lui fait passer le test de fumée à chaque PR touchant le code ou l'image ; à chaque push sur `main`, si la fumée passe, la pousse sur ghcr (`latest`, `sha-…`) puis déclenche sa mise à jour sur le NAS |
 
-Le paquet est installé hors mode éditable : les gabarits `accueil.html`, `page.html` et `arbitrage.html` (déclarés en `package-data`) sont dans le venv, et l'image ne contient pas `src/`. Un gabarit absent du paquet passe inaperçu dans le devcontainer, qui exécute le code depuis `src/` : seul le test de fumée de l'image le révèle.
+Le paquet est installé hors mode éditable : les gabarits `accueil.html`, `page.html` et `arbitrage.html` et les icônes `icones/*` (déclarés en `package-data`) sont dans le venv, et l'image ne contient pas `src/`. Un fichier absent du paquet passe inaperçu dans le devcontainer, qui exécute le code depuis `src/` : seul le test de fumée de l'image le révèle.
 
 ## Configuration de la commande
 

@@ -83,6 +83,12 @@ def navigateur() -> Iterator[Any]:
         nav.close()
 
 
+# Rendu par une route de ``api`` : la requête reste en suspens, la route
+# est gardée dans ``SUSPENDUES`` pour que le test y réponde plus tard.
+EN_ATTENTE = object()
+SUSPENDUES: list[Any] = []
+
+
 def _ouvrir(
     navigateur: Any,
     donnees: dict[str, Any] | None = None,
@@ -105,7 +111,10 @@ def _ouvrir(
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
         elif api and (chemin := "/" + url.split("/", 3)[-1]) in api:
             reponse = api[chemin](route.request)
-            route.fulfill(body=json.dumps(reponse), content_type="application/json")
+            if reponse is EN_ATTENTE:
+                SUSPENDUES.append(route)
+            else:
+                route.fulfill(body=json.dumps(reponse), content_type="application/json")
         elif url.endswith("/api/donnees"):
             route.fulfill(body=corps, content_type="application/json")
         else:
@@ -194,7 +203,7 @@ def test_les_colonnes_d_une_page_d_etat_se_trient(navigateur: Any) -> None:
     page.locator('.compteur[data-etat="localise"]').click()
     entetes = page.locator("th.triable")
     noms = [t.rstrip(" ▲▼") for t in entetes.all_inner_texts()]
-    assert noms == ["Date", "Titre", "Thèmes", "Sources", "Depuis"]
+    assert noms == ["Date", "Titre", "Sources", "Depuis"]
 
     def colonne(i: int) -> list[Any]:
         textes = page.locator(f"tbody tr td:nth-child({i + 1})").all_inner_texts()
@@ -214,7 +223,7 @@ def test_la_page_dans_lmelp_n_a_ni_sources_ni_anciennete(navigateur: Any) -> Non
     page = _ouvrir(navigateur)
     page.locator('.compteur[data-etat="lmelp"]').click()
     entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
-    assert entetes == ["Date", "Titre", "Thèmes"]
+    assert entetes == ["Date", "Titre"]
 
 
 def test_sans_action_pas_de_colonne_action(navigateur: Any) -> None:
@@ -655,12 +664,10 @@ def test_sans_donnees_de_l_api_un_message_et_l_ecoute_reste_possible(
 # --- mettre à disposition de lmelp ------------------------------------------
 
 
-def _remettre(
-    navigateur: Any, reponse: Any, accepter: bool = True
-) -> tuple[Any, dict[str, Any], list[Any]]:
+def _remettre(navigateur: Any, reponse: Any) -> tuple[Any, dict[str, Any], list[Any]]:
     """L'accueil sur la page qualifié ; ``reponse(donnees, cible)`` rend la
-    réponse de ``POST /api/remises``. Les confirmations sont acceptées ou
-    refusées selon ``accepter``."""
+    réponse de ``POST /api/remises``. Les confirmations se font dans la
+    boîte de la page (voir ``_confirmer``)."""
     donnees = _donnees()
     cible = next(e for e in donnees["emissions"] if e["maturite"] == "qualifie")
     envoyees: list[Any] = []
@@ -673,9 +680,17 @@ def _remettre(
         )
 
     page = _ouvrir(navigateur, donnees, api={"/api/remises": remises})
-    page.on("dialog", lambda d: d.accept() if accepter else d.dismiss())
     page.locator('.compteur[data-etat="qualifie"]').click()
     return page, cible, envoyees
+
+
+def _confirmer(page: Any, accepter: bool = True) -> None:
+    """Répond à la boîte de confirmation de la page (jamais une boîte native
+    du navigateur)."""
+    boite = page.get_by_role("dialog")
+    boite.wait_for()
+    nom = "Mettre à disposition" if accepter else "Annuler"
+    boite.get_by_role("button", name=nom, exact=True).click()
 
 
 def _mise(apres: dict[str, Any], e: dict[str, Any]) -> dict[str, Any]:
@@ -704,6 +719,7 @@ def test_mettre_a_disposition_confirme_envoie_et_notifie(navigateur: Any) -> Non
     page, cible, envoyees = _remettre(navigateur, _mise)
     ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
     ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    _confirmer(page)
 
     page.locator("#toast", has_text="mis à disposition").wait_for()
     assert envoyees == [{"emissions": [cible["id"]]}]
@@ -715,12 +731,49 @@ def test_mettre_a_disposition_confirme_envoie_et_notifie(navigateur: Any) -> Non
 
 
 def test_sans_confirmation_rien_n_est_envoye(navigateur: Any) -> None:
-    page, cible, envoyees = _remettre(navigateur, _mise, accepter=False)
+    page, cible, envoyees = _remettre(navigateur, _mise)
     ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
     ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    _confirmer(page, accepter=False)
     page.wait_for_timeout(200)
+    assert page.get_by_role("dialog").count() == 0
     assert envoyees == []
     assert ligne.count() == 1
+
+
+def test_la_confirmation_est_une_boite_de_la_page(navigateur: Any) -> None:
+    natives: list[Any] = []
+    page, cible, _ = _remettre(navigateur, _mise)
+
+    def native(d: Any) -> None:
+        natives.append(d)
+        d.dismiss()
+
+    page.on("dialog", native)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    boite = page.get_by_role("dialog")
+    boite.wait_for()
+    assert natives == []
+    assert cible["id"] in boite.inner_text()
+    assert "dossier audio de lmelp" in boite.inner_text()
+
+
+def test_la_mise_a_disposition_en_cours_reste_affichee(navigateur: Any) -> None:
+    page, cible, _ = _remettre(navigateur, lambda apres, e: EN_ATTENTE)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    _confirmer(page)
+
+    boite = page.get_by_role("dialog")
+    boite.get_by_text("en cours").wait_for()
+    assert boite.get_by_role("button").count() == 0
+    route = SUSPENDUES.pop()
+    apres = _donnees()
+    e = next(x for x in apres["emissions"] if x["id"] == cible["id"])
+    route.fulfill(body=json.dumps(_mise(apres, e)), content_type="application/json")
+    page.locator("#toast", has_text="mis à disposition").wait_for()
+    assert page.get_by_role("dialog").count() == 0
 
 
 def test_une_collision_s_affiche_visiblement(navigateur: Any) -> None:
@@ -735,6 +788,7 @@ def test_une_collision_s_affiche_visiblement(navigateur: Any) -> None:
     page, cible, _ = _remettre(navigateur, collision)
     ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
     ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    _confirmer(page)
 
     alerte = page.locator(".refus")
     alerte.wait_for()
@@ -788,3 +842,140 @@ def test_le_tri_choisi_sur_une_page_est_garde(navigateur: Any) -> None:
     page.get_by_role("button", name="← Accueil").click()
     page.locator('.compteur[data-etat="rapatrie"]').click()
     assert page.locator("th.triable", has_text="Date").inner_text().endswith("▼")
+
+
+# --- annuler une mise à disposition (page valide) ----------------------------
+
+
+def test_une_mise_a_disposition_s_annule_depuis_la_page_valide(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "valide")
+    envoyees: list[Any] = []
+
+    def annulation(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        apres = json.loads(json.dumps(donnees))
+        next(e for e in apres["emissions"] if e["id"] == cible["id"])["maturite"] = (
+            "qualifie"
+        )
+        return apres
+
+    page = _ouvrir(navigateur, donnees, api={"/api/remises/annulation": annulation})
+    page.locator('.compteur[data-etat="valide"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    bouton = ligne.get_by_role("button", name="Annuler", exact=True)
+    assert "discret" in (bouton.get_attribute("class") or "")
+    bouton.click()
+    boite = page.get_by_role("dialog")
+    boite.wait_for()
+    assert "qualifié" in boite.inner_text()
+    boite.get_by_role("button", name="Annuler la mise à disposition").click()
+
+    page.locator("#toast", has_text="annulée").wait_for()
+    assert envoyees == [{"emission": cible["id"]}]
+    assert page.locator(f'tbody tr[data-id="{cible["id"]}"]').count() == 0
+    assert page.locator(".lot").count() == 0
+
+
+def test_la_page_valide_montre_depuis_combien_de_jours_lmelp_attend(
+    navigateur: Any,
+) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="valide"]').click()
+    colonnes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
+    i = colonnes.index("Depuis")
+    cellule = page.locator("tbody tr").first.locator("td").nth(i)
+    assert cellule.inner_text().endswith(" j")
+
+
+def test_aucune_page_d_etat_n_a_de_colonne_themes(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    for etat in ("telechargeable", "qualifie", "valide", "lmelp"):
+        page.locator(f'.compteur[data-etat="{etat}"]').click()
+        entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
+        assert "Thèmes" not in entetes, etat
+        page.get_by_role("button", name="← Accueil").click()
+
+
+def test_une_emission_qui_n_est_pas_que_livres_le_dit_a_cote_du_titre(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    mixte, autre = [e for e in donnees["emissions"] if e["maturite"] == "qualifie"][:2]
+    mixte["themes"] = ["cinéma", "livres"]
+    page = _ouvrir(navigateur, donnees)
+    page.locator('.compteur[data-etat="qualifie"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{mixte["id"]}"]')
+    assert "cinéma, livres" in ligne.inner_text()
+    seul_livres = page.locator(f'tbody tr[data-id="{autre["id"]}"]')
+    assert "livres" not in seul_livres.inner_text()
+
+
+def test_cliquer_une_emission_qualifiee_deplie_l_apercu_de_sa_fiche(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "qualifie")
+    apercu = {
+        "emission_id": cible["id"],
+        "titre": "Le Masque et la Plume du 4 janvier 2009",
+        "date": "2009-01-04T00:00:00+00:00",
+        "type": "livres",
+        "duree": 3287,
+        "description": "durée : 00:54:47 - Le Masque et la Plume",
+        "sources_description": {},
+        "episode_page_url": None,
+        "url": None,
+        "audio_rel_filename": "2009/x.m4a",
+        "sha256": "abc",
+        "date_remise": None,
+        "apercu": True,
+    }
+    page = _ouvrir(
+        navigateur, donnees, api={f"/api/remises/{cible['id']}": lambda r: apercu}
+    )
+    page.locator('.compteur[data-etat="qualifie"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.locator("td").nth(1).click()
+
+    detail = page.locator("tr.fiche")
+    detail.get_by_text("Aperçu").wait_for()
+    assert "2009/x.m4a" in detail.inner_text()
+    # la case à cocher ne replie rien
+    ligne.locator("input[type=checkbox]").click()
+    assert page.locator("tr.fiche").count() == 1
+
+
+def test_cliquer_une_emission_valide_deplie_sa_fiche(navigateur: Any) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "valide")
+    fiche = {
+        "emission_id": cible["id"],
+        "titre": "Le Masque et la Plume du 4 janvier 2015",
+        "date": "2015-01-04T00:00:00+00:00",
+        "type": "livres",
+        "duree": 3287,
+        "description": "durée : 00:54:47 - Le Masque et la Plume - par : Jérôme Garcin",
+        "sources_description": {"duree": "fichier"},
+        "episode_page_url": "https://www.radiofrance.fr/x",
+        "url": "https://media.radiofrance-podcast.net/x.m4a",
+        "audio_rel_filename": "2015/x.m4a",
+        "sha256": "5e06ea3830e3",
+        "date_remise": "2026-11-22T09:58:03+00:00",
+    }
+    page = _ouvrir(
+        navigateur, donnees, api={f"/api/remises/{cible['id']}": lambda r: fiche}
+    )
+    page.locator('.compteur[data-etat="valide"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.locator("td").first.click()
+
+    detail = page.locator("tr.fiche")
+    detail.get_by_text("par : Jérôme Garcin").wait_for()
+    texte = detail.inner_text()
+    for attendu in (fiche["titre"], "2015/x.m4a", "00:54:47", "livres"):
+        assert attendu in texte
+    ligne.locator("td").first.click()
+    assert page.locator("tr.fiche").count() == 0

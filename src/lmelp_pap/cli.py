@@ -1,21 +1,27 @@
 """Commande ``lmelp-pap``."""
 
 import argparse
+import logging
 import os
 import sys
 import webbrowser
 from collections import Counter
 from collections.abc import Sequence
 from datetime import timedelta
+from importlib.metadata import version
 from pathlib import Path
 
+from lmelp_pap import logs
 from lmelp_pap.arbitrages import lire_arbitrages
 from lmelp_pap.arbitrer import AUDIOS, AUDIOS_LMELP, creer_serveur
 from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import construire_liste
-from lmelp_pap.maturite import depot_depuis_env
+from lmelp_pap.maturite import Depot, depot_depuis_env
 from lmelp_pap.page import construire_page
+
+
+log = logging.getLogger(__name__)
 
 
 def _chemin(variable: str, defaut: str | None) -> Path | None:
@@ -111,6 +117,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page`` et
     ``arbitrer``. Rend le code de sortie."""
     args = _parser().parse_args(argv)
+    logs.configurer()
 
     if args.commande == "arbitrer":
         return _arbitrer(args)
@@ -146,18 +153,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def _etat_mongo(depot: Depot | None) -> str:
+    """L'état de la base de la maturité : absente, connectée, ou injoignable
+    (un ``ping`` au démarrage)."""
+    if depot is None:
+        return "absent (MONGO_URI non défini)"
+    base = depot.base.name
+    try:
+        depot.base.client.admin.command("ping")
+    except Exception as erreur:  # noqa: BLE001 — l'appli démarre sans base
+        return f"injoignable (base {base}) : {erreur}"
+    return f"connecté (base {base})"
+
+
 def _arbitrer(args: argparse.Namespace) -> int:
-    """Sert la page en mode arbitrage jusqu'à Ctrl+C."""
-    print("Lecture du cache et construction de la liste…", file=sys.stderr)
+    """Sert l'appli (la page en mode arbitrage) jusqu'à l'arrêt du processus."""
+    log.info("lecture du cache et construction de la liste…")
+    # La maturité des enregistrements vit dans Mongo (MONGO_URI) ; sans
+    # base, l'appli sert la liste sans elle.
+    depot = depot_depuis_env()
     serveur = creer_serveur(
         args.cache,
         args.sortie,
         port=args.port,
         hote=args.hote,
         arbitrages=args.arbitrages,
-        # La maturité des enregistrements vit dans Mongo (MONGO_URI) ; sans
-        # base, l'appli sert la liste sans elle.
-        depot=depot_depuis_env(),
+        depot=depot,
         audios=args.audios,
         audios_lmelp=args.audios_lmelp,
         # Vérification des URL d'intégral : au démarrage sur une base vide,
@@ -165,10 +186,23 @@ def _arbitrer(args: argparse.Namespace) -> int:
         planification=True,
         intervalle=timedelta(days=args.verification_jours),
     )
-    # VS Code redirige le port vers la machine hôte et y ouvre l'adresse.
-    url = f"http://localhost:{serveur.server_address[1]}/"
-    print(f"Arbitrage de la liste : {url} (Ctrl+C pour arrêter)", file=sys.stderr)
+    port = serveur.server_address[1]
+    atelier = serveur.atelier  # type: ignore[attr-defined]
+    log.info(f"lmelp-pap {version('lmelp-pap')} : écoute sur {args.hote}:{port}")
+    # ni l'un ni l'autre ne lit la base : l'appli démarre même sans elle
+    log.info(f"Mongo : {_etat_mongo(depot)}")
+    log.info(f"liste : {atelier.nombre_emissions()} émissions")
+    log.info(
+        f"dossiers : cache {args.cache}, données {args.sortie}, "
+        f"arbitrages {atelier.fichier}, audios {args.audios}, "
+        f"audios lmelp {args.audios_lmelp}"
+    )
+    if publique := os.environ.get("PAP_URL_PUBLIQUE"):
+        log.info(f"page publique : {publique}")
     if not args.sans_navigateur:
+        # VS Code redirige le port vers la machine hôte et y ouvre l'adresse.
+        url = f"http://localhost:{port}/"
+        log.info(f"ouverture de {url} dans le navigateur (Ctrl+C pour arrêter)")
         webbrowser.open(url)
     try:
         serveur.serve_forever()
@@ -176,6 +210,7 @@ def _arbitrer(args: argparse.Namespace) -> int:
         pass
     finally:
         serveur.server_close()
+        log.info("arrêt du serveur")
     return 0
 
 
