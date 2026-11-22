@@ -223,7 +223,24 @@ def test_la_page_dans_lmelp_n_a_ni_sources_ni_anciennete(navigateur: Any) -> Non
     page = _ouvrir(navigateur)
     page.locator('.compteur[data-etat="lmelp"]').click()
     entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
-    assert entetes == ["Date", "Titre"]
+    assert entetes == ["Date", "Titre", "Intégrée"]
+
+
+def test_la_page_dans_lmelp_date_l_integration_et_la_trie(navigateur: Any) -> None:
+    donnees = _donnees()
+    lmelp = [e for e in donnees["emissions"] if e["date"].startswith("2015")]
+    lmelp[0]["integration_lmelp"] = "2026-11-22T16:30:05+00:00"
+    lmelp[1]["integration_lmelp"] = "2026-11-21T09:05:00+00:00"
+    page = _ouvrir(navigateur, donnees)
+    page.locator('.compteur[data-etat="lmelp"]').click()
+
+    integree = page.locator("th.triable", has_text="Intégrée")
+    integree.click()  # la plus récente d'abord
+    premieres = page.locator("tbody tr td:nth-child(3)").all_inner_texts()[:3]
+    assert premieres[0].startswith("22/11/2026")
+    assert premieres[1].startswith("21/11/2026")
+    assert premieres[2] == "—"  # une émission venue du flux de lmelp
+    assert integree.inner_text().endswith("▼")
 
 
 def test_sans_action_pas_de_colonne_action(navigateur: Any) -> None:

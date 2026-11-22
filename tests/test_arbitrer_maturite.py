@@ -17,6 +17,7 @@ from typing import Any
 
 import mongomock
 import pytest
+from bson import ObjectId
 
 from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.maturite import Depot
@@ -737,6 +738,31 @@ def test_un_episode_lmelp_de_meme_fichier_fait_entrer_l_emission_dans_lmelp(
     emissions = _emissions(_get(f"{url}/api/donnees"))
     assert emissions["2014-09-28"]["dans_lmelp"] is True
     assert emissions["2024-02-11"]["dans_lmelp"] is False
+
+
+def test_l_integration_par_lmelp_est_datee_par_l_episode(
+    url: str, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    _remettre(url, "2014-09-28")
+    assert (
+        _emissions(_get(f"{url}/api/donnees"))["2014-09-28"]["integration_lmelp"]
+        is None
+    )
+
+    # l'ObjectId d'un épisode porte l'heure de sa création par le back-office
+    integre = datetime(2026, 11, 22, 16, 30, 5, tzinfo=UTC)
+    depot.base["episodes"].insert_one(
+        {
+            "_id": ObjectId.from_datetime(integre),
+            "audio_rel_filename": FICHIER_2014,
+            "source": "pap",
+        }
+    )
+
+    emissions = _emissions(_get(f"{url}/api/donnees"))
+    assert emissions["2014-09-28"]["integration_lmelp"] == "2026-11-22T16:30:05+00:00"
+    assert emissions["2024-02-11"]["integration_lmelp"] is None
 
 
 def test_une_emission_deja_dans_lmelp_n_est_pas_remise(
