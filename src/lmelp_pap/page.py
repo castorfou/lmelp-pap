@@ -27,6 +27,13 @@ def construire_page(dossier: Path, arbitrage: bool = False) -> str:
     gabarit = (
         _ressource("page.html")
         .replace("__FAVICON__", favicon)
+        # dans l'appli, l'onglet suit le back-office lmelp (« Accueil - lmelp »)
+        .replace(
+            "__TITRE__",
+            "Liste et arbitrages - pap"
+            if arbitrage
+            else "Liste des émissions du Masque et la Plume",
+        )
         .replace(
             "__ARBITRAGE__",
             _ressource("arbitrage.html")
