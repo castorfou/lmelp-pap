@@ -1035,3 +1035,22 @@ def test_l_annulation_est_tracee(
         f"copie retirée {tmp_path / 'audios-lmelp' / FICHIER_2014}, "
         "retour à qualifié"
     ) in logs
+
+
+# --- la fiche d'une mise à disposition --------------------------------------
+
+
+def test_la_fiche_d_une_mise_a_disposition_se_lit(url: str) -> None:
+    _qualifier_2014(url)
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _get(f"{url}/api/remises/2014-09-28")
+    assert erreur.value.code == 404
+
+    _remettre(url, "2014-09-28")
+    fiche = _get(f"{url}/api/remises/2014-09-28")
+
+    assert fiche["titre"] == "Le Masque et la Plume du 28 septembre 2014"
+    assert fiche["audio_rel_filename"] == FICHIER_2014
+    assert "par : Jérôme Garcin" in fiche["description"]
+    assert fiche["date"].startswith("2014-09-28")
+    assert "_id" not in fiche

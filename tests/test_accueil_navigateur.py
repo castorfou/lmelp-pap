@@ -888,3 +888,44 @@ def test_la_page_valide_montre_depuis_combien_de_jours_lmelp_attend(
     i = colonnes.index("Depuis")
     cellule = page.locator("tbody tr").first.locator("td").nth(i)
     assert cellule.inner_text().endswith(" j")
+
+
+def test_la_page_valide_n_a_pas_de_colonne_themes(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="valide"]').click()
+    entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
+    assert "Thèmes" not in entetes
+    assert "Date" in entetes
+
+
+def test_cliquer_une_emission_valide_deplie_sa_fiche(navigateur: Any) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "valide")
+    fiche = {
+        "emission_id": cible["id"],
+        "titre": "Le Masque et la Plume du 4 janvier 2015",
+        "date": "2015-01-04T00:00:00+00:00",
+        "type": "livres",
+        "duree": 3287,
+        "description": "durée : 00:54:47 - Le Masque et la Plume - par : Jérôme Garcin",
+        "sources_description": {"duree": "fichier"},
+        "episode_page_url": "https://www.radiofrance.fr/x",
+        "url": "https://media.radiofrance-podcast.net/x.m4a",
+        "audio_rel_filename": "2015/x.m4a",
+        "sha256": "5e06ea3830e3",
+        "date_remise": "2026-11-22T09:58:03+00:00",
+    }
+    page = _ouvrir(
+        navigateur, donnees, api={f"/api/remises/{cible['id']}": lambda r: fiche}
+    )
+    page.locator('.compteur[data-etat="valide"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.locator("td").first.click()
+
+    detail = page.locator("tr.fiche")
+    detail.get_by_text("par : Jérôme Garcin").wait_for()
+    texte = detail.inner_text()
+    for attendu in (fiche["titre"], "2015/x.m4a", "00:54:47", "livres"):
+        assert attendu in texte
+    ligne.locator("td").first.click()
+    assert page.locator("tr.fiche").count() == 0

@@ -38,6 +38,8 @@ API :
   de chaque émission (``emissions``) : copie dans le dossier audio de lmelp,
   fiche ``pap_remises``, passage à valide ; la réponse porte en plus
   ``remise`` (``mises``, ``refus`` avec leur ``detail``) ;
+- ``GET /api/remises/<emission_id>`` : la fiche ``pap_remises`` de l'émission
+  (ce que lmelp reçoit), 404 sans mise à disposition ;
 - ``POST /api/remises/annulation`` : annule la mise à disposition d'une
   émission valide pas encore dans lmelp (``emission``) : fiche et copie chez
   lmelp retirées, retour à qualifié ;
@@ -748,6 +750,19 @@ class Atelier:
         )
         return {**self.donnees(), "remise": {"mises": mises, "refus": refus}}
 
+    def fiche_remise(self, emission_id: str) -> dict[str, Any]:
+        """La fiche ``pap_remises`` d'une émission mise à disposition (ce que
+        lmelp reçoit), dates en ISO 8601 ; ``DemandeInvalideError`` sans
+        fiche."""
+        fiche = self._depot().remise_de(emission_id)
+        if fiche is None:
+            raise DemandeInvalideError(f"{emission_id} : aucune mise à disposition")
+        return {
+            cle: _iso(valeur) if isinstance(valeur, datetime) else valeur
+            for cle, valeur in fiche.items()
+            if cle != "_id"
+        }
+
     def annuler_mise_a_disposition(self, demande: dict[str, Any]) -> dict[str, Any]:
         """Annule la mise à disposition d'une émission valide qui n'est pas
         encore dans lmelp (``emission``) : retire sa fiche ``pap_remises`` et
@@ -1041,6 +1056,11 @@ class Atelier:
         }
 
 
+def _iso(quand: datetime) -> str:
+    """Une date de Mongo en ISO 8601 ; Mongo rend l'UTC sans fuseau."""
+    return (quand if quand.tzinfo else quand.replace(tzinfo=UTC)).isoformat()
+
+
 # Les routes POST : l'action de l'atelier, appelée avec le corps JSON.
 ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/arbitrages": Atelier.arbitrer,
@@ -1157,6 +1177,12 @@ def creer_serveur(
                 self._json(atelier.etat_verification())
             elif self.path == "/api/rapatriements":
                 self._json(atelier.etat_rapatriement())
+            elif self.path.startswith("/api/remises/"):
+                emission_id = unquote(self.path.removeprefix("/api/remises/"))
+                try:
+                    self._json(atelier.fiche_remise(emission_id))
+                except DemandeInvalideError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.NOT_FOUND)
             elif self.path.startswith("/api/radiofrance/"):
                 emission_id = unquote(self.path.removeprefix("/api/radiofrance/"))
                 try:

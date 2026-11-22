@@ -402,6 +402,13 @@ class Depot:
         une par enregistrement)."""
         self.base[REMISES].replace_one({"_id": fiche["_id"]}, fiche, upsert=True)
 
+    def remise_de(self, emission_id: str) -> dict[str, Any] | None:
+        """La fiche ``pap_remises`` d'une émission, ou ``None``."""
+        fiche: dict[str, Any] | None = self.base[REMISES].find_one(
+            {"emission_id": emission_id}
+        )
+        return fiche
+
     def retirer_remise(self, url: str) -> None:
         """Retire la fiche ``pap_remises`` d'un enregistrement (annulation
         d'une mise à disposition)."""
