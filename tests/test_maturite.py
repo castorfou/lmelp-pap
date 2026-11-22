@@ -260,6 +260,28 @@ def test_verifier_classe_et_enregistre_chaque_url(depot: Depot) -> None:
     assert "lmelp-pap" in options["headers"]["User-Agent"]
 
 
+def test_un_echec_passager_de_verification_est_journalise(
+    depot: Depot, capfd: pytest.CaptureFixture[str]
+) -> None:
+    session = Session(
+        {URL: Reponse(404), "https://c.m4a": requests.ConnectionError("hors ligne")}
+    )
+
+    verifier(
+        [(URL, "2008-03-02"), ("https://c.m4a", "2010-05-09")],
+        depot,
+        session,
+        maintenant=AUJOURDHUI,
+    )
+
+    logs = capfd.readouterr().err
+    assert (
+        "WARNING maturite : vérification 2010-05-09 https://c.m4a : ConnectionError"
+        in logs
+    )
+    assert "2008-03-02" not in logs  # une URL morte n'est pas un échec réseau
+
+
 def test_verifier_deux_fois_ne_duplique_rien(depot: Depot) -> None:
     session = Session({URL: Reponse(200)})
     verifier([(URL, "2008-03-02")], depot, session, maintenant=HIER)
