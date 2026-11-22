@@ -37,9 +37,10 @@ RACINE = Path(__file__).resolve().parent.parent
 SOURCE = Path(__file__).resolve().parent / "icone" / "source_lmelp_green.png"
 SORTIE = RACINE / "src" / "lmelp_pap" / "icones"
 
-# Fond sépia (dégradé vertical) : le papier jauni des archives
-SEPIA = (0x7A, 0x4E, 0x2A)
-SEPIA_FIN = (0x4E, 0x30, 0x1A)
+# Fond sépia (dégradé vertical) : le papier jauni des archives, assez clair
+# pour que le masque doré ressorte autant que sur le vert du back-office
+SEPIA = (0xA8, 0x6E, 0x3A)
+SEPIA_FIN = (0x7A, 0x4E, 0x2A)
 # Bobine : flasques argentées, bande magnétique brun foncé
 FLASQUE = (0xE3, 0xE6, 0xEA)
 FLASQUE_BORD = (0x9A, 0xA3, 0xAE)
@@ -50,8 +51,6 @@ BANDE = (0x3A, 0x26, 0x18)
 _BOBINE_CENTRE = (975, 900)
 _BOBINE_RAYON = 310
 
-# Rayon du disque contenant le motif, en fraction du côté de l'icône
-_RAYON_MOTIF = 0.44
 _TRAVAIL = 1024
 
 # Pixels « verts » (fond + ombre) : G dépasse max(R, B)
@@ -149,22 +148,13 @@ def fond(taille: int) -> Image.Image:
 
 
 def icone_carree() -> Image.Image:
-    """Fond sépia plein, motif centré (``_TRAVAIL`` px de côté)."""
+    """Fond sépia plein, motif cadré comme dans l'icône source (``_TRAVAIL`` px
+    de côté) : masque et plume ont la même taille que dans celle du
+    back-office, et la bobine tient dans le carré."""
     m = motif()
-    alpha = np.asarray(m)[..., 3]
-    ys, xs = np.nonzero(alpha)
-    cx, cy = (xs.min() + xs.max()) / 2, (ys.min() + ys.max()) / 2
-    rayon = float(np.sqrt((xs - cx) ** 2 + (ys - cy) ** 2).max())
-    echelle = _TRAVAIL * _RAYON_MOTIF / rayon
-    m = m.resize(
-        (round(m.width * echelle), round(m.height * echelle)),
-        Image.Resampling.LANCZOS,
-    )
-    icone = fond(_TRAVAIL)
-    icone.alpha_composite(
-        m, (round(_TRAVAIL / 2 - cx * echelle), round(_TRAVAIL / 2 - cy * echelle))
-    )
-    return icone
+    icone = fond(m.width)
+    icone.alpha_composite(m)
+    return icone.resize((_TRAVAIL, _TRAVAIL), Image.Resampling.LANCZOS)
 
 
 def arrondir(icone: Image.Image) -> Image.Image:
