@@ -608,6 +608,21 @@ def test_le_serveur_sert_une_icone_demandee_avec_une_query_string(url: str) -> N
         assert r.read()[:4] == b"\x00\x00\x01\x00"
 
 
+def test_les_icones_peuvent_etre_gardees_par_le_navigateur(url: str) -> None:
+    # avec ``no-store``, Chrome affiche l'icône dans l'onglet mais ne l'enregistre
+    # pas : le favori de pap reste sans favicon
+    for nom in ("favicon.ico", "favicon-32x32.png", "apple-touch-icon.png"):
+        with urllib.request.urlopen(f"{url}/{nom}") as r:
+            cache = r.headers["Cache-Control"]
+        assert "no-store" not in cache
+        assert "max-age=" in cache
+
+
+def test_la_page_d_accueil_n_est_pas_gardee_en_cache(url: str) -> None:
+    with urllib.request.urlopen(f"{url}/") as r:
+        assert r.headers["Cache-Control"] == "no-store"
+
+
 def test_l_accueil_declare_des_icones_que_le_serveur_sert(url: str) -> None:
     with urllib.request.urlopen(f"{url}/") as r:
         accueil = r.read().decode()
