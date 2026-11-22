@@ -203,7 +203,7 @@ def test_les_colonnes_d_une_page_d_etat_se_trient(navigateur: Any) -> None:
     page.locator('.compteur[data-etat="localise"]').click()
     entetes = page.locator("th.triable")
     noms = [t.rstrip(" ▲▼") for t in entetes.all_inner_texts()]
-    assert noms == ["Date", "Titre", "Thèmes", "Sources", "Depuis"]
+    assert noms == ["Date", "Titre", "Sources", "Depuis"]
 
     def colonne(i: int) -> list[Any]:
         textes = page.locator(f"tbody tr td:nth-child({i + 1})").all_inner_texts()
@@ -223,7 +223,7 @@ def test_la_page_dans_lmelp_n_a_ni_sources_ni_anciennete(navigateur: Any) -> Non
     page = _ouvrir(navigateur)
     page.locator('.compteur[data-etat="lmelp"]').click()
     entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
-    assert entetes == ["Date", "Titre", "Thèmes"]
+    assert entetes == ["Date", "Titre"]
 
 
 def test_sans_action_pas_de_colonne_action(navigateur: Any) -> None:
@@ -890,12 +890,62 @@ def test_la_page_valide_montre_depuis_combien_de_jours_lmelp_attend(
     assert cellule.inner_text().endswith(" j")
 
 
-def test_la_page_valide_n_a_pas_de_colonne_themes(navigateur: Any) -> None:
+def test_aucune_page_d_etat_n_a_de_colonne_themes(navigateur: Any) -> None:
     page = _ouvrir(navigateur)
-    page.locator('.compteur[data-etat="valide"]').click()
-    entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
-    assert "Thèmes" not in entetes
-    assert "Date" in entetes
+    for etat in ("telechargeable", "qualifie", "valide", "lmelp"):
+        page.locator(f'.compteur[data-etat="{etat}"]').click()
+        entetes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
+        assert "Thèmes" not in entetes, etat
+        page.get_by_role("button", name="← Accueil").click()
+
+
+def test_une_emission_qui_n_est_pas_que_livres_le_dit_a_cote_du_titre(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    mixte, autre = [e for e in donnees["emissions"] if e["maturite"] == "qualifie"][:2]
+    mixte["themes"] = ["cinéma", "livres"]
+    page = _ouvrir(navigateur, donnees)
+    page.locator('.compteur[data-etat="qualifie"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{mixte["id"]}"]')
+    assert "cinéma, livres" in ligne.inner_text()
+    seul_livres = page.locator(f'tbody tr[data-id="{autre["id"]}"]')
+    assert "livres" not in seul_livres.inner_text()
+
+
+def test_cliquer_une_emission_qualifiee_deplie_l_apercu_de_sa_fiche(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "qualifie")
+    apercu = {
+        "emission_id": cible["id"],
+        "titre": "Le Masque et la Plume du 4 janvier 2009",
+        "date": "2009-01-04T00:00:00+00:00",
+        "type": "livres",
+        "duree": 3287,
+        "description": "durée : 00:54:47 - Le Masque et la Plume",
+        "sources_description": {},
+        "episode_page_url": None,
+        "url": None,
+        "audio_rel_filename": "2009/x.m4a",
+        "sha256": "abc",
+        "date_remise": None,
+        "apercu": True,
+    }
+    page = _ouvrir(
+        navigateur, donnees, api={f"/api/remises/{cible['id']}": lambda r: apercu}
+    )
+    page.locator('.compteur[data-etat="qualifie"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.locator("td").nth(1).click()
+
+    detail = page.locator("tr.fiche")
+    detail.get_by_text("Aperçu").wait_for()
+    assert "2009/x.m4a" in detail.inner_text()
+    # la case à cocher ne replie rien
+    ligne.locator("input[type=checkbox]").click()
+    assert page.locator("tr.fiche").count() == 1
 
 
 def test_cliquer_une_emission_valide_deplie_sa_fiche(navigateur: Any) -> None:

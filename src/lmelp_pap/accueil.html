@@ -173,6 +173,7 @@ async function mettreADisposition(ids) {
     const t = await r.json();
     if (!r.ok) throw new Error(t.erreur || r.statusText);
     const { mises, refus } = t.remise;
+    ids.forEach(id => delete FICHES[id]);
     preparer(t); vue.choix.clear(); vue.refus = refus; rendre();
     notifier(`${mises.length} mis à disposition${refus.length ? ` · ${refus.length} refus` : ""}`, avant);
   } catch (err) {
@@ -190,6 +191,7 @@ async function annulerMiseADisposition(id) {
     const r = await fetch("/api/remises/annulation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emission: id }) });
     const t = await r.json();
     if (!r.ok) throw new Error(t.erreur || r.statusText);
+    delete FICHES[id];
     preparer(t); rendre();
     notifier(`Mise à disposition annulée : ${id}`, avant);
   } catch (err) {
@@ -205,7 +207,7 @@ const lien = u => u ? `<a href="${esc(u)}" target="_blank" rel="noopener norefer
 function fiche(e, colonnesN) {
   const f = FICHES[e.id];
   let corps;
-  if (!f) corps = `<span class="doux">lecture de la fiche…</span>`;
+  if (!f) corps = `<span class="doux">lecture de la fiche… (l'API Radio France peut prendre quelques secondes)</span>`;
   else if (f.erreur) corps = `<span class="echec">${esc(f.erreur)}</span>`;
   else {
     const sources = Object.entries(f.sources_description || {}).map(([k, v]) => `${k} : ${v}`).join(", ");
@@ -216,7 +218,7 @@ function fiche(e, colonnesN) {
       ["URL de l'intégral", lien(f.url)], ["Fichier (audio_rel_filename)", esc(f.audio_rel_filename)],
       ["SHA-256", `<code>${esc(f.sha256 || "")}</code>`], ["Mise à disposition", esc(quand(f.date_remise))],
     ];
-    corps = `<dl>${lignes.map(([t, v, c]) => `<dt>${t}</dt><dd${c ? ` class="${c}"` : ""}>${v || `<span class="doux">—</span>`}</dd>`).join("")}</dl>`;
+    corps = (f.apercu ? `<div class="doux">Aperçu : ce que lmelp recevra à la mise à disposition (rien n'est encore écrit).</div>` : "") + `<dl>${lignes.map(([t, v, c]) => `<dt>${t}</dt><dd${c ? ` class="${c}"` : ""}>${v || `<span class="doux">—</span>`}</dd>`).join("")}</dl>`;
   }
   return `<tr class="fiche"><td colspan="${colonnesN}">${corps}</td></tr>`;
 }
@@ -557,14 +559,14 @@ function accueil(racine) {
 }
 
 // ---------- Page de travail d'un état ----------
+// Les thèmes n'ont pas de colonne (presque toutes les émissions sont « livres ») :
+// seule une émission qui n'est pas que « livres » les montre après son titre.
+const themesMixtes = e => e.themes.length && e.themes.join() !== "livres" ? ` <span class="doux">· ${esc(e.themes.join(", "))}</span>` : "";
 function colonnes(cle) {
   const c = [
     { k: "date", t: "Date", v: e => e.date, h: e => e.date },
-    { k: "titre", t: "Titre", v: e => e.titre.toLowerCase(), h: e => esc(e.titre) + (e.echec ? `<div class="echec">échec le ${new Date(e.echec.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ")} : ${esc(e.echec.detail)}</div>` : "") + (e.ecart ? `<div class="ecart" title="écarté le ${esc(new Date(e.ecart.date).toLocaleDateString("fr-FR"))}">écarté : ${esc(e.ecart.motif)}</div>` : "") },
-    { k: "themes", t: "Thèmes", v: e => e.themes.join(","), h: e => `<span class="doux">${esc(e.themes.join(", "))}</span>` },
+    { k: "titre", t: "Titre", v: e => e.titre.toLowerCase(), h: e => esc(e.titre) + themesMixtes(e) + (e.echec ? `<div class="echec">échec le ${new Date(e.echec.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ")} : ${esc(e.echec.detail)}</div>` : "") + (e.ecart ? `<div class="ecart" title="écarté le ${esc(new Date(e.ecart.date).toLocaleDateString("fr-FR"))}">écarté : ${esc(e.ecart.motif)}</div>` : "") },
   ];
-  // la page valide montre la fiche au clic, sans les thèmes
-  if (cle === "valide") c.splice(2, 1);
   if (cle !== "lmelp") {
     c.push({ k: "sources", t: "Sources", v: e => e.sources.join(","), h: e => `<span class="doux">${esc(e.sources.join(", "))}</span>` });
     c.push({ k: "depuis", t: "Depuis", v: e => e.depuis ?? -1, h: depuis });
@@ -602,7 +604,8 @@ function pageEtat(racine) {
   $("tous")?.addEventListener("change", ev => { liste.forEach(e => ev.target.checked ? vue.choix.add(e.id) : vue.choix.delete(e.id)); rendre(); });
   const tb = racine.querySelector("tbody");
   const lot = action && action.lot;
-  const depliable = vue.etat === "valide";
+  // qualifié et valide : un clic sur la ligne déplie ce que lmelp reçoit
+  const depliable = vue.etat === "valide" || vue.etat === "qualifie";
   tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}"${depliable ? ' class="depliable" title="Voir la fiche remise à lmelp"' : ""}>${lot ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action${action.discret ? ' class="discret"' : ""}>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
     (liste.length > 300 ? `<tr><td colspan="6" class="doux">… ${liste.length - 300} de plus</td></tr>` : "");
   const ecoutee = vue.etat === "rapatrie" && liste.find(e => e.id === vue.ecoute);

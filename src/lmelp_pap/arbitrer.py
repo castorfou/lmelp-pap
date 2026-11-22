@@ -38,8 +38,9 @@ API :
   de chaque émission (``emissions``) : copie dans le dossier audio de lmelp,
   fiche ``pap_remises``, passage à valide ; la réponse porte en plus
   ``remise`` (``mises``, ``refus`` avec leur ``detail``) ;
-- ``GET /api/remises/<emission_id>`` : la fiche ``pap_remises`` de l'émission
-  (ce que lmelp reçoit), 404 sans mise à disposition ;
+- ``GET /api/remises/<emission_id>`` : ce que lmelp reçoit, la fiche
+  ``pap_remises`` de l'émission mise à disposition, ou l'aperçu de celle de
+  son enregistrement qualifié (``apercu``) ; 404 sinon ;
 - ``POST /api/remises/annulation`` : annule la mise à disposition d'une
   émission valide pas encore dans lmelp (``emission``) : fiche et copie chez
   lmelp retirées, retour à qualifié ;
@@ -131,6 +132,7 @@ from lmelp_pap.radiofrance_api import (
 from lmelp_pap.remise import (
     RemiseError,
     annuler_mise_a_disposition,
+    apercu_fiche,
     mettre_a_disposition,
 )
 
@@ -751,16 +753,32 @@ class Atelier:
         return {**self.donnees(), "remise": {"mises": mises, "refus": refus}}
 
     def fiche_remise(self, emission_id: str) -> dict[str, Any]:
-        """La fiche ``pap_remises`` d'une émission mise à disposition (ce que
-        lmelp reçoit), dates en ISO 8601 ; ``DemandeInvalideError`` sans
-        fiche."""
-        fiche = self._depot().remise_de(emission_id)
+        """Ce que lmelp reçoit pour une émission, dates en ISO 8601 : sa
+        fiche ``pap_remises`` si elle est mise à disposition (``apercu``
+        faux), sinon l'aperçu de la fiche de son enregistrement qualifié
+        (``apercu`` vrai, rien n'est écrit) ; ``DemandeInvalideError`` sinon."""
+        depot = self._depot()
+        fiche = depot.remise_de(emission_id)
+        apercu = fiche is None
         if fiche is None:
-            raise DemandeInvalideError(f"{emission_id} : aucune mise à disposition")
+            emission = self._emissions.get(emission_id)
+            qualifie = next(
+                (e for e in Maturites(depot).de(emission_id) if e.niveau == "qualifie"),
+                None,
+            )
+            if emission is None or qualifie is None:
+                raise DemandeInvalideError(
+                    f"{emission_id} : ni mise à disposition, ni enregistrement qualifié"
+                )
+            _, api, _ = self._diffusion(emission, " (aperçu de la fiche)")
+            fiche = apercu_fiche(qualifie, emission, self.audios, api)
         return {
-            cle: _iso(valeur) if isinstance(valeur, datetime) else valeur
-            for cle, valeur in fiche.items()
-            if cle != "_id"
+            **{
+                cle: _iso(valeur) if isinstance(valeur, datetime) else valeur
+                for cle, valeur in fiche.items()
+                if cle != "_id"
+            },
+            "apercu": apercu,
         }
 
     def annuler_mise_a_disposition(self, demande: dict[str, Any]) -> dict[str, Any]:

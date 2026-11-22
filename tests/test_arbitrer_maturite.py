@@ -1041,13 +1041,26 @@ def test_l_annulation_est_tracee(
 
 
 def test_la_fiche_d_une_mise_a_disposition_se_lit(url: str) -> None:
-    _qualifier_2014(url)
+    _rapatrier_2014(url)
     with pytest.raises(urllib.error.HTTPError) as erreur:
         _get(f"{url}/api/remises/2014-09-28")
     assert erreur.value.code == 404
 
+    _post_json(
+        f"{url}/api/qualifications",
+        {"emission_id": "2014-09-28", "verdict": "favorable"},
+    )
+    apercu = _get(f"{url}/api/remises/2014-09-28")
+    assert apercu["apercu"] is True
+    assert apercu["date_remise"] is None
+    assert apercu["audio_rel_filename"] == FICHIER_2014
+
     _remettre(url, "2014-09-28")
     fiche = _get(f"{url}/api/remises/2014-09-28")
+    assert fiche["apercu"] is False
+    assert {k: v for k, v in fiche.items() if k not in ("apercu", "date_remise")} == {
+        k: v for k, v in apercu.items() if k not in ("apercu", "date_remise")
+    }
 
     assert fiche["titre"] == "Le Masque et la Plume du 28 septembre 2014"
     assert fiche["audio_rel_filename"] == FICHIER_2014

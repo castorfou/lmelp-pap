@@ -250,7 +250,42 @@ def mettre_a_disposition(
     if not reprise:
         _copier(source, final, enregistrement.sha256)
 
-    secondes = duree_du_fichier(final)
+    fiche = _fiche(enregistrement, emission, final, maintenant, api)
+    entrees = {**enregistrement.entrees, "valide": maintenant}
+    valide = replace(enregistrement, niveau="valide", entrees=entrees)
+    return Remise(valide, fiche, reprise)
+
+
+def apercu_fiche(
+    enregistrement: Enregistrement,
+    emission: Emission,
+    audios: Path,
+    api: Diffusion | None = None,
+) -> dict[str, Any]:
+    """La fiche ``pap_remises`` que recevrait lmelp si l'enregistrement
+    qualifié était mis à disposition maintenant, sans rien copier ni écrire
+    (``date_remise`` vide). ``RemiseError`` si l'enregistrement n'est pas
+    qualifié ou n'a pas de fichier."""
+    if enregistrement.niveau != "qualifie" or not enregistrement.fichier:
+        raise RemiseError(
+            f"{enregistrement.url} : niveau {enregistrement.niveau}, "
+            "seul un enregistrement qualifié a un aperçu de sa fiche"
+        )
+    fiche = _fiche(enregistrement, emission, audios / enregistrement.fichier, None, api)
+    return fiche
+
+
+def _fiche(
+    enregistrement: Enregistrement,
+    emission: Emission,
+    fichier: Path,
+    maintenant: datetime | None,
+    api: Diffusion | None,
+) -> dict[str, Any]:
+    """La fiche ``pap_remises`` de l'enregistrement ; la durée vient de
+    ``fichier`` s'il est lisible."""
+    relatif = enregistrement.fichier
+    secondes = duree_du_fichier(fichier) if fichier.is_file() else None
     duree = (secondes, "fichier") if secondes else None
     if duree is None:
         duree = next(
@@ -264,7 +299,7 @@ def mettre_a_disposition(
         )
     description, sources = _composer(emission, api, duree)
     page = next(iter(emission.pages_radiofrance), None)
-    fiche = {
+    return {
         "_id": enregistrement.url,
         "emission_id": emission.id,
         "titre": _titre(emission.date),
@@ -281,9 +316,6 @@ def mettre_a_disposition(
         "sha256": enregistrement.sha256,
         "date_remise": maintenant,
     }
-    entrees = {**enregistrement.entrees, "valide": maintenant}
-    valide = replace(enregistrement, niveau="valide", entrees=entrees)
-    return Remise(valide, fiche, reprise)
 
 
 def annuler_mise_a_disposition(
