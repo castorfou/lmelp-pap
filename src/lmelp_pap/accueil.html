@@ -433,8 +433,9 @@ function notifier(message, avant) {
   toast(message + (delta ? " — " + delta : ""));
 }
 const depuis = e => {
-  if (e.depuis === null || !ETAT[e.etat].action) return "";
-  const c = e.depuis >= 45 ? "#b3261e" : e.depuis >= 21 ? "#9a6700" : "var(--doux)";
+  if (e.depuis === null) return "";
+  // les couleurs d'alerte valent pour une file de travail (un état à action)
+  const c = !ETAT[e.etat].action ? "var(--doux)" : e.depuis >= 45 ? "#b3261e" : e.depuis >= 21 ? "#9a6700" : "var(--doux)";
   return `<span style="color:${c};white-space:nowrap">${e.depuis} j</span>`;
 };
 

@@ -877,3 +877,14 @@ def test_une_mise_a_disposition_s_annule_depuis_la_page_valide(
     assert envoyees == [{"emission": cible["id"]}]
     assert page.locator(f'tbody tr[data-id="{cible["id"]}"]').count() == 0
     assert page.locator(".lot").count() == 0
+
+
+def test_la_page_valide_montre_depuis_combien_de_jours_lmelp_attend(
+    navigateur: Any,
+) -> None:
+    page = _ouvrir(navigateur)
+    page.locator('.compteur[data-etat="valide"]').click()
+    colonnes = [t.rstrip(" ▲▼") for t in page.locator("th").all_inner_texts()]
+    i = colonnes.index("Depuis")
+    cellule = page.locator("tbody tr").first.locator("td").nth(i)
+    assert cellule.inner_text().endswith(" j")
