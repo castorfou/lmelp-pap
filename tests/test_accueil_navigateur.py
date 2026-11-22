@@ -83,6 +83,12 @@ def navigateur() -> Iterator[Any]:
         nav.close()
 
 
+# Rendu par une route de ``api`` : la requête reste en suspens, la route
+# est gardée dans ``SUSPENDUES`` pour que le test y réponde plus tard.
+EN_ATTENTE = object()
+SUSPENDUES: list[Any] = []
+
+
 def _ouvrir(
     navigateur: Any,
     donnees: dict[str, Any] | None = None,
@@ -105,7 +111,10 @@ def _ouvrir(
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
         elif api and (chemin := "/" + url.split("/", 3)[-1]) in api:
             reponse = api[chemin](route.request)
-            route.fulfill(body=json.dumps(reponse), content_type="application/json")
+            if reponse is EN_ATTENTE:
+                SUSPENDUES.append(route)
+            else:
+                route.fulfill(body=json.dumps(reponse), content_type="application/json")
         elif url.endswith("/api/donnees"):
             route.fulfill(body=corps, content_type="application/json")
         else:
@@ -655,12 +664,10 @@ def test_sans_donnees_de_l_api_un_message_et_l_ecoute_reste_possible(
 # --- mettre à disposition de lmelp ------------------------------------------
 
 
-def _remettre(
-    navigateur: Any, reponse: Any, accepter: bool = True
-) -> tuple[Any, dict[str, Any], list[Any]]:
+def _remettre(navigateur: Any, reponse: Any) -> tuple[Any, dict[str, Any], list[Any]]:
     """L'accueil sur la page qualifié ; ``reponse(donnees, cible)`` rend la
-    réponse de ``POST /api/remises``. Les confirmations sont acceptées ou
-    refusées selon ``accepter``."""
+    réponse de ``POST /api/remises``. Les confirmations se font dans la
+    boîte de la page (voir ``_confirmer``)."""
     donnees = _donnees()
     cible = next(e for e in donnees["emissions"] if e["maturite"] == "qualifie")
     envoyees: list[Any] = []
@@ -673,9 +680,17 @@ def _remettre(
         )
 
     page = _ouvrir(navigateur, donnees, api={"/api/remises": remises})
-    page.on("dialog", lambda d: d.accept() if accepter else d.dismiss())
     page.locator('.compteur[data-etat="qualifie"]').click()
     return page, cible, envoyees
+
+
+def _confirmer(page: Any, accepter: bool = True) -> None:
+    """Répond à la boîte de confirmation de la page (jamais une boîte native
+    du navigateur)."""
+    boite = page.get_by_role("dialog")
+    boite.wait_for()
+    nom = "Mettre à disposition" if accepter else "Annuler"
+    boite.get_by_role("button", name=nom, exact=True).click()
 
 
 def _mise(apres: dict[str, Any], e: dict[str, Any]) -> dict[str, Any]:
@@ -704,6 +719,7 @@ def test_mettre_a_disposition_confirme_envoie_et_notifie(navigateur: Any) -> Non
     page, cible, envoyees = _remettre(navigateur, _mise)
     ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
     ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    _confirmer(page)
 
     page.locator("#toast", has_text="mis à disposition").wait_for()
     assert envoyees == [{"emissions": [cible["id"]]}]
@@ -715,12 +731,49 @@ def test_mettre_a_disposition_confirme_envoie_et_notifie(navigateur: Any) -> Non
 
 
 def test_sans_confirmation_rien_n_est_envoye(navigateur: Any) -> None:
-    page, cible, envoyees = _remettre(navigateur, _mise, accepter=False)
+    page, cible, envoyees = _remettre(navigateur, _mise)
     ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
     ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    _confirmer(page, accepter=False)
     page.wait_for_timeout(200)
+    assert page.get_by_role("dialog").count() == 0
     assert envoyees == []
     assert ligne.count() == 1
+
+
+def test_la_confirmation_est_une_boite_de_la_page(navigateur: Any) -> None:
+    natives: list[Any] = []
+    page, cible, _ = _remettre(navigateur, _mise)
+
+    def native(d: Any) -> None:
+        natives.append(d)
+        d.dismiss()
+
+    page.on("dialog", native)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    boite = page.get_by_role("dialog")
+    boite.wait_for()
+    assert natives == []
+    assert cible["id"] in boite.inner_text()
+    assert "ne se retire pas" in boite.inner_text()
+
+
+def test_la_mise_a_disposition_en_cours_reste_affichee(navigateur: Any) -> None:
+    page, cible, _ = _remettre(navigateur, lambda apres, e: EN_ATTENTE)
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    _confirmer(page)
+
+    boite = page.get_by_role("dialog")
+    boite.get_by_text("en cours").wait_for()
+    assert boite.get_by_role("button").count() == 0
+    route = SUSPENDUES.pop()
+    apres = _donnees()
+    e = next(x for x in apres["emissions"] if x["id"] == cible["id"])
+    route.fulfill(body=json.dumps(_mise(apres, e)), content_type="application/json")
+    page.locator("#toast", has_text="mis à disposition").wait_for()
+    assert page.get_by_role("dialog").count() == 0
 
 
 def test_une_collision_s_affiche_visiblement(navigateur: Any) -> None:
@@ -735,6 +788,7 @@ def test_une_collision_s_affiche_visiblement(navigateur: Any) -> None:
     page, cible, _ = _remettre(navigateur, collision)
     ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
     ligne.get_by_role("button", name="Mettre à disposition de lmelp").click()
+    _confirmer(page)
 
     alerte = page.locator(".refus")
     alerte.wait_for()

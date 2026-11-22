@@ -101,12 +101,23 @@
   .lot { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
   button.primaire { background: var(--entete); color: var(--entete-texte); border-color: var(--entete); }
   button:disabled { opacity: .5; cursor: wait; }
+  /* Boîte de la page : confirmation d'une action, puis attente de son résultat */
+  dialog.boite { width: min(460px, calc(100vw - 32px)); padding: 18px 20px; border: 1px solid var(--trait); border-radius: 10px; background: var(--carte); color: var(--texte); box-shadow: 0 12px 36px #0006; }
+  dialog.boite::backdrop { background: #0008; }
+  dialog.boite h3 { margin: 0 0 8px; font-size: 15px; }
+  dialog.boite p { margin: 0; color: var(--doux); }
+  dialog.boite .choix { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  dialog.boite .choix button { padding: 6px 14px; }
+  dialog.boite .attente { display: flex; gap: 10px; align-items: center; }
+  .rouet { flex: none; width: 18px; height: 18px; border: 2px solid var(--trait); border-top-color: var(--qualifie); border-radius: 50%; animation: tourner 1s linear infinite; }
+  @keyframes tourner { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <header class="app"><a class="logo" href="/" id="logo">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><a class="vers-liste" href="/liste">Liste et arbitrages</a></header>
 <main id="accueil"></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog class="boite" id="boite" aria-labelledby="boite-titre"></dialog>
 <script>
 // Les états d'une émission, dans l'ordre du chemin vers lmelp. « action » : ce que
 // le compteur annonce ; l'action elle-même vit dans ACTIONS.
@@ -128,7 +139,7 @@ const ACTIONS = {
   rapatrie: { libelle: "Écouter et qualifier", lot: false, executer: ids => { vue.ecoute = vue.ecoute === ids[0] ? null : ids[0]; rendre(); } },
   // « confirmer » : la question posée avant d'agir, par ligne comme en lot
   qualifie: {
-    libelle: "Mettre à disposition de lmelp", lot: true, executer: ids => mettreADisposition(ids),
+    libelle: "Mettre à disposition de lmelp", oui: "Mettre à disposition", lot: true, executer: ids => mettreADisposition(ids),
     confirmer: ids => `Mettre à disposition de lmelp ${ids.length > 1 ? `les ${ids.length} émissions` : `l'émission ${ids[0]}`} ? Le fichier est copié dans le dossier audio de lmelp ; une mise à disposition ne se retire pas.`,
   },
 };
@@ -140,6 +151,8 @@ const ACTIONS = {
 async function mettreADisposition(ids) {
   const avant = compter(EMISSIONS);
   document.querySelectorAll("button[data-action], .lot button").forEach(b => { b.disabled = true; });
+  patienter("Mise à disposition en cours…",
+    "Lecture des métadonnées (API Radio France, quelques secondes si elles ne sont pas en cache), puis copie du fichier dans le dossier audio de lmelp.");
   try {
     const r = await fetch("/api/remises", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emissions: ids }) });
     const t = await r.json();
@@ -149,6 +162,8 @@ async function mettreADisposition(ids) {
     notifier(`${mises.length} mis à disposition${refus.length ? ` · ${refus.length} refus` : ""}`, avant);
   } catch (err) {
     toast(`Échec : ${err.message}`); rendre();
+  } finally {
+    $("boite").close();
   }
 }
 function afficherRefus(racine) {
@@ -366,6 +381,27 @@ function parAnnee(liste) {
   return m;
 }
 // Un message bref ; « tenir » le garde affiché (avancement d'une tâche).
+// ---------- Boîte de la page (à la place des boîtes natives du navigateur) ----------
+// demander : la question avant une action ; rend une promesse, vraie si
+// l'utilisateur confirme (Annuler ou Échap : fausse).
+function demander(titre, texte, oui) {
+  const d = $("boite");
+  d.innerHTML = `<h3 id="boite-titre">${esc(titre)}</h3><p>${esc(texte)}</p>
+    <div class="choix"><button value="non">Annuler</button><button class="primaire" value="oui">${esc(oui)}</button></div>`;
+  return new Promise(resoudre => {
+    const fin = ok => { d.oncancel = null; if (d.open) d.close(); resoudre(ok); };
+    d.querySelectorAll(".choix button").forEach(b => b.addEventListener("click", () => fin(b.value === "oui")));
+    d.oncancel = ev => { ev.preventDefault(); fin(false); };
+    d.showModal(); d.querySelector(".primaire").focus();
+  });
+}
+// patienter : la boîte reste ouverte, sans bouton ni Échap, jusqu'à close().
+function patienter(titre, texte) {
+  const d = $("boite");
+  d.innerHTML = `<div class="attente"><span class="rouet" aria-hidden="true"></span><h3 id="boite-titre" style="margin:0">${esc(titre)}</h3></div><p style="margin-top:8px">${esc(texte)}</p>`;
+  d.oncancel = ev => ev.preventDefault();
+  if (!d.open) d.showModal();
+}
 function toast(t, tenir = false) { const el = $("toast"); el.textContent = t; el.classList.add("vu"); clearTimeout(toast.t); if (!tenir) toast.t = setTimeout(() => el.classList.remove("vu"), 6000); }
 // Après une action : les compteurs qui ont changé (« rapatrié 12→15 »).
 function notifier(message, avant) {
@@ -488,12 +524,14 @@ function pageEtat(racine) {
   $("h").append(histogramme({ liste: tous, hauteur: 90, empile: false, surligne: vue.etat, annee: vue.annee,
     clic: a => { vue.annee = vue.annee === a ? null : a; rendre(); } }));
   // une action qui a « confirmer » pose sa question avant d'agir, par ligne comme en lot
-  const confirme = ids => !action.confirmer || confirm(action.confirmer(ids));
-  $("lot")?.addEventListener("click", () => {
+  const question = (ids, toujours) => action.confirmer || toujours
+    ? demander(action.libelle, action.confirmer ? action.confirmer(ids) : `${action.libelle} : les ${ids.length} émissions ?`, action.oui || action.libelle)
+    : Promise.resolve(true);
+  $("lot")?.addEventListener("click", async () => {
     const ids = liste.map(e => e.id);
-    if (confirm(action.confirmer ? action.confirmer(ids) : `${action.libelle} : les ${liste.length} émissions ?`)) action.executer(ids);
+    if (await question(ids, true)) action.executer(ids);
   });
-  $("lot-selection")?.addEventListener("click", () => { if (vue.choix.size && confirme([...vue.choix])) action.executer([...vue.choix]); });
+  $("lot-selection")?.addEventListener("click", async () => { const ids = [...vue.choix]; if (ids.length && await question(ids)) action.executer(ids); });
   $("tous")?.addEventListener("change", ev => { liste.forEach(e => ev.target.checked ? vue.choix.add(e.id) : vue.choix.delete(e.id)); rendre(); });
   const tb = racine.querySelector("tbody");
   const lot = action && action.lot;
@@ -504,9 +542,9 @@ function pageEtat(racine) {
     const tr = tb.querySelector(`tr[data-id="${CSS.escape(ecoutee.id)}"]`);
     if (tr) { tr.insertAdjacentHTML("afterend", lecteur(ecoutee, tr.children.length)); brancherLecteur(ecoutee.id); }
   }
-  if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", () => {
+  if (action) tb.querySelectorAll("button[data-action]").forEach(b => b.addEventListener("click", async () => {
     const ids = [b.closest("tr").dataset.id];
-    if (confirme(ids)) action.executer(ids);
+    if (await question(ids)) action.executer(ids);
   }));
   if (lot) tb.querySelectorAll("input[type=checkbox]").forEach(c => c.addEventListener("change", () => {
     const id = c.closest("tr").dataset.id;
