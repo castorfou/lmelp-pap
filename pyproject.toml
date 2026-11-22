@@ -75,7 +75,7 @@ where = ["src"]
 "" = "src"
 
 [tool.setuptools.package-data]
-lmelp_pap = ["*.html"]
+lmelp_pap = ["*.html", "icones/*"]
 
 # Configuration uv pour la reproductibilité
 [dependency-groups]

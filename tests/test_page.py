@@ -1,5 +1,6 @@
 """Page HTML de la liste des émissions, générée à partir de ses CSV."""
 
+import base64
 import json
 import re
 from pathlib import Path
@@ -116,3 +117,11 @@ def test_la_page_en_mode_arbitrage_a_les_memes_donnees_et_ses_controles() -> Non
     assert _donnees(arbitrage) == _donnees(publiee)
     assert 'id="arbitrage"' in arbitrage
     assert "/api/arbitrages" in arbitrage
+
+
+def test_la_page_embarque_son_favicon_pour_s_ouvrir_sans_serveur() -> None:
+    page = construire_page(FIXTURES)
+
+    lien = re.search(r'<link rel="icon"[^>]*href="data:image/png;base64,([^"]+)"', page)
+    assert lien is not None
+    assert base64.b64decode(lien.group(1)).startswith(b"\x89PNG\r\n\x1a\n")

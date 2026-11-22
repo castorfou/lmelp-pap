@@ -4,6 +4,7 @@ La page embarque les données en JSON (``<script id="donnees">``) et le
 JavaScript qui les affiche : elle s'ouvre hors ligne, sans serveur.
 """
 
+import base64
 import csv
 import json
 from collections import defaultdict
@@ -21,13 +22,21 @@ def construire_page(dossier: Path, arbitrage: bool = False) -> str:
     En mode ``arbitrage``, la page porte en plus les contrôles de l'outil
     ``lmelp-pap arbitrer`` ; elle ne fonctionne alors que servie par lui.
     """
-    gabarit = _ressource("page.html").replace(
-        "__ARBITRAGE__",
-        _ressource("arbitrage.html")
-        .replace("__THEMES__", json.dumps(THEMES, ensure_ascii=False))
-        .replace("__HOMMAGE__", json.dumps(HOMMAGE, ensure_ascii=False))
-        if arbitrage
-        else "",
+    # Le favicon voyage dans la page (data URI) : elle s'ouvre sans serveur.
+    favicon = base64.b64encode(
+        files("lmelp_pap").joinpath("icones", "favicon-32x32.png").read_bytes()
+    ).decode()
+    gabarit = (
+        _ressource("page.html")
+        .replace("__FAVICON__", favicon)
+        .replace(
+            "__ARBITRAGE__",
+            _ressource("arbitrage.html")
+            .replace("__THEMES__", json.dumps(THEMES, ensure_ascii=False))
+            .replace("__HOMMAGE__", json.dumps(HOMMAGE, ensure_ascii=False))
+            if arbitrage
+            else "",
+        )
     )
     # « </ » fermerait le bloc <script> : « <\/ » est le même JSON.
     donnees = json.dumps(donnees_page(dossier), ensure_ascii=False)

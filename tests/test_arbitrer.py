@@ -6,6 +6,7 @@ et un dossier de sortie temporaire ; il reconstruit la liste sans réseau.
 
 import csv
 import json
+import re
 import threading
 import urllib.error
 import urllib.request
@@ -589,3 +590,26 @@ def test_un_arbitrage_de_rapprochement_invalide_est_refuse_sans_rien_ecrire(
 
     assert erreur.value.code == 400
     assert not (sortie / "arbitrages.csv").exists()
+
+
+def test_le_serveur_sert_le_favicon_ico(url: str) -> None:
+    with urllib.request.urlopen(f"{url}/favicon.ico") as r:
+        assert r.headers["Content-Type"] == "image/x-icon"
+        corps = r.read()
+
+    # en-tête d'un fichier ICO : réservé 0, type 1 (icône)
+    assert corps[:4] == b"\x00\x00\x01\x00"
+
+
+def test_l_accueil_declare_des_icones_que_le_serveur_sert(url: str) -> None:
+    with urllib.request.urlopen(f"{url}/") as r:
+        accueil = r.read().decode()
+
+    liens = re.findall(
+        r'<link rel="(?:icon|apple-touch-icon)"[^>]*href="([^"]+)"', accueil
+    )
+    assert "/favicon.ico" in liens
+    assert "/apple-touch-icon.png" in liens
+    for lien in liens:
+        with urllib.request.urlopen(f"{url}{lien}") as r:
+            assert r.headers["Content-Type"].startswith("image/")
