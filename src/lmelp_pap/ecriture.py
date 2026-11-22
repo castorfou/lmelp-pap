@@ -28,6 +28,7 @@ COLONNES_ATTESTATIONS = [
     "themes",
     "titre",
     "url",
+    "extrait",
 ]
 COLONNES_ENREGISTREMENTS = ["emission_id", "url", "type", "sources", "duree"]
 COLONNES_DOUTES = [
@@ -80,6 +81,7 @@ def ecrire_liste(liste: list[Emission], doutes: list[Doute], dossier: Path) -> N
                 "themes": _themes(a.themes),
                 "titre": a.titre,
                 "url": a.url,
+                "extrait": "oui" if a.extrait else "non",
             }
             for e in emissions
             for a in sorted(e.attestations, key=lambda a: (a.source, a.source_id))

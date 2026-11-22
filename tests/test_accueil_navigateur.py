@@ -592,11 +592,16 @@ PAGE_RF = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume
 
 
 def _ecouter(
-    navigateur: Any, radiofrance: Any, page_rf: bool = True
+    navigateur: Any,
+    radiofrance: Any,
+    page_rf: bool = True,
+    autres: list[dict[str, Any]] | None = None,
 ) -> tuple[Any, list[str]]:
     """Le lecteur ouvert sur l'émission rapatriée ; ``radiofrance`` : la
-    réponse de ``GET /api/radiofrance/<id>``."""
+    réponse de ``GET /api/radiofrance/<id>`` ; ``autres`` : des attestations
+    ajoutées avant la page radiofrance.fr."""
     donnees, cible = _avec_rapatrie()
+    cible["attestations"].extend(autres or [])
     if page_rf:
         cible["attestations"].append(
             {"source": "radiofrance", "url": PAGE_RF, "titre": "Une fiche"}
@@ -645,6 +650,30 @@ def test_sans_page_radiofrance_pas_de_lien(navigateur: Any) -> None:
     page, _ = _ecouter(navigateur, TROUVEE, page_rf=False)
     page.locator("tr.ecoute .radiofrance", has_text="Jérôme Garcin").wait_for()
     assert page.locator("tr.ecoute a").count() == 0
+
+
+def test_la_fiche_d_un_extrait_n_a_pas_de_lien(navigateur: Any) -> None:
+    """La fiche radiofrance.fr d'un seul livre de l'émission (un extrait)
+    n'est pas la page de l'émission : seule celle de l'émission entière a un
+    lien."""
+    extrait = PAGE_RF.replace("x-1", "un-livre-2")
+    page, _ = _ecouter(
+        navigateur,
+        TROUVEE,
+        autres=[
+            {
+                "source": "radiofrance",
+                "url": extrait,
+                "titre": "Un livre",
+                "extrait": True,
+            }
+        ],
+    )
+    page.locator("tr.ecoute .radiofrance", has_text="Jérôme Garcin").wait_for()
+    liens = page.locator("tr.ecoute").get_by_role("link", name="page radiofrance.fr")
+    assert [liens.nth(i).get_attribute("href") for i in range(liens.count())] == [
+        PAGE_RF
+    ]
 
 
 def test_l_ecoute_montre_l_equipe_et_les_invites_de_l_api(navigateur: Any) -> None:
