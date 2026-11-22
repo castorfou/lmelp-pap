@@ -50,8 +50,9 @@ def lire_fiche(page: str) -> Attestation | None:
         titre=titre,
         description=_texte(article.get("description")),
         duree=duree,
+        # un nom vide (ou « . ») est sauté : pas de virgule orpheline
         animateur=", ".join(
-            _texte(p["name"]) or "" for p in episode.get("director", [])
+            nom for p in episode.get("director", []) if (nom := _texte(p["name"]))
         )
         or None,
         url=url,

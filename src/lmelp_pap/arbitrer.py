@@ -70,13 +70,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 from lmelp_pap import audio
 from lmelp_pap.arbitrages import (
     EXISTANTE,
     INEXISTANTE,
     ajouter_arbitrage,
+    decision,
     erreur_de_themes,
     lire_arbitrages,
     lire_date,
@@ -114,7 +115,7 @@ from lmelp_pap.maturite import (
     verification_due,
     verifier,
 )
-from lmelp_pap.page import construire_page, donnees_page
+from lmelp_pap.page import construire_page, donnees_page, icone
 from lmelp_pap.radiofrance_api import (
     QUOTA,
     ApiRadioFranceError,
@@ -161,23 +162,6 @@ def _duree(secondes: float) -> str:
     return f"{s} s" if s < 60 else f"{s // 60} min {s % 60} s"
 
 
-def _decision(arbitrage: Arbitrage) -> str:
-    """La décision d'un arbitrage, pour les logs, avec sa justification."""
-    if arbitrage.sorte == "thème":
-        decision = ", ".join(sorted(arbitrage.themes))
-    elif arbitrage.sorte == "existence":
-        decision = "existe" if arbitrage.existe else "n'existe pas"
-    elif arbitrage.sorte == "date":
-        decision = str(arbitrage.date_retenue)
-    elif arbitrage.sorte == "rapprochement":
-        vers = ":".join(arbitrage.cible) if arbitrage.cible else "gardée ici"
-        decision = f"{arbitrage.source}:{arbitrage.source_id} → {vers}"
-    else:
-        decision = "renvoi à l'écoute"
-    pourquoi = arbitrage.justification
-    return f"{decision} (« {pourquoi} »)" if pourquoi else decision
-
-
 class Maturites:
     """Les enregistrements du dépôt, par émission, et ceux des fichiers
     valides qu'un épisode de lmelp porte : lus une fois pour une requête."""
@@ -222,9 +206,10 @@ class TacheEnCoursError(RuntimeError):
 class Tache:
     """Une tâche de fond (vérification, rapatriement) et son avancement :
     ``en_cours``, ``faites``, ``total``, ``bilan`` une fois finie, et les
-    champs propres à la tâche."""
+    champs propres à la tâche. ``nom`` la désigne dans les logs."""
 
-    def __init__(self, **champs: Any):
+    def __init__(self, nom: str = "tâche", **champs: Any):
+        self.nom = nom
         self._champs = champs
         self._etat: dict[str, Any] = self._repos()
         self._verrou = threading.Lock()
@@ -263,7 +248,9 @@ class Tache:
 
     def lancer(self, total: int, travail: Any, refuser: bool = False) -> dict[str, Any]:
         """Lance ``travail(tache)`` dans un fil, qui rend le bilan. Une tâche
-        déjà en cours est rendue telle quelle, ou refusée si ``refuser``."""
+        déjà en cours est rendue telle quelle, ou refusée si ``refuser``. Une
+        exception du travail va aux logs avec sa trace ; la tâche finit alors
+        sans bilan."""
         with self._verrou:
             if self._etat["en_cours"]:
                 if refuser:
@@ -281,6 +268,9 @@ class Tache:
             bilan = None
             try:
                 bilan = travail(self)
+            except Exception:
+                # pas de bilan ni de ligne « terminée » : la trace dit pourquoi
+                log.exception(f"{self.nom} en échec")
             finally:
                 self.maj(en_cours=False, bilan=bilan)
 
@@ -319,8 +309,9 @@ class Atelier:
         self._radiofrance = LecteurDiffusions(session)
         self.intervalle = intervalle  # entre deux vérifications complètes
         self.planification = False
-        self._verification = Tache()
+        self._verification = Tache("vérification")
         self._rapatriement = Tache(
+            "rapatriement",
             en_cours_sur=None,
             erreurs=[],
             octets=0,
@@ -348,6 +339,11 @@ class Atelier:
         """Les émissions de la liste et les arbitrages, pour la page."""
         with self._verrou:
             return self._donnees()
+
+    def nombre_emissions(self) -> int:
+        """Le nombre d'émissions de la liste, sans lire la base Mongo."""
+        with self._verrou:
+            return len(self._emissions)
 
     def etat_verification(self) -> dict[str, Any]:
         """L'avancement de la vérification des URL d'intégral, avec la date de
@@ -392,8 +388,9 @@ class Atelier:
                 depot.noter_verification(datetime.now(UTC))
             log.info(
                 f"vérification terminée en {round(time.monotonic() - debut)} s : "
-                f"{bilan['ok']} ok, {bilan['net']} mortes, "
-                f"{bilan['passager']} échecs passagers"
+                f"{bilan['ok']} ok, {bilan['net']} morte{_s(bilan['net'])}, "
+                f"{bilan['passager']} échec{_s(bilan['passager'])} "
+                f"passager{_s(bilan['passager'])}"
             )
             return bilan
 
@@ -730,11 +727,12 @@ class Atelier:
                     refus.append({"emission": emission_id, "detail": str(erreur)})
                     continue
                 relatif = fait.fichier or ""
+                deja_copie = ", reprise : fichier déjà copié, même sha256"
                 log.info(
                     f"mis à disposition {emission_id} : {self.audios / relatif} → "
                     f"{self.audios_lmelp / relatif} (sha256 {(fait.sha256 or '')[:12]}"
                     f"{', API Radio France' if api else ''}"
-                    f"{', reprise : fichier déjà copié, même sha256' if reprise else ''})"
+                    f"{deja_copie if reprise else ''})"
                 )
                 mises.append({"emission": emission_id, "fichier": relatif})
         log.info(
@@ -794,7 +792,7 @@ class Atelier:
                 date=datetime.now().replace(microsecond=0),
             )
             ajouter_arbitrage(self.fichier, arbitrage)
-            log.info(f"arbitrage {sorte} {emission.id} : {_decision(arbitrage)}")
+            log.info(f"arbitrage {sorte} {emission.id} : {decision(arbitrage)}")
             self._reconstruire()
             donnees = self._donnees()
         self._apres_reconstruction()
@@ -817,7 +815,8 @@ class Atelier:
                 raise DemandeInvalideError("aucun arbitrage à annuler")
             cible = demande.get("emission_id") or ":".join(next(iter(cles)))
             log.info(
-                f"annulation {cible} : {retires} arbitrage{_s(retires)} retiré{_s(retires)}"
+                f"annulation {cible} : {retires} arbitrage{_s(retires)} "
+                f"retiré{_s(retires)}"
             )
             self._reconstruire()
             donnees = self._donnees()
@@ -1035,11 +1034,6 @@ ICONES = {
 }
 
 
-def _icone(nom: str) -> bytes:
-    """Une icône livrée avec le paquet (``lmelp_pap/icones/``)."""
-    return files("lmelp_pap").joinpath("icones", nom).read_bytes()
-
-
 def creer_serveur(
     cache: Path,
     sortie: Path,
@@ -1084,15 +1078,19 @@ def creer_serveur(
 
         def _sans_panne(self, route: Callable[[], None]) -> None:
             """Sert la route ; une exception imprévue (Mongo injoignable…) va
-            aux logs avec sa trace et donne une 500, si la réponse n'est pas
-            déjà partie."""
+            aux logs avec son type et sa trace et donne une 500 au message
+            générique (rien du détail : il peut porter une adresse ou un
+            identifiant), si la réponse n'est pas déjà partie."""
             try:
                 route()
             except Exception as erreur:
-                log.exception(f"{self.command} {self.path} : erreur interne")
+                log.exception(
+                    f"{self.command} {self.path} : erreur interne "
+                    f"({type(erreur).__name__})"
+                )
                 if not self.repondu:
                     self._json(
-                        {"erreur": f"erreur interne : {erreur}"},
+                        {"erreur": "erreur interne"},
                         HTTPStatus.INTERNAL_SERVER_ERROR,
                     )
 
@@ -1102,6 +1100,8 @@ def creer_serveur(
 
         def _get(self) -> None:
             """La page, les données courantes, ou l'état du service."""
+            # le nom d'une icône, sans query string (``/favicon.ico?v=2``)
+            nom = urlsplit(self.path).path.lstrip("/")
             if self.path == "/health":
                 self._json({"status": "ok"})
             elif self.path in ("/", "/index.html"):
@@ -1124,9 +1124,8 @@ def creer_serveur(
                     self._json({"erreur": str(e)}, HTTPStatus.NOT_FOUND)
             elif self.path.startswith("/audios/"):
                 self._audio()
-            elif self.path.lstrip("/") in ICONES:
-                nom = self.path.lstrip("/")
-                self._repondre(_icone(nom), ICONES[nom])
+            elif nom in ICONES:
+                self._repondre(icone(nom), ICONES[nom])
             else:
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 

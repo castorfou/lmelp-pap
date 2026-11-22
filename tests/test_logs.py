@@ -16,8 +16,8 @@ from typing import Any
 import mongomock
 import pytest
 
-from lmelp_pap import cli, logs
-from lmelp_pap.arbitrer import creer_serveur
+from lmelp_pap import arbitrer, cli, logs
+from lmelp_pap.arbitrer import Atelier, creer_serveur
 from lmelp_pap.maturite import Depot
 from tests.test_commande import _cache_rempli
 
@@ -128,10 +128,28 @@ def test_une_exception_dans_une_requete_est_journalisee_avec_sa_trace(
 
     sortie = _logs(capfd)
     assert statut == 500
-    assert any(
-        niveau == "ERROR" and "GET /api/donnees" in m for niveau, _, m in lignes(sortie)
-    )
+    assert (
+        "ERROR",
+        "arbitrer",
+        "GET /api/donnees : erreur interne (RuntimeError)",
+    ) in lignes(sortie)
     assert "RuntimeError: serveur Mongo injoignable" in sortie
+
+
+def test_une_erreur_interne_ne_donne_au_client_qu_un_message_generique(
+    serveur: Any, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def panne() -> None:
+        raise RuntimeError("mongodb://secret@nas923:27018")
+
+    monkeypatch.setattr(serveur.atelier, "donnees", panne)
+
+    with pytest.raises(urllib.error.HTTPError) as reponse:
+        urllib.request.urlopen(f"{serveur.url}/api/donnees")
+
+    assert reponse.value.code == 500
+    assert json.loads(reponse.value.read()) == {"erreur": "erreur interne"}
+    assert "mongodb://secret@nas923:27018" in _logs(capfd)
 
 
 # --- au seam de la commande : le démarrage ----------------------------------
@@ -216,6 +234,25 @@ def test_le_demarrage_dit_mongo_injoignable(
     )
 
 
+def test_le_demarrage_survit_a_mongo_injoignable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """Toute lecture de la base échoue : l'appli démarre quand même et dit
+    l'état de Mongo et le nombre d'émissions."""
+    depot = Depot(mongomock.MongoClient()["masque_et_la_plume"])
+
+    def injoignable(*_args: object, **_options: object) -> None:
+        raise RuntimeError("nas923:27018: timed out")
+
+    monkeypatch.setattr(depot.base.client.admin, "command", injoignable)
+    monkeypatch.setattr(depot, "tous", injoignable)
+
+    journal = _demarrer_la_commande(tmp_path, monkeypatch, capfd, depot)
+
+    assert any(m.startswith("Mongo : injoignable") for m in journal)
+    assert any(re.fullmatch(r"liste : \d+ émissions", m) for m in journal)
+
+
 def test_le_demarrage_donne_l_url_publique_si_elle_est_fournie(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
 ) -> None:
@@ -262,3 +299,37 @@ def test_une_demande_refusee_est_journalisee(
         m.startswith("POST /api/arbitrages refusée (400) : sorte invalide")
         for m in messages(_logs(capfd), "http")
     )
+
+
+# --- au seam de l'atelier : les tâches de fond ------------------------------
+
+
+def test_une_exception_dans_une_tache_de_fond_est_journalisee_avec_sa_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """La vérification plante : la trace va aux logs, la tâche s'arrête sans
+    bilan et sans ligne « terminée »."""
+    cache = tmp_path / "cache"
+    _cache_rempli(cache)
+    depot = Depot(mongomock.MongoClient()["masque_et_la_plume"])
+    atelier = Atelier(cache, tmp_path / "sortie", depot=depot)
+
+    def panne(*_args: object, **_options: object) -> None:
+        raise RuntimeError("serveur Mongo injoignable")
+
+    monkeypatch.setattr(arbitrer, "verifier", panne)
+    capfd.readouterr()
+
+    atelier.lancer_verification()
+    for _ in range(100):
+        if not atelier.etat_verification()["en_cours"]:
+            break
+        time.sleep(0.02)
+
+    etat = atelier.etat_verification()
+    sortie = _logs(capfd)
+    assert not etat["en_cours"]
+    assert etat["bilan"] is None
+    assert ("ERROR", "arbitrer", "vérification en échec") in lignes(sortie)
+    assert "RuntimeError: serveur Mongo injoignable" in sortie
+    assert not any("terminée" in m for m in messages(sortie, "arbitrer"))

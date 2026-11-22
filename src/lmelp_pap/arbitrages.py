@@ -167,6 +167,25 @@ def valeur(arbitrage: Arbitrage) -> str:
     return ";".join(sorted(arbitrage.themes))
 
 
+def decision(arbitrage: Arbitrage) -> str:
+    """La décision d'un arbitrage en clair, pour les logs, avec sa
+    justification : la colonne ``valeur`` (``existe``, ``n'existe pas``, la
+    date retenue, ou « sans date »), sauf pour les thèmes (séparés par des
+    virgules), un rapprochement (l'attestation et où elle va) et un renvoi à
+    l'écoute."""
+    if arbitrage.sorte == "thème":
+        texte = ", ".join(sorted(arbitrage.themes))
+    elif arbitrage.sorte == "rapprochement":
+        vers = ":".join(arbitrage.cible) if arbitrage.cible else "gardée ici"
+        texte = f"{arbitrage.source}:{arbitrage.source_id} → {vers}"
+    elif arbitrage.sorte == "écoute":
+        texte = "renvoi à l'écoute"
+    else:
+        texte = valeur(arbitrage) or "sans date"
+    pourquoi = arbitrage.justification
+    return f"{texte} (« {pourquoi} »)" if pourquoi else texte
+
+
 def _date(moment: datetime) -> str:
     """Le jour seul à minuit (saisie à la main), sinon le jour et l'heure."""
     if moment.time() == datetime.min.time():
