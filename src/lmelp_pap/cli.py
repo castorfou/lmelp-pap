@@ -189,8 +189,9 @@ def _arbitrer(args: argparse.Namespace) -> int:
     port = serveur.server_address[1]
     atelier = serveur.atelier  # type: ignore[attr-defined]
     log.info(f"lmelp-pap {version('lmelp-pap')} : écoute sur {args.hote}:{port}")
-    log.info(f"liste : {len(atelier.donnees()['emissions'])} émissions")
+    # ni l'un ni l'autre ne lit la base : l'appli démarre même sans elle
     log.info(f"Mongo : {_etat_mongo(depot)}")
+    log.info(f"liste : {atelier.nombre_emissions()} émissions")
     log.info(
         f"dossiers : cache {args.cache}, données {args.sortie}, "
         f"arbitrages {atelier.fichier}, audios {args.audios}, "

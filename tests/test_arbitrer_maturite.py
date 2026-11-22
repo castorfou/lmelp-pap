@@ -426,7 +426,7 @@ def test_la_verification_automatique_laisse_une_trace_dans_les_logs(
     assert f"vérification automatique (complète : dernière le {date} à " in logs
     assert ") : 3 URL" in logs
     assert "vérification terminée" in logs
-    assert "2 ok, 1 mortes, 0 échecs passagers" in logs
+    assert "2 ok, 1 morte, 0 échec passager" in logs
 
 
 def test_une_verification_manuelle_est_tracee(

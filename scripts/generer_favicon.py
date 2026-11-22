@@ -168,7 +168,8 @@ def icone_carree() -> Image.Image:
 
 
 def arrondir(icone: Image.Image) -> Image.Image:
-    """Coins arrondis (rayon d'un sixième du côté), comme les autres icônes lmelp."""
+    """Coins arrondis (rayon d'un sixième du côté), comme les autres icônes
+    lmelp."""
     forme = Image.new("L", icone.size, 0)
     ImageDraw.Draw(forme).rounded_rectangle(
         (0, 0, icone.width - 1, icone.height - 1), radius=icone.width // 6, fill=255

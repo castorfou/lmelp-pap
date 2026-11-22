@@ -310,12 +310,12 @@ La page publiée n'a aucun de ces contrôles. Elle reflète les décisions d'une
 
 #### Logs
 
-L'appli écrit ses logs sur la sortie d'erreur (dans le conteneur : `docker logs lmelp-pap`), une ligne par événement : horodatage local, niveau (`INFO`, `WARNING`, `ERROR`), module, message. Le démarrage donne la version, l'adresse d'écoute (`hôte:port`), le nombre d'émissions de la liste, l'état de Mongo et les dossiers (voir [L'appli pap en conteneur](appli-docker-nas.md#logs)). Puis :
+L'appli écrit ses logs sur la sortie d'erreur (dans le conteneur : `docker logs lmelp-pap`), une ligne par événement : horodatage local, niveau (`INFO`, `WARNING`, `ERROR`), module, message. Le démarrage donne la version, l'adresse d'écoute (`hôte:port`), l'état de Mongo, le nombre d'émissions de la liste et les dossiers (voir [L'appli pap en conteneur](appli-docker-nas.md#logs)). Puis :
 
 ```
 2026-11-21 10:53:51 INFO    arbitrer : vérification automatique (complète : jamais vérifiée) : 570 URL
 2026-11-21 10:53:58 WARNING maturite : vérification 1980-02-24 https://media.radiofrance-podcast.net/… : HTTP 503
-2026-11-21 10:54:02 INFO    arbitrer : vérification terminée en 10 s : 569 ok, 0 mortes, 1 échecs passagers
+2026-11-21 10:54:02 INFO    arbitrer : vérification terminée en 10 s : 569 ok, 0 morte, 1 échec passager
 2026-11-21 10:58:10 INFO    arbitrer : arbitrage thème 2010-07-11 : théâtre (« titre explicite »)
 2026-11-21 10:58:10 INFO    http : POST /api/arbitrages 200 (192.168.1.20)
 2026-11-21 11:01:33 INFO    arbitrer : annulation 2010-07-11 : 1 arbitrage retiré
@@ -327,7 +327,7 @@ L'appli écrit ses logs sur la sortie d'erreur (dans le conteneur : `docker logs
 2026-11-21 11:40:02 INFO    arbitrer : mis à disposition 2014-09-28 : /data/audios/2014/14007-28.09.2014-….m4a → /audios-lmelp/2014/14007-28.09.2014-….m4a (sha256 3f1c0e9a77b2)
 2026-11-21 11:40:02 INFO    arbitrer : mise à disposition refusée 2006-04-23 (niveau qualifie) : 2006/14007-23.04.2006-….m4a existe déjà dans le dossier de lmelp
 2026-11-21 11:40:02 INFO    arbitrer : mise à disposition : 1 mise à disposition, 1 refus
-2026-11-21 11:42:17 ERROR   arbitrer : GET /api/donnees : ServerSelectionTimeoutError('nas923:27018: timed out')
+2026-11-21 11:42:17 ERROR   arbitrer : GET /api/donnees : erreur interne (ServerSelectionTimeoutError)
 Traceback (most recent call last):
   …
 ```
@@ -336,7 +336,7 @@ Traceback (most recent call last):
 
 **Requêtes HTTP.** Chaque requête donne sa méthode, son chemin, son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »).
 
-**Erreurs.** Niveau `WARNING` : échec passager d'une vérification d'URL (réseau, 5xx, 429, 403), échec d'un essai ou d'un rapatriement, erreur de l'API Radio France, fichier audio introuvable. Niveau `ERROR`, avec la trace : exception imprévue pendant une requête (Mongo injoignable, par exemple ; la page reçoit une 500) ou dans la planification de la vérification.
+**Erreurs.** Niveau `WARNING` : échec passager d'une vérification d'URL (réseau, 5xx, 429, 403), échec d'un essai ou d'un rapatriement, erreur de l'API Radio France, fichier audio introuvable. Niveau `ERROR`, avec le type de l'exception et la trace : exception imprévue pendant une requête (Mongo injoignable, par exemple ; la page reçoit une 500 au message générique `{"erreur": "erreur interne"}`, le détail ne reste que dans les logs), dans la planification de la vérification, ou dans une tâche de fond (« vérification en échec », « rapatriement en échec » : la tâche s'arrête sans bilan). Mongo injoignable n'empêche pas le démarrage : la ligne « Mongo : injoignable … » le signale et l'appli sert la liste.
 
 #### API
 

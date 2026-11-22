@@ -30,9 +30,6 @@ class _SortieErreur(logging.StreamHandler):
     """Écrit dans la sortie d'erreur du moment (``sys.stderr`` relu à chaque
     ligne : une capture de tests ou une redirection est suivie)."""
 
-    def __init__(self) -> None:
-        super().__init__()
-
     @property
     def stream(self) -> object:
         return sys.stderr

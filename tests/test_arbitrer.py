@@ -601,6 +601,13 @@ def test_le_serveur_sert_le_favicon_ico(url: str) -> None:
     assert corps[:4] == b"\x00\x00\x01\x00"
 
 
+def test_le_serveur_sert_une_icone_demandee_avec_une_query_string(url: str) -> None:
+    # un navigateur ou un lien peut forcer le rechargement : ``?v=2``
+    with urllib.request.urlopen(f"{url}/favicon.ico?v=2") as r:
+        assert r.headers["Content-Type"] == "image/x-icon"
+        assert r.read()[:4] == b"\x00\x00\x01\x00"
+
+
 def test_l_accueil_declare_des_icones_que_le_serveur_sert(url: str) -> None:
     with urllib.request.urlopen(f"{url}/") as r:
         accueil = r.read().decode()

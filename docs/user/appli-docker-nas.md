@@ -41,13 +41,13 @@ L'appli écrit ses logs sur la sortie d'erreur du conteneur : `docker logs lmelp
 ```
 2026-11-21 10:53:40 INFO    cli : lecture du cache et construction de la liste…
 2026-11-21 10:53:49 INFO    cli : lmelp-pap 0.1.0 : écoute sur 0.0.0.0:8090
-2026-11-21 10:53:49 INFO    cli : liste : 2123 émissions
 2026-11-21 10:53:49 INFO    cli : Mongo : connecté (base masque_et_la_plume)
+2026-11-21 10:53:49 INFO    cli : liste : 2123 émissions
 2026-11-21 10:53:49 INFO    cli : dossiers : cache /data/cache, données /data/processed, arbitrages /data/processed/arbitrages.csv, audios /data/audios, audios lmelp /audios-lmelp
 2026-11-21 10:53:49 INFO    cli : page publique : https://pap.lmelp.ascot63.synology.me
 ```
 
-L'adresse d'écoute est celle du conteneur (`0.0.0.0:8090`) ; l'adresse vue depuis le réseau est celle de `PAP_URL_PUBLIQUE`, ligne absente sans cette variable. Mongo est `connecté`, `absent (MONGO_URI non défini)` ou `injoignable (base …) : <erreur>` : le démarrage tente un `ping`, et l'appli démarre dans tous les cas. Les lignes qui suivent (requêtes, actions, erreurs) sont décrites dans [la liste des émissions](liste-des-emissions.md#logs).
+L'adresse d'écoute est celle du conteneur (`0.0.0.0:8090`) ; l'adresse vue depuis le réseau est celle de `PAP_URL_PUBLIQUE`, ligne absente sans cette variable. Mongo est `connecté`, `absent (MONGO_URI non défini)` ou `injoignable (base …) : <erreur>` : le démarrage tente un `ping` et compte les émissions sans lire la base : l'appli démarre dans tous les cas. Les lignes qui suivent (requêtes, actions, erreurs) sont décrites dans [la liste des émissions](liste-des-emissions.md#logs).
 
 ## Lancer l'image sur un poste
 

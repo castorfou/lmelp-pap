@@ -23,9 +23,7 @@ def construire_page(dossier: Path, arbitrage: bool = False) -> str:
     ``lmelp-pap arbitrer`` ; elle ne fonctionne alors que servie par lui.
     """
     # Le favicon voyage dans la page (data URI) : elle s'ouvre sans serveur.
-    favicon = base64.b64encode(
-        files("lmelp_pap").joinpath("icones", "favicon-32x32.png").read_bytes()
-    ).decode()
+    favicon = base64.b64encode(icone("favicon-32x32.png")).decode()
     gabarit = (
         _ressource("page.html")
         .replace("__FAVICON__", favicon)
@@ -85,6 +83,12 @@ def donnees_page(dossier: Path) -> list[dict[str, Any]]:
         }
         for e in _lire(dossier / "emissions.csv")
     ]
+
+
+def icone(nom: str) -> bytes:
+    """Une icône livrée avec le paquet (``lmelp_pap/icones/``, produites par
+    ``scripts/generer_favicon.py``)."""
+    return files("lmelp_pap").joinpath("icones", nom).read_bytes()
 
 
 def _ressource(nom: str) -> str:
