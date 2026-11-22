@@ -359,7 +359,8 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | Requête | Effet |
 |---|---|
 | `GET /` | L'accueil. `GET /liste` : la liste en mode arbitrage. |
-| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. Avec une base Mongo, chaque émission porte aussi `maturite`, `maturite_depuis`, `echec_rapatriement`, `fichier_audio` (le fichier écoutable, relatif au dossier audio, ou `null`) `ecart` (`date` et `motif` de l'écart, ou `null`) `dans_lmelp` (vrai si un épisode de lmelp porte le fichier d'un de ses enregistrements valides, ou si lmelp l'atteste) et `integration_lmelp` (l'heure de création de cet épisode par le back-office, ISO 8601, ou `null`). |
+| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. Avec une base Mongo, chaque émission porte aussi `maturite`, `maturite_depuis`, `echec_rapatriement`, `fichier_audio` (le fichier écoutable, relatif au dossier audio, ou `null`) `ecart` (`date` et `motif` de l'écart, ou `null`) `dans_lmelp` (vrai si un épisode de lmelp porte le fichier d'un de ses enregistrements valides, ou si lmelp l'atteste) `integration_lmelp` (l'heure de création de cet épisode par le back-office, ISO 8601, ou `null`) et `localisations` (ses enregistrements localisés, du plus ancien au plus récent : `source`, `note`, `notice`, l'URL de la notice INA ou `null`, et `depuis`, la date d'entrée dans le niveau). |
+| `POST /api/localisations` | Ajoute à une émission un enregistrement localisé saisi à la main : `{"emission_id": "2008-03-02", "source": "Jean D., forum, cassettes 2008", "note": "face B abîmée"}` (`note` facultative). Renvoie les données à jour. Erreurs : 400 (émission inconnue, source vide), 503 (sans base Mongo). |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
 | `POST /api/rapatriements` | Lance en fond le rapatriement des émissions `{"emissions": ["2007-01-14", …]}`, l'une après l'autre. Erreurs : 400 (liste vide, émission sans intégral téléchargeable), 409 (un lot tourne déjà), 503 (sans base Mongo). |
 | `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `rapatriees` (dates des émissions rapatriées), `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
@@ -388,6 +389,12 @@ Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste ou si un
 - La page **dans lmelp** a une colonne **Intégrée** : le jour et l'heure où le back-office a fait un épisode de l'enregistrement remis par pap (création du document `episodes`). Une émission entrée dans lmelp par son flux RSS ou une page radiofrance.fr affiche « — ».
 
 L'accueil suit le thème clair ou sombre du système. Sans base Mongo, il n'affiche que « sans enregistrement » et « dans lmelp », avec un bandeau. « pap », en haut à gauche, ramène à l'accueil sans filtre.
+
+### Ajouter un enregistrement localisé (piste)
+
+La page **sans enregistrement** propose, sur chaque ligne, **Ajouter un enregistrement localisé** : une piste qu'une démarche humaine peut faire aboutir. Exemples : un passionné qui dit détenir cette date, ou les archives de Radio France une fois leur réponse reçue. La boîte demande une **source** en texte libre, obligatoire (qui détient l'enregistrement, par quel canal, ce qu'il détient), et une **note** facultative. L'émission passe à **localisé**, avec la date du jour comme date d'entrée.
+
+La page **localisé** indique dans sa colonne « Sources » qui détient chaque enregistrement : la notice INA (lien vers le catalogue) ou la source saisie, avec sa note en dessous. Au survol, la colonne « Depuis » donne la date d'entrée dans le niveau.
 
 ### Télécharger les enregistrements (rapatrier)
 
@@ -466,7 +473,7 @@ La **description** de la fiche suit le format des descriptions du flux RSS du Ma
 
 ### Maturité des enregistrements
 
-Avec une base Mongo (`MONGO_URI` et `MONGO_DB`, dans l'environnement ou le fichier `.env`), l'appli suit la **maturité** de chaque enregistrement intégral, c'est-à-dire le niveau atteint sur le chemin qui le mène à lmelp : localisé, téléchargeable, rapatrié, qualifié, valide. Elle la conserve dans la collection `pap_enregistrements`, un document par URL d'intégral, avec la date d'entrée dans chaque niveau. Sans base, la page n'a ni badge, ni filtre, ni bouton de vérification.
+Avec une base Mongo (`MONGO_URI` et `MONGO_DB`, dans l'environnement ou le fichier `.env`), l'appli suit la **maturité** de chaque enregistrement intégral, c'est-à-dire le niveau atteint sur le chemin qui le mène à lmelp : localisé, téléchargeable, rapatrié, qualifié, valide. Elle la conserve dans la collection `pap_enregistrements`, un document par enregistrement, avec la date d'entrée dans chaque niveau. Un enregistrement est identifié par son URL d'intégral (radiofrance), par l'URL de sa notice (INA) ou par un identifiant `piste:…` (saisie manuelle). Sans base, la page n'a ni badge, ni filtre, ni bouton de vérification.
 
 - La **vérification des URL d'intégral** interroge chaque URL de `enregistrements.csv` (requête `HEAD`, quatre à la fois). Elle part seule :
     - au démarrage de l'appli, si aucune vérification complète n'a encore eu lieu (base neuve) ;
@@ -482,6 +489,19 @@ Avec une base Mongo (`MONGO_URI` et `MONGO_DB`, dans l'environnement ou le fichi
   | délai dépassé, erreur réseau, 5xx (échec passager) | noté, niveau inchangé |
 
   Un enregistrement rapatrié, qualifié ou valide ne change plus de niveau, même si son URL ne répond plus. Une URL jamais vue qui échoue entre au niveau localisé.
+- Les **notices INA des Archives Radio Pro** localisent les émissions sans intégral. Chaque notice crée un enregistrement **localisé** de source `ina`, rattaché à la notice : une copie se demande à INA mediapro. L'identifiant de la notice départage les fonds :
+
+  | Notice | Fonds | Effet |
+  |---|---|---|
+  | `PH_…` | Archives Radio Pro (≈ 1955-1998) | un enregistrement localisé par notice |
+  | `RD_…` | Dépôt légal radio (≈ 1995 à aujourd'hui, consultable seulement à l'InaTHÈQUE) | aucun : l'émission reste sans enregistrement |
+
+  Ce préfixe correspond au champ « Base » de la fiche détaillée de la notice. La création se fait seule, au démarrage de l'appli, toutes les heures et après chaque reconstruction de la liste. Elle n'ajoute que les enregistrements absents : la relancer ne change rien, et elle n'écrase ni une piste saisie à la main ni un enregistrement déjà plus avancé. Une émission qui a une URL d'intégral n'en reçoit pas. Les archives de Radio France ne localisent aucune émission tant qu'elles n'ont pas répondu : leur réponse se saisit comme une piste. Le journal note chaque création :
+
+  ```
+  2026-11-22 17:40:02 INFO    arbitrer : localisation INA : 273 enregistrements localisés créés (273 notices des Archives Radio Pro)
+  2026-11-22 17:45:10 INFO    arbitrer : enregistrement localisé ajouté : 2008-03-02 (source « Jean D., forum »)
+  ```
 - Chaque émission porte un badge : le niveau de son enregistrement le plus avancé, ou **dans lmelp** si lmelp l'atteste, état qui l'emporte sur la maturité.
 - Le filtre **Maturité** retient un niveau, « dans lmelp », ou les émissions sans enregistrement suivi.
 

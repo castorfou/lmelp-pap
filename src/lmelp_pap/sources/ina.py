@@ -71,6 +71,17 @@ def lire_notices(
     return attestations
 
 
+def archives_radio_pro(source_id: str) -> bool:
+    """La notice relève des Archives Radio Pro (≈ 1955-1998), dont une copie se
+    demande à INA mediapro : son identifiant commence par ``PH_``. Celles du
+    Dépôt légal radio (≈ 1995 à aujourd'hui, ``RD_…``) ne se consultent qu'à
+    l'InaTHÈQUE, et les Archives TV Pro (``DA_…``) ne sont pas de la radio.
+    Le préfixe correspond au champ ``BASE`` de la fiche détaillée (« Archives
+    Radio Pro », « Dépôt Légal Radio », « Archives TV Pro ») sur toutes les
+    fiches du cache : il suffit, et il se lit sans fiche."""
+    return source_id.startswith("PH_")
+
+
 def identifiant(url: str) -> str:
     """``…/doc/TV-RADIO/PH_PHD88021484/titre`` → ``PH_PHD88021484``."""
     return url.rstrip("/").split("/")[-2]
