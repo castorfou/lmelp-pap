@@ -304,28 +304,39 @@ Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans l
 | `--audios DOSSIER` | Dossier des enregistrements rapatriés (par défaut `data/raw/audios`, ou `PAP_AUDIOS`). |
 | `--audios-lmelp DOSSIER` | Dossier audio du back-office lmelp, où vont les enregistrements mis à disposition (par défaut `data/raw/audios-lmelp`, ou `PAP_AUDIOS_LMELP`). |
 | `--port PORT` | Port du serveur (par défaut 8765). |
-| `--sans-navigateur` | N'ouvre pas la page ; l'adresse s'affiche dans le terminal. |
+| `--sans-navigateur` | N'ouvre pas la page ; l'adresse d'écoute s'affiche dans les logs. |
 
 La page publiée n'a aucun de ces contrôles. Elle reflète les décisions d'une séance d'arbitrage une fois les CSV de `data/processed/` et `arbitrages.csv` committés sur `main`, qui la régénère et la redéploie.
 
 #### Logs
 
-L'appli écrit sur la sortie d'erreur (dans le conteneur : `docker logs lmelp-pap`) une ligne horodatée par étape de ses tâches de fond :
+L'appli écrit ses logs sur la sortie d'erreur (dans le conteneur : `docker logs lmelp-pap`), une ligne par événement : horodatage local, niveau (`INFO`, `WARNING`, `ERROR`), module, message. Le démarrage donne la version, l'adresse d'écoute (`hôte:port`), le nombre d'émissions de la liste, l'état de Mongo et les dossiers (voir [L'appli pap en conteneur](appli-docker-nas.md#logs)). Puis :
 
 ```
-2026-11-21 10:53:51 vérification automatique (complète : jamais vérifiée) : 570 URL
-2026-11-21 10:54:02 vérification terminée en 10 s : 570 ok, 0 mortes, 0 échecs passagers
-2026-11-21 11:04:46 rapatriement : 1 émission demandée
-2026-11-21 11:04:53 rapatrié 2006-04-23 : 2006/14007-23.04.2006-ITEMA_20025254-2006F4007E0016-27.m4a, 71 Mo en 7 s
-2026-11-21 11:04:53 rapatriement terminé en 7 s : 1 rapatrié, 0 déjà là, 0 échec
-2026-11-21 11:20:12 écarté 2006-04-23 (2006/14007-23.04.2006-ITEMA_20025254-2006F4007E0016-27.m4a) : « coupé à 40 min »
-2026-11-21 11:31:40 qualifié 2014-09-28 (2014/14007-28.09.2014-ITEMA_20674220-2014F4007S0271-27.m4a) : favorable
-2026-11-21 11:40:02 mis à disposition 2014-09-28 : /data/audios/2014/14007-28.09.2014-….m4a → /audios-lmelp/2014/14007-28.09.2014-….m4a (sha256 3f1c0e9a77b2)
-2026-11-21 11:40:02 mise à disposition refusée 2006-04-23 (niveau qualifie) : 2006/14007-23.04.2006-….m4a existe déjà dans le dossier de lmelp
-2026-11-21 11:40:02 mise à disposition : 1 mise à disposition, 1 refus
+2026-11-21 10:53:51 INFO    arbitrer : vérification automatique (complète : jamais vérifiée) : 570 URL
+2026-11-21 10:53:58 WARNING maturite : vérification 1980-02-24 https://media.radiofrance-podcast.net/… : HTTP 503
+2026-11-21 10:54:02 INFO    arbitrer : vérification terminée en 10 s : 569 ok, 0 mortes, 1 échecs passagers
+2026-11-21 10:58:10 INFO    arbitrer : arbitrage thème 2010-07-11 : théâtre (« titre explicite »)
+2026-11-21 10:58:10 INFO    http : POST /api/arbitrages 200 (192.168.1.20)
+2026-11-21 11:01:33 INFO    arbitrer : annulation 2010-07-11 : 1 arbitrage retiré
+2026-11-21 11:04:46 INFO    arbitrer : rapatriement : 1 émission demandée
+2026-11-21 11:04:53 INFO    arbitrer : rapatrié 2006-04-23 : 2006/14007-23.04.2006-ITEMA_20025254-2006F4007E0016-27.m4a, 71 Mo en 7 s
+2026-11-21 11:04:53 INFO    arbitrer : rapatriement terminé en 7 s : 1 rapatrié, 0 déjà là, 0 échec
+2026-11-21 11:20:12 INFO    arbitrer : écarté 2006-04-23 (2006/14007-23.04.2006-ITEMA_20025254-2006F4007E0016-27.m4a) : « coupé à 40 min »
+2026-11-21 11:31:40 INFO    arbitrer : qualifié 2014-09-28 (2014/14007-28.09.2014-ITEMA_20674220-2014F4007S0271-27.m4a) : favorable
+2026-11-21 11:40:02 INFO    arbitrer : mis à disposition 2014-09-28 : /data/audios/2014/14007-28.09.2014-….m4a → /audios-lmelp/2014/14007-28.09.2014-….m4a (sha256 3f1c0e9a77b2)
+2026-11-21 11:40:02 INFO    arbitrer : mise à disposition refusée 2006-04-23 (niveau qualifie) : 2006/14007-23.04.2006-….m4a existe déjà dans le dossier de lmelp
+2026-11-21 11:40:02 INFO    arbitrer : mise à disposition : 1 mise à disposition, 1 refus
+2026-11-21 11:42:17 ERROR   arbitrer : GET /api/donnees : ServerSelectionTimeoutError('nas923:27018: timed out')
+Traceback (most recent call last):
+  …
 ```
 
-Une vérification lancée par le bouton est « manuelle ». La raison d'une vérification automatique est indiquée : jamais vérifiée, base vide, date de la précédente, nouvelles URL. Un rapatriement trace aussi chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »), comme une demande de fichier audio introuvable (« audio introuvable : /audios/… »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »).
+**Actions.** Une vérification lancée par le bouton est « manuelle » ; la raison d'une vérification automatique est indiquée (jamais vérifiée, base vide, date de la précédente, nouvelles URL). Chaque arbitrage donne sa sorte, l'émission, la décision (thèmes, existence, date retenue, rapprochement, renvoi à l'écoute) et sa justification ; chaque annulation, l'émission ou l'attestation et le nombre d'arbitrages retirés. Un rapatriement trace chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »). Les appels à l'API Radio France donnent leur résultat, le nombre de requêtes et la durée, jamais le contenu reçu.
+
+**Requêtes HTTP.** Chaque requête donne sa méthode, son chemin, son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »).
+
+**Erreurs.** Niveau `WARNING` : échec passager d'une vérification d'URL (réseau, 5xx, 429, 403), échec d'un essai ou d'un rapatriement, erreur de l'API Radio France, fichier audio introuvable. Niveau `ERROR`, avec la trace : exception imprévue pendant une requête (Mongo injoignable, par exemple ; la page reçoit une 500) ou dans la planification de la vérification.
 
 #### API
 

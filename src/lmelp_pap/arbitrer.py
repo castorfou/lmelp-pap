@@ -59,10 +59,9 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 """
 
 import json
-import sys
+import logging
 import threading
 import time
-import traceback
 from collections.abc import Callable
 from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
@@ -138,6 +137,18 @@ PLANIFICATION = 3600
 AUDIOS = Path("data/raw/audios")
 AUDIOS_LMELP = Path("data/raw/audios-lmelp")
 
+log = logging.getLogger(__name__)
+# Les requêtes HTTP du serveur, dans leur propre logger.
+log_http = logging.getLogger("lmelp_pap.http")
+
+# Les requêtes que le journal des requêtes tait : la santé (sondée toutes les
+# 30 s par Docker) et les sondages de l'avancement par la page.
+SILENCIEUSES = {
+    ("GET", "/health"),
+    ("GET", "/api/verifications"),
+    ("GET", "/api/rapatriements"),
+}
+
 
 def _s(n: int) -> str:
     """Le « s » du pluriel."""
@@ -150,12 +161,21 @@ def _duree(secondes: float) -> str:
     return f"{s} s" if s < 60 else f"{s // 60} min {s % 60} s"
 
 
-def journal(message: str) -> None:
-    """Une ligne horodatée dans les logs (sortie d'erreur, ``docker logs``)."""
-    horodatage = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
-    # un seul write : les lignes de deux fils ne se mêlent pas
-    sys.stderr.write(f"{horodatage} {message}\n")
-    sys.stderr.flush()
+def _decision(arbitrage: Arbitrage) -> str:
+    """La décision d'un arbitrage, pour les logs, avec sa justification."""
+    if arbitrage.sorte == "thème":
+        decision = ", ".join(sorted(arbitrage.themes))
+    elif arbitrage.sorte == "existence":
+        decision = "existe" if arbitrage.existe else "n'existe pas"
+    elif arbitrage.sorte == "date":
+        decision = str(arbitrage.date_retenue)
+    elif arbitrage.sorte == "rapprochement":
+        vers = ":".join(arbitrage.cible) if arbitrage.cible else "gardée ici"
+        decision = f"{arbitrage.source}:{arbitrage.source_id} → {vers}"
+    else:
+        decision = "renvoi à l'écoute"
+    pourquoi = arbitrage.justification
+    return f"{decision} (« {pourquoi} »)" if pourquoi else decision
 
 
 class Maturites:
@@ -358,7 +378,7 @@ class Atelier:
         if self._verification.etat()["en_cours"]:
             return self._verification.etat()
         genre = "complète" if complete else "partielle"
-        journal(
+        log.info(
             f"vérification {origine}"
             f"{'' if '(' in origine else f' ({genre})'} : {len(urls)} URL"
         )
@@ -370,7 +390,7 @@ class Atelier:
             )
             if complete:
                 depot.noter_verification(datetime.now(UTC))
-            journal(
+            log.info(
                 f"vérification terminée en {round(time.monotonic() - debut)} s : "
                 f"{bilan['ok']} ok, {bilan['net']} mortes, "
                 f"{bilan['passager']} échecs passagers"
@@ -419,8 +439,8 @@ class Atelier:
             while True:
                 try:
                     self.planifier()
-                except Exception:  # noqa: BLE001 — la planification ne doit pas mourir
-                    traceback.print_exc()  # visible dans les logs du conteneur
+                except Exception:
+                    log.exception("planification de la vérification en échec")
                 time.sleep(periode)
 
         self.planification = True
@@ -456,7 +476,7 @@ class Atelier:
             rapatriees: list[str] = []
             debut_lot = time.monotonic()
             n_demandes = len(a_rapatrier)
-            journal(
+            log.info(
                 f"rapatriement : {n_demandes} émission{_s(n_demandes)} "
                 f"demandée{_s(n_demandes)}"
             )
@@ -481,7 +501,7 @@ class Atelier:
                     pause: float,
                     emission: str = enregistrement.emission_id,
                 ) -> None:
-                    journal(
+                    log.warning(
                         f"échec {emission} (essai {essai}/{ESSAIS}) : "
                         f"{erreur or type(erreur).__name__}, "
                         f"nouvel essai dans {pause:g} s"
@@ -504,7 +524,7 @@ class Atelier:
                     bilan["deja_la" if deja else "rapatries"] += 1
                     rapatriees.append(enregistrement.emission_id)
                     tache.maj(rapatriees=list(rapatriees))
-                    journal(
+                    log.info(
                         f"{'déjà là' if deja else 'rapatrié'} "
                         f"{enregistrement.emission_id} : {fait.fichier}, "
                         f"{round((fait.taille or 0) / 1e6)} Mo en "
@@ -512,12 +532,14 @@ class Atelier:
                     )
                 except RapatriementInterrompuError:
                     tache.maj(arrete=True, octets=recus)
-                    journal(f"rapatriement arrêté pendant {enregistrement.emission_id}")
+                    log.info(
+                        f"rapatriement arrêté pendant {enregistrement.emission_id}"
+                    )
                     break
                 except Exception as erreur:  # noqa: BLE001 — l'erreur va au bilan
                     bilan["echecs"] += 1
                     detail = str(erreur) or type(erreur).__name__
-                    journal(f"échec {enregistrement.emission_id} : {detail}")
+                    log.warning(f"échec {enregistrement.emission_id} : {detail}")
                     erreurs.append(
                         {"emission": enregistrement.emission_id, "detail": detail}
                     )
@@ -533,7 +555,7 @@ class Atelier:
                 tache.maj(faites=n, erreurs=list(erreurs), octets=recus)
             tache.maj(en_cours_sur=None)
             arrete = " (arrêté)" if tache.etat()["arrete"] else ""
-            journal(
+            log.info(
                 f"rapatriement terminé en {_duree(time.monotonic() - debut_lot)} : "
                 f"{bilan['rapatries']} rapatrié{_s(bilan['rapatries'])}, "
                 f"{bilan['deja_la']} déjà là, "
@@ -570,12 +592,12 @@ class Atelier:
                 depot.ajouter_qualification(qualification)
                 ecrire_qualifications(depot.qualifications(), self.sortie)
         except (DemandeInvalideError, QualificationError) as erreur:
-            journal(f"qualification refusée {emission_id or '?'} : {erreur}")
+            log.info(f"qualification refusée {emission_id or '?'} : {erreur}")
             raise DemandeInvalideError(str(erreur)) from erreur
         if qualification.verdict == "favorable":
-            journal(f"qualifié {emission_id} ({fait.fichier}) : favorable")
+            log.info(f"qualifié {emission_id} ({fait.fichier}) : favorable")
         else:
-            journal(
+            log.info(
                 f"écarté {emission_id} ({fait.fichier}) : « {qualification.motif} »"
             )
         return self.donnees()
@@ -587,7 +609,7 @@ class Atelier:
         with self._verrou:
             emission = self._emissions.get(emission_id)
         if emission is None:
-            journal(f"api radiofrance {emission_id} : émission inconnue")
+            log.info(f"api radiofrance {emission_id} : émission inconnue")
             raise DemandeInvalideError(f"{emission_id} : émission inconnue")
         statut, diffusion, detail = self._diffusion(emission)
         reponse: dict[str, Any] = {
@@ -607,7 +629,7 @@ class Atelier:
         prefixe = f"api radiofrance {emission.id}{contexte} :"
         cle = jeton()
         if not cle:
-            journal(f"{prefixe} pas de clé")
+            log.info(f"{prefixe} pas de clé")
             return "sans_cle", None, None
         debut = time.monotonic()
 
@@ -619,7 +641,7 @@ class Atelier:
                 emission.id, emission.date, emission.pages_radiofrance, cle
             )
         except ApiRadioFranceError as erreur:
-            journal(
+            log.warning(
                 f"{prefixe} erreur {erreur}, "
                 f"{requetes(erreur.requetes, erreur.du_jour)}, "
                 f"{_duree(time.monotonic() - debut)}"
@@ -629,9 +651,9 @@ class Atelier:
         libelle = "trouvée" if lecture.diffusion else "introuvable"
         compte = requetes(lecture.requetes, lecture.du_jour)
         if lecture.cache:
-            journal(f"{prefixe} {libelle} (cache), {compte}")
+            log.info(f"{prefixe} {libelle} (cache), {compte}")
         else:
-            journal(
+            log.info(
                 f"{prefixe} {libelle}, {compte}, {_duree(time.monotonic() - debut)}"
             )
         return statut, lecture.diffusion, None
@@ -701,21 +723,21 @@ class Atelier:
                     depot.ajouter_remise(fiche)
                     depot.enregistrer(fait)
                 except RemiseError as erreur:
-                    journal(
+                    log.info(
                         f"mise à disposition refusée {emission_id} "
                         f"(niveau {niveau}) : {erreur}"
                     )
                     refus.append({"emission": emission_id, "detail": str(erreur)})
                     continue
                 relatif = fait.fichier or ""
-                journal(
+                log.info(
                     f"mis à disposition {emission_id} : {self.audios / relatif} → "
                     f"{self.audios_lmelp / relatif} (sha256 {(fait.sha256 or '')[:12]}"
                     f"{', API Radio France' if api else ''}"
                     f"{', reprise : fichier déjà copié, même sha256' if reprise else ''})"
                 )
                 mises.append({"emission": emission_id, "fichier": relatif})
-        journal(
+        log.info(
             f"mise à disposition : {len(mises)} mise{_s(len(mises))} à disposition, "
             f"{len(refus)} refus"
         )
@@ -772,6 +794,7 @@ class Atelier:
                 date=datetime.now().replace(microsecond=0),
             )
             ajouter_arbitrage(self.fichier, arbitrage)
+            log.info(f"arbitrage {sorte} {emission.id} : {_decision(arbitrage)}")
             self._reconstruire()
             donnees = self._donnees()
         self._apres_reconstruction()
@@ -789,8 +812,13 @@ class Atelier:
                 raise DemandeInvalideError(
                     "emission_id, ou source et source_id, attendus"
                 )
-            if not retirer_arbitrages(self.fichier, cles):
+            retires = retirer_arbitrages(self.fichier, cles)
+            if not retires:
                 raise DemandeInvalideError("aucun arbitrage à annuler")
+            cible = demande.get("emission_id") or ":".join(next(iter(cles)))
+            log.info(
+                f"annulation {cible} : {retires} arbitrage{_s(retires)} retiré{_s(retires)}"
+            )
             self._reconstruire()
             donnees = self._donnees()
         self._apres_reconstruction()
@@ -1046,7 +1074,33 @@ def creer_serveur(
     class Requetes(BaseHTTPRequestHandler):
         """Les routes de la page et de l'API JSON."""
 
+        repondu = False  # la ligne de statut est partie
+
         def do_GET(self) -> None:
+            self._sans_panne(self._get)
+
+        def do_POST(self) -> None:
+            self._sans_panne(self._post)
+
+        def _sans_panne(self, route: Callable[[], None]) -> None:
+            """Sert la route ; une exception imprévue (Mongo injoignable…) va
+            aux logs avec sa trace et donne une 500, si la réponse n'est pas
+            déjà partie."""
+            try:
+                route()
+            except Exception as erreur:
+                log.exception(f"{self.command} {self.path} : erreur interne")
+                if not self.repondu:
+                    self._json(
+                        {"erreur": f"erreur interne : {erreur}"},
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                    )
+
+        def send_response(self, code: int, message: str | None = None) -> None:
+            self.repondu = True
+            super().send_response(code, message)
+
+        def _get(self) -> None:
             """La page, les données courantes, ou l'état du service."""
             if self.path == "/health":
                 self._json({"status": "ok"})
@@ -1076,7 +1130,7 @@ def creer_serveur(
             else:
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 
-        def do_POST(self) -> None:
+        def _post(self) -> None:
             """Une action de ``ACTIONS_POST`` sur le corps JSON de la requête ;
             chaque erreur connue donne son statut (``ERREURS_POST``)."""
             action = ACTIONS_POST.get(self.path)
@@ -1087,6 +1141,7 @@ def creer_serveur(
                 self._json(action(atelier, self._demande()))
             except tuple(ERREURS_POST) as e:
                 statut = next(s for t, s in ERREURS_POST.items() if isinstance(e, t))
+                log_http.info(f"POST {self.path} refusée ({statut.value}) : {e}")
                 self._json({"erreur": str(e)}, statut)
 
         def _audio(self) -> None:
@@ -1094,7 +1149,7 @@ def creer_serveur(
             206), pour l'écoute et le saut dans le fichier."""
             chemin = audio.fichier_audio(atelier.audios, self.path)
             if chemin is None:
-                journal(f"audio introuvable : {self.path}")
+                log.warning(f"audio introuvable : {self.path}")
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
                 return
             audio.servir(self, chemin)
@@ -1123,8 +1178,22 @@ def creer_serveur(
             self.end_headers()
             self.wfile.write(corps)
 
+        def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+            """Une ligne par requête (méthode, chemin, statut, client), hors
+            ``/health`` et sondages de l'avancement (``SILENCIEUSES``)."""
+            if (self.command, self.path) in SILENCIEUSES:
+                return
+            statut = code.value if isinstance(code, HTTPStatus) else code
+            log_http.info(
+                f"{self.command} {self.path} {statut} ({self.address_string()})"
+            )
+
+        def log_error(self, format: str, *args: Any) -> None:
+            """Une requête malformée, refusée par le serveur."""
+            log_http.warning(format % args)
+
         def log_message(self, format: str, *args: Any) -> None:
-            """Pas de ligne par requête dans le terminal."""
+            """Rien d'autre du serveur HTTP sur la sortie d'erreur."""
 
     serveur = ThreadingHTTPServer((hote, port), Requetes)
     serveur.atelier = atelier  # type: ignore[attr-defined]

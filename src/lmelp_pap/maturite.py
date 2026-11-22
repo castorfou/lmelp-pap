@@ -30,6 +30,7 @@ s'exporte dans ``qualifications.csv``.
 import contextlib
 import csv
 import hashlib
+import logging
 import os
 import time
 from collections import Counter
@@ -42,6 +43,9 @@ from typing import Any, Literal
 
 import requests
 from dotenv import find_dotenv, load_dotenv
+
+
+log = logging.getLogger(__name__)
 
 
 NIVEAUX = ("localise", "telechargeable", "rapatrie", "qualifie", "valide")
@@ -494,6 +498,9 @@ def verifier(
             depot.enregistrer(
                 appliquer(existants.get(url), verification, url, emission_id)
             )
+            if verification.resultat == "passager":
+                # un échec réseau ou serveur : l'URL sera revérifiée
+                log.warning(f"vérification {emission_id} {url} : {verification.detail}")
             bilan[verification.resultat] += 1
             faites += 1
             if progres:
