@@ -322,6 +322,10 @@ pre-commit run --all-files
 # Mettre à jour pre-commit hooks
 pre-commit autoupdate
 
+# Serveur local de pap (décrit dans .dev-ports.json) : lancer en tâche de fond,
+# puis --status pour l'URL et le commit servi, --restart après un changement de src/
+scripts/start-dev.sh [--restart|--stop|--status]
+
 # Prévisualiser la documentation
 uv run mkdocs serve
 
