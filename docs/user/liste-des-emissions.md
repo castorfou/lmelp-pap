@@ -263,6 +263,20 @@ uv run --active lmelp-pap arbitrer
 
 La commande lit le cache, reconstruit la liste et lance un serveur local qui sert la page de la liste en **mode arbitrage**. Elle ouvre la page dans le navigateur : dans le devcontainer, VS Code redirige le port vers la machine hôte. Le serveur tourne jusqu'à `Ctrl+C`. La liste est reconstruite depuis le cache, sans réseau ; seule la vérification des URL d'intégral (voir « Maturité des enregistrements ») interroge radiofrance.fr, à la demande.
 
+Le script `scripts/start-dev.sh` lance le même serveur sans ouvrir le navigateur, et sait l'arrêter ou le remplacer depuis un autre terminal :
+
+```bash
+scripts/start-dev.sh             # démarre au premier plan ; Ctrl+C l'arrête
+scripts/start-dev.sh --restart   # arrête le serveur précédent, puis démarre
+scripts/start-dev.sh --stop      # arrête le serveur et quitte
+scripts/start-dev.sh --status    # URL, pid, ancienneté, /health, commit servi
+scripts/start-dev.sh -- --verification-jours 1   # options passées à arbitrer
+```
+
+Le port est `PAP_PORT` s'il est défini, et le démarrage est refusé s'il est pris ; sinon, le premier port libre de 8765 à 8799 (plage modifiable par `PAP_PLAGE_PORTS`, par exemple `8765-8799`). L'adresse d'écoute vient de `PAP_HOTE` (127.0.0.1 par défaut).
+
+Le serveur démarré est décrit dans `.dev-ports.json`, à la racine du dépôt (à ne pas commiter) : `pid`, `port`, `host`, `url`, `started_at`, `commit` et `branche` du code servi. `--stop`, `--restart` et `--status` le relisent, et retrouvent aussi par leur port les serveurs pap qui n'y figurent pas (lancés à la main, ou par un second démarrage) : `--stop` les arrête tous. Un second démarrage prend le port libre suivant et prévient qu'un serveur pap tourne déjà, car les deux écrivent les mêmes CSV et la même base Mongo. `--status` signale quand le dépôt a changé de commit depuis le démarrage.
+
 La page garde la frise et les filtres de la page publiée (année, thème, source, type de doute). Sous le détail de chaque émission s'ajoutent :
 
 - une case par thème (livres, cinéma, théâtre, opéra, télévision, musique, variétés, hommage), cochée pour les thèmes actuels, et le bouton **Arbitrer le thème**. Cocher `hommage` décoche les autres thèmes, et cocher un autre thème décoche `hommage` ;
