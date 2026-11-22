@@ -209,6 +209,14 @@ def test_l_accueil_est_sur_la_racine_et_la_liste_sur_liste(url: str) -> None:
     assert 'id="lignes"' in _texte(f"{url}/liste")
 
 
+def test_les_onglets_de_l_appli_sont_titres_comme_le_back_office_lmelp(
+    url: str,
+) -> None:
+    # « <page> - <appli> », comme « Accueil - lmelp »
+    assert "<title>Accueil - pap</title>" in _texte(f"{url}/")
+    assert "<title>Liste et arbitrages - pap</title>" in _texte(f"{url}/liste")
+
+
 def test_sans_mongo_l_accueil_repond_aussi(url_sans_mongo: str) -> None:
     assert 'id="accueil"' in _texte(f"{url_sans_mongo}/")
 
