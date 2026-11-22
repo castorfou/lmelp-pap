@@ -1067,3 +1067,39 @@ def test_la_fiche_d_une_mise_a_disposition_se_lit(url: str) -> None:
     assert "par : Jérôme Garcin" in fiche["description"]
     assert fiche["date"].startswith("2014-09-28")
     assert "_id" not in fiche
+
+
+# --- doublons : un épisode lmelp à quelques jours de l'émission -------------
+
+
+@pytest.mark.parametrize("decalage", [-3, -2, 0, 1, 3])
+def test_un_episode_lmelp_a_trois_jours_pres_refuse_la_remise(
+    url: str, tmp_path: Path, depot: Depot, decalage: int
+) -> None:
+    _qualifier_2014(url)
+    jour = datetime(2014, 9, 28, 9, 59) + timedelta(days=decalage)
+    depot.base["episodes"].insert_one(
+        {"titre": "Les livres", "date": jour, "audio_rel_filename": "2014/autre.mp3"}
+    )
+
+    donnees = _remettre(url, "2014-09-28")
+
+    (refus,) = donnees["remise"]["refus"]
+    assert "épisode lmelp" in refus["detail"]
+    assert jour.date().isoformat() in refus["detail"]
+    assert not (tmp_path / "audios-lmelp" / FICHIER_2014).exists()
+    assert list(depot.base["pap_remises"].find()) == []
+
+
+def test_un_episode_lmelp_d_une_autre_semaine_ne_bloque_rien(
+    url: str, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    for decalage in (-4, 4, 7):
+        depot.base["episodes"].insert_one(
+            {"date": datetime(2014, 9, 28) + timedelta(days=decalage)}
+        )
+
+    donnees = _remettre(url, "2014-09-28")
+
+    assert donnees["remise"]["refus"] == []

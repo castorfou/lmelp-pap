@@ -265,6 +265,51 @@ def test_sans_api_l_ina_donne_resume_et_animateur(
     assert fiche["sources_description"] == {"animateur": "ina", "resume": "ina"}
 
 
+def test_sans_api_l_ina_donne_aussi_l_equipe_et_les_invites(
+    dossiers: tuple[Path, Path],
+) -> None:
+    audios, lmelp = dossiers
+    ina = replace(
+        INA, equipe=("Françoise Maupin", "Michel Mardore"), invites=("Odile Grand",)
+    )
+
+    _, fiche, _ = mettre_a_disposition(
+        qualifie(audios), emission(ina), audios, lmelp, MAINTENANT
+    )
+
+    assert fiche["description"].endswith(
+        " - équipe : Françoise Maupin, Michel Mardore - invités : Odile Grand"
+    )
+    assert fiche["sources_description"]["equipe"] == "ina"
+    assert fiche["sources_description"]["invites"] == "ina"
+
+
+def test_l_equipe_de_l_api_l_emporte_sur_celle_de_l_ina(
+    dossiers: tuple[Path, Path],
+) -> None:
+    audios, lmelp = dossiers
+    ina = replace(INA, equipe=("Françoise Maupin",), invites=("Odile Grand",))
+    api = Diffusion(
+        titre=None,
+        resume=None,
+        url=None,
+        animateurs=(),
+        equipe=(Personnalite("Ilinca Negulesco", None),),
+        invites=(),
+    )
+
+    _, fiche, _ = mettre_a_disposition(
+        qualifie(audios), emission(ina), audios, lmelp, MAINTENANT, api=api
+    )
+
+    assert "équipe : Ilinca Negulesco" in fiche["description"]
+    assert "Maupin" not in fiche["description"]
+    # l'API ne donne pas d'invités : ceux de l'INA complètent
+    assert "invités : Odile Grand" in fiche["description"]
+    assert fiche["sources_description"]["equipe"] == "api_radiofrance"
+    assert fiche["sources_description"]["invites"] == "ina"
+
+
 def test_sans_aucune_source_l_animateur_est_deduit_de_la_date(
     dossiers: tuple[Path, Path],
 ) -> None:
@@ -306,6 +351,44 @@ def _m4a(secondes: int, echelle: int = 44100) -> bytes:
 def test_la_duree_d_un_m4a_se_lit_dans_son_entete(tmp_path: Path) -> None:
     chemin = tmp_path / "a.m4a"
     chemin.write_bytes(_m4a(2893))
+    assert duree_du_fichier(chemin) == 2893
+
+
+# Une trame MPEG-1 couche III, 128 kbit/s, 44,1 kHz, stéréo, sans protection :
+# 417 octets, 1 152 échantillons (26,12 ms).
+TRAME_MP3 = bytes([0xFF, 0xFB, 0x90, 0x00]) + bytes(413)
+TRAMES_PAR_SECONDE = 44100 / 1152
+
+
+def _id3(taille: int = 1000) -> bytes:
+    """Un tag ID3v2.3 de ``taille`` octets de contenu (taille « synchsafe »)."""
+    synchsafe = bytes((taille >> s) & 0x7F for s in (21, 14, 7, 0))
+    return b"ID3\x03\x00\x00" + synchsafe + bytes(taille)
+
+
+def _mp3_cbr(secondes: int) -> bytes:
+    return _id3() + TRAME_MP3 * round(secondes * TRAMES_PAR_SECONDE)
+
+
+def _mp3_xing(secondes: int) -> bytes:
+    """Une trame Xing (débit variable) annonçant le nombre de trames, puis
+    quelques trames seulement : la durée vient de l'en-tête."""
+    trames = round(secondes * TRAMES_PAR_SECONDE)
+    # MPEG-1 stéréo : 32 octets d'informations annexes après l'en-tête
+    xing = b"Xing" + (1).to_bytes(4, "big") + trames.to_bytes(4, "big")
+    premiere = (TRAME_MP3[:4] + bytes(32) + xing).ljust(len(TRAME_MP3), b"\x00")
+    return _id3() + premiere + TRAME_MP3 * 10
+
+
+def test_la_duree_d_un_mp3_a_debit_constant_se_calcule(tmp_path: Path) -> None:
+    chemin = tmp_path / "a.mp3"
+    chemin.write_bytes(_mp3_cbr(61))
+    assert duree_du_fichier(chemin) == 61
+
+
+def test_la_duree_d_un_mp3_xing_se_lit_dans_son_entete(tmp_path: Path) -> None:
+    chemin = tmp_path / "a.mp3"
+    chemin.write_bytes(_mp3_xing(2893))
     assert duree_du_fichier(chemin) == 2893
 
 

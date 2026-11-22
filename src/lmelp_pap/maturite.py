@@ -37,7 +37,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -53,6 +53,7 @@ COLLECTION = "pap_enregistrements"
 QUALIFICATIONS = "pap_qualifications"
 REMISES = "pap_remises"  # fiches des mises à disposition, lues par lmelp
 EPISODES_LMELP = "episodes"  # les épisodes de lmelp, dans la même base
+DOUBLON = 3  # jours d'écart entre une émission et un épisode lmelp de doublon
 ETAT = "pap_etat"  # état de l'appli : date de la dernière vérification complète
 SOURCE = "radiofrance"
 ENTETES = {"User-Agent": "lmelp-pap (https://github.com/castorfou/lmelp-pap)"}
@@ -401,6 +402,23 @@ class Depot:
         """Écrit la fiche d'une mise à disposition (collection ``pap_remises``,
         une par enregistrement)."""
         self.base[REMISES].replace_one({"_id": fiche["_id"]}, fiche, upsert=True)
+
+    def episodes_proches(
+        self, jour: date, jours: int = DOUBLON
+    ) -> list[dict[str, Any]]:
+        """Les épisodes de lmelp datés à ``jours`` jours près de ``jour``
+        (collection ``episodes``) : la date d'un épisode est parfois celle de
+        sa publication, un ou deux jours après la diffusion, ou un autre jour
+        de la semaine pour les anciens ; une fenêtre de trois jours ne touche
+        jamais l'émission de la semaine voisine."""
+        debut = datetime(jour.year, jour.month, jour.day) - timedelta(days=jours)
+        fin = debut + timedelta(days=2 * jours + 1)
+        return list(
+            self.base[EPISODES_LMELP].find(
+                {"date": {"$gte": debut, "$lt": fin}},
+                {"date": True, "titre": True, "audio_rel_filename": True},
+            )
+        )
 
     def remise_de(self, emission_id: str) -> dict[str, Any] | None:
         """La fiche ``pap_remises`` d'une émission, ou ``None``."""

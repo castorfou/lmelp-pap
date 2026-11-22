@@ -64,6 +64,8 @@ def lire_notices(
                 heure=_horaire(ligne.get("heure")),
                 duree=_horaire(ligne.get("duree")),
                 url=url,
+                equipe=_generique(fiche, "PAR"),
+                invites=_generique(fiche, "INT"),
             )
         )
     return attestations
@@ -121,6 +123,28 @@ def _champ(fiche: str, code: str) -> str | None:
     if m is None:
         return None
     return html.unescape(re.sub(r"<[^>]+>", " ", m.group(1))).strip() or None
+
+
+def _generique(fiche: str | None, role: str) -> tuple[str, ...]:
+    """Les personnes d'un rôle du générique de la fiche (``GEN``, puis
+    ``GENS``, sans doublon) : ``PAR`` les participants (critiques), ``INT``
+    les intervenants (invités). L'INA écrit « Nom Prénom particule »
+    (« Rabaudy Martine de ») : rendu « Prénom particule Nom », sans rôle entre
+    parenthèses."""
+    if fiche is None:
+        return ()
+    noms: list[str] = []
+    for code in ("GEN", "GENS"):
+        for entree in (_champ(fiche, code) or "").split(";"):
+            code_role, _, personne = entree.strip().partition(",")
+            # sans le rôle entre parenthèses (« Wiener Jean (piano) »)
+            mots = re.sub(r"\([^)]*\)", " ", personne).split()
+            if code_role.strip() != role or not mots:
+                continue
+            nom = " ".join([*mots[1:], mots[0]])
+            if nom not in noms:
+                noms.append(nom)
+    return tuple(noms)
 
 
 def _horaire(valeur: str | None) -> str | None:
