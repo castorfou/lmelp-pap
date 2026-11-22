@@ -101,6 +101,8 @@
   .lot { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
   button.primaire { background: var(--entete); color: var(--entete-texte); border-color: var(--entete); }
   button:disabled { opacity: .5; cursor: wait; }
+  button.discret { border-color: transparent; background: none; color: var(--doux); font-size: 12px; padding: 2px 6px; }
+  button.discret:hover { color: var(--texte); border-color: var(--trait); }
   /* Boîte de la page : confirmation d'une action, puis attente de son résultat */
   dialog.boite { width: min(460px, calc(100vw - 32px)); padding: 18px 20px; border: 1px solid var(--trait); border-radius: 10px; background: var(--carte); color: var(--texte); box-shadow: 0 12px 36px #0006; }
   dialog.boite::backdrop { background: #0008; }
@@ -140,7 +142,13 @@ const ACTIONS = {
   // « confirmer » : la question posée avant d'agir, par ligne comme en lot
   qualifie: {
     libelle: "Mettre à disposition de lmelp", oui: "Mettre à disposition", lot: true, executer: ids => mettreADisposition(ids),
-    confirmer: ids => `Mettre à disposition de lmelp ${ids.length > 1 ? `les ${ids.length} émissions` : `l'émission ${ids[0]}`} ? Le fichier est copié dans le dossier audio de lmelp ; une mise à disposition ne se retire pas.`,
+    confirmer: ids => `Mettre à disposition de lmelp ${ids.length > 1 ? `les ${ids.length} émissions` : `l'émission ${ids[0]}`} ? Le fichier est copié dans le dossier audio de lmelp ; tant que lmelp ne l'a pas importée, la mise à disposition s'annule depuis la page valide.`,
+  },
+  // « discret » : un petit bouton, pour revenir en arrière (retour à qualifié)
+  valide: {
+    libelle: "Annuler", titre: "Annuler la mise à disposition", oui: "Annuler la mise à disposition", discret: true, lot: false,
+    executer: ids => annulerMiseADisposition(ids[0]),
+    confirmer: ids => `Annuler la mise à disposition de l'émission ${ids[0]} ? Sa fiche pap_remises et sa copie dans le dossier audio de lmelp sont retirées, et elle revient à qualifié.`,
   },
 };
 
@@ -164,6 +172,21 @@ async function mettreADisposition(ids) {
     toast(`Échec : ${err.message}`); rendre();
   } finally {
     $("boite").close();
+  }
+}
+// POST /api/remises/annulation : l'émission valide (pas encore dans lmelp)
+// revient à qualifié ; sa fiche et sa copie chez lmelp sont retirées.
+async function annulerMiseADisposition(id) {
+  const avant = compter(EMISSIONS);
+  document.querySelectorAll("button[data-action]").forEach(b => { b.disabled = true; });
+  try {
+    const r = await fetch("/api/remises/annulation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emission: id }) });
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.erreur || r.statusText);
+    preparer(t); rendre();
+    notifier(`Mise à disposition annulée : ${id}`, avant);
+  } catch (err) {
+    toast(`Échec : ${err.message}`); rendre();
   }
 }
 function afficherRefus(racine) {
@@ -525,7 +548,7 @@ function pageEtat(racine) {
     clic: a => { vue.annee = vue.annee === a ? null : a; rendre(); } }));
   // une action qui a « confirmer » pose sa question avant d'agir, par ligne comme en lot
   const question = (ids, toujours) => action.confirmer || toujours
-    ? demander(action.libelle, action.confirmer ? action.confirmer(ids) : `${action.libelle} : les ${ids.length} émissions ?`, action.oui || action.libelle)
+    ? demander(action.titre || action.libelle, action.confirmer ? action.confirmer(ids) : `${action.libelle} : les ${ids.length} émissions ?`, action.oui || action.libelle)
     : Promise.resolve(true);
   $("lot")?.addEventListener("click", async () => {
     const ids = liste.map(e => e.id);
@@ -535,7 +558,7 @@ function pageEtat(racine) {
   $("tous")?.addEventListener("change", ev => { liste.forEach(e => ev.target.checked ? vue.choix.add(e.id) : vue.choix.delete(e.id)); rendre(); });
   const tb = racine.querySelector("tbody");
   const lot = action && action.lot;
-  tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}">${lot ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
+  tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}">${lot ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action${action.discret ? ' class="discret"' : ""}>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
     (liste.length > 300 ? `<tr><td colspan="6" class="doux">… ${liste.length - 300} de plus</td></tr>` : "");
   const ecoutee = vue.etat === "rapatrie" && liste.find(e => e.id === vue.ecoute);
   if (ecoutee) {

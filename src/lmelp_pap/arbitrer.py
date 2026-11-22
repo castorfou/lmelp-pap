@@ -38,6 +38,9 @@ API :
   de chaque émission (``emissions``) : copie dans le dossier audio de lmelp,
   fiche ``pap_remises``, passage à valide ; la réponse porte en plus
   ``remise`` (``mises``, ``refus`` avec leur ``detail``) ;
+- ``POST /api/remises/annulation`` : annule la mise à disposition d'une
+  émission valide pas encore dans lmelp (``emission``) : fiche et copie chez
+  lmelp retirées, retour à qualifié ;
 - ``GET /audios/<fichier>`` : un fichier du dossier audio, avec les requêtes
   ``Range`` (206) pour le saut ; rien hors du dossier audio.
 
@@ -123,7 +126,11 @@ from lmelp_pap.radiofrance_api import (
     LecteurDiffusions,
     jeton,
 )
-from lmelp_pap.remise import RemiseError, mettre_a_disposition
+from lmelp_pap.remise import (
+    RemiseError,
+    annuler_mise_a_disposition,
+    mettre_a_disposition,
+)
 
 
 # Les doutes qu'un arbitrage de date lève.
@@ -741,6 +748,39 @@ class Atelier:
         )
         return {**self.donnees(), "remise": {"mises": mises, "refus": refus}}
 
+    def annuler_mise_a_disposition(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Annule la mise à disposition d'une émission valide qui n'est pas
+        encore dans lmelp (``emission``) : retire sa fiche ``pap_remises`` et
+        sa copie chez lmelp (si elle a encore son empreinte), et ramène son
+        enregistrement à qualifié. Rend les données à jour."""
+        depot = self._depot()
+        emission_id = str(demande.get("emission") or "")
+        with self._verrou_remise:
+            maturites = Maturites(depot)
+            emission = self._emissions.get(emission_id)
+            if emission is None:
+                raise DemandeInvalideError(f"émission inconnue : {emission_id!r}")
+            if maturites.dans_lmelp(emission):
+                raise DemandeInvalideError(f"{emission_id} est déjà dans lmelp")
+            valide = next(
+                (e for e in maturites.de(emission_id) if e.niveau == "valide"), None
+            )
+            if valide is None:
+                raise DemandeInvalideError(f"{emission_id} : aucune mise à disposition")
+            qualifie, retiree = annuler_mise_a_disposition(valide, self.audios_lmelp)
+            depot.retirer_remise(valide.url)
+            depot.enregistrer(qualifie)
+        copie = (
+            f"copie retirée {retiree}"
+            if retiree
+            else f"copie gardée {self.audios_lmelp / (valide.fichier or '')}"
+        )
+        log.info(
+            f"mise à disposition annulée {emission_id} : fiche pap_remises "
+            f"retirée, {copie}, retour à qualifié"
+        )
+        return self.donnees()
+
     def _depot(self) -> Depot:
         if self.depot is None:
             raise MaturiteIndisponibleError("MONGO_URI absent")
@@ -1010,6 +1050,7 @@ ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/rapatriements/arret": lambda atelier, _: atelier.arreter_rapatriement(),
     "/api/qualifications": Atelier.qualifier,
     "/api/remises": Atelier.mettre_a_disposition,
+    "/api/remises/annulation": Atelier.annuler_mise_a_disposition,
 }
 
 # Le statut HTTP de chaque erreur qu'une route POST rend en JSON.

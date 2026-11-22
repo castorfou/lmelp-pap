@@ -351,6 +351,7 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `rapatriees` (dates des émissions rapatriées), `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
 | `POST /api/rapatriements/arret` | Arrête le lot en cours. |
 | `POST /api/qualifications` | Qualifie l'enregistrement rapatrié d'une émission : `{"emission_id": "2014-09-28", "verdict": "favorable"}`, ou `"verdict": "ecarte"` avec `"motif": "…"` ; `"enregistrement"` (son URL) choisit l'enregistrement quand l'émission en a plusieurs. Renvoie les données à jour. Erreurs : 400 (verdict inconnu, écart sans motif, aucun enregistrement rapatrié pour cette émission), 503 (sans base Mongo). |
+| `POST /api/remises/annulation` | Annule la mise à disposition d'une émission valide qui n'est pas encore dans lmelp : `{"emission": "2014-09-28"}`. Retire la fiche `pap_remises` et la copie chez lmelp (si elle a encore son empreinte), ramène l'enregistrement à qualifié et renvoie les données à jour. Erreurs : 400 (émission inconnue, déjà dans lmelp, ou sans mise à disposition), 503 (sans base Mongo). |
 | `POST /api/remises` | Met à disposition de lmelp l'enregistrement qualifié de chaque émission : `{"emissions": ["2014-09-28", …]}`, l'une après l'autre. Renvoie les données à jour et `remise` : `mises` (`emission`, `fichier`) et `refus` (`emission`, `detail`). Une émission refusée (déjà dans lmelp, sans enregistrement qualifié, fichier de même nom chez lmelp) ne change rien et n'arrête pas les suivantes. Erreurs : 400 (liste vide), 503 (sans base Mongo). |
 | `GET /audios/<fichier>` | Un fichier du dossier audio (`fichier_audio` d'une émission), entier ou par plage (`Range: bytes=…`, réponse 206 ; 416 hors du fichier). Rien n'est servi hors du dossier audio (404). |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
@@ -420,7 +421,7 @@ Une ligne par qualification, de la plus ancienne à la plus récente : un enregi
 
 ### Mettre à disposition de lmelp
 
-La page **qualifié** propose **Mettre à disposition de lmelp** sur chaque ligne, sur une sélection (cases à cocher) ou sur toutes les émissions de la page. Chaque fois, une confirmation est demandée : une mise à disposition ne se retire pas.
+La page **qualifié** propose **Mettre à disposition de lmelp** sur chaque ligne, sur une sélection (cases à cocher) ou sur toutes les émissions de la page. Chaque fois, une confirmation est demandée, dans une boîte de la page ; pendant la mise à disposition, la boîte reste ouverte (« Mise à disposition en cours… ») : la lecture de l'API Radio France prend quelques secondes quand la diffusion n'est pas déjà en cache (une heure après l'écoute).
 
 Pour chaque émission :
 
@@ -429,6 +430,8 @@ Pour chaque émission :
 3. l'enregistrement passe à **valide** (date d'entrée notée) : l'émission quitte la page qualifié pour la page « valide (attend lmelp) ».
 
 lmelp prend ensuite l'enregistrement à son rythme. Dès que la collection `episodes` de lmelp contient un épisode de même `audio_rel_filename`, l'émission passe à « dans lmelp ».
+
+Tant que l'émission n'est pas dans lmelp, la page « valide (attend lmelp) » propose sur chaque ligne un petit bouton **Annuler** qui, après confirmation, annule la mise à disposition : la fiche `pap_remises` est retirée, la copie du dossier audio de lmelp aussi (seulement si elle a encore l'empreinte de l'enregistrement : un fichier remplacé chez lmelp est gardé), et l'enregistrement revient à **qualifié**. Une ligne de log le trace (« mise à disposition annulée … »).
 
 Une mise à disposition est **refusée**, sans rien écrire, quand :
 

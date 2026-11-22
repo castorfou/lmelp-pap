@@ -756,7 +756,7 @@ def test_la_confirmation_est_une_boite_de_la_page(navigateur: Any) -> None:
     boite.wait_for()
     assert natives == []
     assert cible["id"] in boite.inner_text()
-    assert "ne se retire pas" in boite.inner_text()
+    assert "dossier audio de lmelp" in boite.inner_text()
 
 
 def test_la_mise_a_disposition_en_cours_reste_affichee(navigateur: Any) -> None:
@@ -842,3 +842,38 @@ def test_le_tri_choisi_sur_une_page_est_garde(navigateur: Any) -> None:
     page.get_by_role("button", name="← Accueil").click()
     page.locator('.compteur[data-etat="rapatrie"]').click()
     assert page.locator("th.triable", has_text="Date").inner_text().endswith("▼")
+
+
+# --- annuler une mise à disposition (page valide) ----------------------------
+
+
+def test_une_mise_a_disposition_s_annule_depuis_la_page_valide(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    cible = next(e for e in donnees["emissions"] if e["maturite"] == "valide")
+    envoyees: list[Any] = []
+
+    def annulation(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        apres = json.loads(json.dumps(donnees))
+        next(e for e in apres["emissions"] if e["id"] == cible["id"])["maturite"] = (
+            "qualifie"
+        )
+        return apres
+
+    page = _ouvrir(navigateur, donnees, api={"/api/remises/annulation": annulation})
+    page.locator('.compteur[data-etat="valide"]').click()
+    ligne = page.locator(f'tbody tr[data-id="{cible["id"]}"]')
+    bouton = ligne.get_by_role("button", name="Annuler", exact=True)
+    assert "discret" in (bouton.get_attribute("class") or "")
+    bouton.click()
+    boite = page.get_by_role("dialog")
+    boite.wait_for()
+    assert "qualifié" in boite.inner_text()
+    boite.get_by_role("button", name="Annuler la mise à disposition").click()
+
+    page.locator("#toast", has_text="annulée").wait_for()
+    assert envoyees == [{"emission": cible["id"]}]
+    assert page.locator(f'tbody tr[data-id="{cible["id"]}"]').count() == 0
+    assert page.locator(".lot").count() == 0

@@ -960,3 +960,78 @@ def test_l_ecoute_puis_la_remise_ne_lisent_l_api_qu_une_fois(
         "0 requête (1/1000 aujourd'hui)"
     ) in logs
     assert "Arnaud Viviant" not in logs
+
+
+# --- annuler une mise à disposition ------------------------------------------
+
+
+def _annuler_remise(url: str, emission_id: str) -> Any:
+    return _post_json(f"{url}/api/remises/annulation", {"emission": emission_id})
+
+
+def test_annuler_une_mise_a_disposition_ramene_a_qualifie(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    _remettre(url, "2014-09-28")
+
+    donnees = _annuler_remise(url, "2014-09-28")
+
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "qualifie"
+    assert list(depot.base["pap_remises"].find()) == []
+    (enregistrement,) = [e for e in depot.tous() if e.url == INTEGRAL_2014]
+    assert enregistrement.niveau == "qualifie"
+    assert "valide" not in enregistrement.entrees
+    assert not (tmp_path / "audios-lmelp" / FICHIER_2014).exists()
+    assert (tmp_path / "audios" / FICHIER_2014).read_bytes() == SON
+    # et elle se remet à disposition comme la première fois
+    again = _remettre(url, "2014-09-28")
+    assert _emissions(again)["2014-09-28"]["maturite"] == "valide"
+
+
+def test_annuler_garde_un_fichier_lmelp_d_une_autre_empreinte(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    _remettre(url, "2014-09-28")
+    copie = tmp_path / "audios-lmelp" / FICHIER_2014
+    copie.write_bytes(b"remplace chez lmelp")
+
+    donnees = _annuler_remise(url, "2014-09-28")
+
+    assert _emissions(donnees)["2014-09-28"]["maturite"] == "qualifie"
+    assert copie.read_bytes() == b"remplace chez lmelp"
+
+
+def test_seule_une_emission_valide_hors_lmelp_s_annule(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _annuler_remise(url, "2014-09-28")
+    assert erreur.value.code == 400
+
+    _remettre(url, "2014-09-28")
+    depot.base["episodes"].insert_one({"audio_rel_filename": FICHIER_2014})
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _annuler_remise(url, "2014-09-28")
+    assert erreur.value.code == 400
+    assert depot.base["pap_remises"].count_documents({}) == 1
+    assert (tmp_path / "audios-lmelp" / FICHIER_2014).exists()
+
+
+def test_l_annulation_est_tracee(
+    url: str, tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _qualifier_2014(url)
+    _remettre(url, "2014-09-28")
+    capfd.readouterr()
+
+    _annuler_remise(url, "2014-09-28")
+
+    logs = capfd.readouterr().err
+    assert (
+        "mise à disposition annulée 2014-09-28 : fiche pap_remises retirée, "
+        f"copie retirée {tmp_path / 'audios-lmelp' / FICHIER_2014}, "
+        "retour à qualifié"
+    ) in logs

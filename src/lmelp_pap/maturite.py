@@ -402,6 +402,11 @@ class Depot:
         une par enregistrement)."""
         self.base[REMISES].replace_one({"_id": fiche["_id"]}, fiche, upsert=True)
 
+    def retirer_remise(self, url: str) -> None:
+        """Retire la fiche ``pap_remises`` d'un enregistrement (annulation
+        d'une mise à disposition)."""
+        self.base[REMISES].delete_one({"_id": url})
+
     def dans_lmelp(self, fichiers: Iterable[str]) -> set[str]:
         """Ceux des fichiers (``<année>/<nom>``) qu'un épisode de lmelp porte
         en ``audio_rel_filename`` (collection ``episodes`` de la même base)."""

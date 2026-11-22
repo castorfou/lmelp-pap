@@ -284,3 +284,30 @@ def mettre_a_disposition(
     entrees = {**enregistrement.entrees, "valide": maintenant}
     valide = replace(enregistrement, niveau="valide", entrees=entrees)
     return Remise(valide, fiche, reprise)
+
+
+def annuler_mise_a_disposition(
+    enregistrement: Enregistrement, audios_lmelp: Path
+) -> tuple[Enregistrement, Path | None]:
+    """Ramène un enregistrement valide à qualifié et retire sa copie du
+    dossier audio de lmelp, si elle a encore son empreinte (un fichier
+    remplacé chez lmelp est gardé). Rend l'enregistrement qualifié et le
+    chemin retiré (``None`` si rien n'a été retiré). ``RemiseError`` si
+    l'enregistrement n'est pas valide. La fiche ``pap_remises`` est retirée
+    par l'appelant."""
+    if enregistrement.niveau != "valide" or not enregistrement.fichier:
+        raise RemiseError(
+            f"{enregistrement.url} : niveau {enregistrement.niveau}, "
+            "seule une mise à disposition (valide) s'annule"
+        )
+    copie = audios_lmelp / enregistrement.fichier
+    retiree = None
+    if (
+        enregistrement.sha256
+        and copie.is_file()
+        and empreinte(copie) == enregistrement.sha256
+    ):
+        copie.unlink()
+        retiree = copie
+    entrees = {k: v for k, v in enregistrement.entrees.items() if k != "valide"}
+    return replace(enregistrement, niveau="qualifie", entrees=entrees), retiree
