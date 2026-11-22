@@ -1124,6 +1124,9 @@ ICONES = {
     "favicon-32x32.png": "image/png",
     "apple-touch-icon.png": "image/png",
 }
+# Les icônes, elles, se gardent : servies en ``no-store``, Chrome les affiche
+# dans l'onglet sans les enregistrer, et les favoris restent sans favicon.
+CACHE_ICONES = "public, max-age=604800"
 
 
 def creer_serveur(
@@ -1223,7 +1226,7 @@ def creer_serveur(
             elif self.path.startswith("/audios/"):
                 self._audio()
             elif nom in ICONES:
-                self._repondre(icone(nom), ICONES[nom])
+                self._repondre(icone(nom), ICONES[nom], cache=CACHE_ICONES)
             else:
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 
@@ -1265,13 +1268,18 @@ def creer_serveur(
             self._repondre(corps, "application/json; charset=utf-8", statut)
 
         def _repondre(
-            self, corps: bytes, type_: str, statut: HTTPStatus = HTTPStatus.OK
+            self,
+            corps: bytes,
+            type_: str,
+            statut: HTTPStatus = HTTPStatus.OK,
+            cache: str = "no-store",
         ) -> None:
-            """Envoie la réponse, jamais mise en cache par le navigateur."""
+            """Envoie la réponse, par défaut jamais mise en cache par le
+            navigateur."""
             self.send_response(statut)
             self.send_header("Content-Type", type_)
             self.send_header("Content-Length", str(len(corps)))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
             self.end_headers()
             self.wfile.write(corps)
 
