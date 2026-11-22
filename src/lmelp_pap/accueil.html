@@ -264,7 +264,8 @@ function lecteur(e, colonnesN) {
     <button id="ecarter" disabled>Écarter</button></div></td></tr>`;
 }
 // ---------- Écoute : page radiofrance.fr et diffusion de l'Open API Radio France ----------
-// Les pages radiofrance.fr viennent des attestations ; la diffusion (équipe,
+// Les pages radiofrance.fr viennent des attestations de l'émission entière (la
+// fiche d'un seul livre, un extrait, n'en est pas une) ; la diffusion (équipe,
 // invités, titre, chapô) est lue à l'ouverture par GET /api/radiofrance/<id>,
 // gardée dans la mémoire de la page seulement (CGU de l'API).
 const DIFFUSIONS = {};
@@ -467,7 +468,7 @@ function preparer(d) {
     etat: etatDe(e),
     echec: e.echec_rapatriement || null,
     fichier: e.fichier_audio || null, ecart: e.ecart || null,
-    pages: e.attestations.filter(a => a.source === "radiofrance" && a.url).map(a => ({ url: a.url, titre: a.titre || "" })),
+    pages: e.attestations.filter(a => a.source === "radiofrance" && a.url && !a.extrait).map(a => ({ url: a.url, titre: a.titre || "" })),
     integration: e.integration_lmelp || null,
     localisations: e.localisations || [],
     entree: e.maturite_depuis || null,

@@ -149,7 +149,7 @@ Une ligne par émission de la liste.
 
 ### `attestations.csv`
 
-Une ligne par source et par émission : `emission_id`, `source`, `source_id`, `date` et `themes` tels que la source les donne, `titre`, `url` de la notice ou de la page d'origine.
+Une ligne par source et par émission : `emission_id`, `source`, `source_id`, `date` et `themes` tels que la source les donne, `titre`, `url` de la notice ou de la page d'origine, `extrait` (`oui` pour une attestation qui ne couvre qu'une partie de l'émission, comme la fiche radiofrance.fr d'un seul livre, `non` sinon). L'écoute ne propose comme page radiofrance.fr de l'émission que les fiches qui ne sont pas des extraits.
 
 ### `enregistrements.csv`
 

@@ -79,6 +79,7 @@ def test_la_liste_est_ecrite_en_trois_csv_lies_par_l_identifiant(
     assert attestations[1]["url"] == (
         "https://catalogue.ina.fr/doc/TV-RADIO/PH_PHD1/theatre"
     )
+    assert [a["extrait"] for a in attestations] == ["non", "non", "non"]
 
     assert _lire(tmp_path / "enregistrements.csv") == [
         {
@@ -89,6 +90,37 @@ def test_la_liste_est_ecrite_en_trois_csv_lies_par_l_identifiant(
             "duree": "",
         }
     ]
+
+
+def test_une_fiche_extrait_est_marquee_dans_attestations_csv(tmp_path: Path) -> None:
+    """La fiche d'un livre de l'émission (extrait) et la fiche de l'émission
+    entière ont chacune leur ligne ; seule la première est un extrait."""
+    liste, doutes = construire_liste(
+        [
+            Attestation(
+                source="radiofrance",
+                source_id="les-livres-a-lire-ou-pas",
+                date=date(2016, 3, 13),
+                themes=frozenset({"livres"}),
+            ),
+            Attestation(
+                source="radiofrance",
+                source_id="il-est-avantageux-d-avoir-ou-aller",
+                date=date(2016, 3, 13),
+                themes=frozenset({"livres"}),
+                extrait=True,
+            ),
+        ]
+    )
+
+    ecrire_liste(liste, doutes, tmp_path)
+
+    assert {
+        a["source_id"]: a["extrait"] for a in _lire(tmp_path / "attestations.csv")
+    } == {
+        "il-est-avantageux-d-avoir-ou-aller": "oui",
+        "les-livres-a-lire-ou-pas": "non",
+    }
 
 
 def test_les_doutes_sont_ecrits_a_cote_dans_la_liste_ou_non(tmp_path: Path) -> None:

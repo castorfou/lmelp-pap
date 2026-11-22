@@ -44,7 +44,7 @@ def construire_page(dossier: Path, arbitrage: bool = False) -> str:
 def donnees_page(dossier: Path) -> list[dict[str, Any]]:
     """Les émissions de la liste, telles que la page les affiche."""
     attestations = _par_emission(
-        dossier / "attestations.csv", ("source", "date", "titre", "url")
+        dossier / "attestations.csv", ("source", "date", "titre", "url", "extrait")
     )
     enregistrements = _par_emission(
         dossier / "enregistrements.csv", ("url", "type", "duree")
@@ -62,7 +62,10 @@ def donnees_page(dossier: Path) -> list[dict[str, Any]]:
             "animateur": e["animateur"],
             "chaine": e["chaine"],
             "duree": e["duree"],
-            "attestations": attestations[e["id"]],
+            # la fiche d'un seul livre (extrait) n'est pas la page de l'émission
+            "attestations": [
+                {**a, "extrait": a["extrait"] == "oui"} for a in attestations[e["id"]]
+            ],
             "enregistrements": enregistrements[e["id"]],
             "doutes": [
                 {
@@ -102,7 +105,8 @@ def _par_emission(
     """Les lignes d'un CSV lié, regroupées par ``emission_id``."""
     groupes: defaultdict[str, list[dict[str, str]]] = defaultdict(list)
     for ligne in _lire(chemin):
-        groupes[ligne["emission_id"]].append({c: ligne[c] for c in champs})
+        # .get : une liste écrite avant l'ajout d'une colonne se lit encore
+        groupes[ligne["emission_id"]].append({c: ligne.get(c) or "" for c in champs})
     return groupes
 
 

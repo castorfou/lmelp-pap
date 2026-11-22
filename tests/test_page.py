@@ -45,8 +45,15 @@ def test_chaque_emission_porte_ses_attestations_enregistrements_et_doutes() -> N
             "date": "1958-12-04",
             "titre": "Louis Aragon",
             "url": "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/louis-aragon-4684213",
+            "extrait": False,
         },
-        {"source": "wayback_podcast", "date": "1958-12-04", "titre": "", "url": ""},
+        {
+            "source": "wayback_podcast",
+            "date": "1958-12-04",
+            "titre": "",
+            "url": "",
+            "extrait": False,
+        },
     ]
     assert aragon["enregistrements"] == [
         {
