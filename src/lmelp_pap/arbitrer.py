@@ -999,6 +999,19 @@ def _ressource(nom: str) -> str:
     return files("lmelp_pap").joinpath(nom).read_text(encoding="utf-8")
 
 
+# Le favicon de pap (``scripts/generer_favicon.py``), servi à la racine.
+ICONES = {
+    "favicon.ico": "image/x-icon",
+    "favicon-32x32.png": "image/png",
+    "apple-touch-icon.png": "image/png",
+}
+
+
+def _icone(nom: str) -> bytes:
+    """Une icône livrée avec le paquet (``lmelp_pap/icones/``)."""
+    return files("lmelp_pap").joinpath("icones", nom).read_bytes()
+
+
 def creer_serveur(
     cache: Path,
     sortie: Path,
@@ -1057,6 +1070,9 @@ def creer_serveur(
                     self._json({"erreur": str(e)}, HTTPStatus.NOT_FOUND)
             elif self.path.startswith("/audios/"):
                 self._audio()
+            elif self.path.lstrip("/") in ICONES:
+                nom = self.path.lstrip("/")
+                self._repondre(_icone(nom), ICONES[nom])
             else:
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
 
