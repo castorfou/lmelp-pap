@@ -47,6 +47,9 @@ class Attestation:
     duree: str | None = None
     animateur: str | None = None
     url: str | None = None
+    # les critiques et les invités, nommés « Prénom Nom » (générique INA)
+    equipe: tuple[str, ...] = ()
+    invites: tuple[str, ...] = ()
     enregistrements: tuple[Enregistrement, ...] = ()
     extrait: bool = False  # un fragment, qui ne décrit pas l'émission entière
     # La date de première diffusion, de publication (dans le podcast pour

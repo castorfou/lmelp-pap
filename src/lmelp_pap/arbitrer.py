@@ -712,6 +712,11 @@ class Atelier:
                         raise RemiseError(f"émission inconnue : {emission_id}")
                     if maturites.dans_lmelp(emission):
                         raise RemiseError(f"{emission_id} est déjà dans lmelp")
+                    if proches := depot.episodes_proches(emission.date):
+                        raise RemiseError(
+                            f"{emission_id} : doublon, épisode lmelp "
+                            + ", ".join(_episode(e) for e in proches)
+                        )
                     choisi = next(
                         (e for e in enregistrements if e.niveau == "qualifie"), None
                     )
@@ -1072,6 +1077,14 @@ class Atelier:
                 else None
             ),
         }
+
+
+def _episode(document: dict[str, Any]) -> str:
+    """Un épisode de lmelp dans un message : sa date et son titre."""
+    quand = document.get("date")
+    jour = quand.date().isoformat() if isinstance(quand, datetime) else "sans date"
+    titre = document.get("titre")
+    return f"du {jour}" + (f" (« {titre} »)" if titre else "")
 
 
 def _iso(quand: datetime) -> str:

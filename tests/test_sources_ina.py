@@ -201,3 +201,22 @@ def test_a_defaut_de_champ_de_classement_le_resume_documentaire_donne_le_theme()
     fiche = '<td id="RES" class="v">Débat à propos des livres suivants : …</td>'
 
     assert _notice_avec(fiche).themes == frozenset({"livres"})
+
+
+def test_le_generique_donne_l_equipe_et_les_invites() -> None:
+    # PAR : les participants (les critiques) ; INT : les intervenants (invités) ;
+    # l'INA écrit « Nom Prénom particule »
+    notice = _notice_avec(
+        '<td id="GEN" class="v">PRO,Bastide François Régis ; '
+        "PRE,Bastide François Régis ; PAR,Maupin Françoise ; "
+        "PAR,Rabaudy Martine de ; INT,Parmentier Gérard ; INT,Wiener Jean (piano)</td>"
+        '<td id="GENS" class="v">PAR,Maupin Françoise ; PAR,Grand Odile</td>'
+    )
+    assert notice.equipe == ("Françoise Maupin", "Martine de Rabaudy", "Odile Grand")
+    assert notice.invites == ("Gérard Parmentier", "Jean Wiener")
+
+
+def test_sans_generique_ni_equipe_ni_invites() -> None:
+    notice = _notice_avec('<td id="DE" class="v">littérature</td>')
+    assert notice.equipe == ()
+    assert notice.invites == ()

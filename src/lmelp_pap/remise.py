@@ -96,13 +96,82 @@ def _copier(source: Path, final: Path, sha256: str | None) -> None:
 
 
 def duree_du_fichier(chemin: Path) -> int | None:
-    """La durée en secondes d'un fichier m4a, lue dans sa boîte ``mvhd`` ;
-    ``None`` pour un fichier illisible ou d'un autre format."""
+    """La durée en secondes d'un fichier m4a (boîte ``mvhd``) ou mp3 (en-tête
+    Xing, Info ou VBRI, sinon débit constant) ; ``None`` pour un fichier
+    illisible ou d'un autre format."""
     try:
         with chemin.open("rb") as f:
-            return _mvhd(f, chemin.stat().st_size)
+            taille = chemin.stat().st_size
+            duree = _mvhd(f, taille)
+            if duree is None:
+                f.seek(0)
+                duree = _duree_mp3(f, taille)
+            return duree
     except (OSError, ValueError):
         return None
+
+
+# Les débits (kbit/s) des couches III, MPEG-1 puis MPEG-2/2.5, par index.
+_DEBITS = (
+    (0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320),
+    (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160),
+)
+# Les fréquences (Hz) par version MPEG (bits 19-20 de l'en-tête) et index.
+_FREQUENCES = {
+    3: (44100, 48000, 32000),
+    2: (22050, 24000, 16000),
+    0: (11025, 12000, 8000),
+}
+
+
+def _trame_mp3(entete: bytes) -> tuple[int, int, int, int, bool] | None:
+    """Une trame MPEG couche III : (débit en bit/s, fréquence, échantillons par
+    trame, longueur en octets, mono) ; ``None`` si ce n'en est pas une."""
+    if len(entete) < 4:
+        return None
+    mot = int.from_bytes(entete[:4], "big")
+    version, couche = (mot >> 19) & 3, (mot >> 17) & 3
+    i_debit, i_frequence = (mot >> 12) & 15, (mot >> 10) & 3
+    if mot >> 21 != 0x7FF or version == 1 or couche != 1:
+        return None
+    if i_debit in (0, 15) or i_frequence == 3:
+        return None
+    mpeg1 = version == 3
+    debit = _DEBITS[0 if mpeg1 else 1][i_debit] * 1000
+    frequence = _FREQUENCES[version][i_frequence]
+    echantillons = 1152 if mpeg1 else 576
+    longueur = echantillons // 8 * debit // frequence + ((mot >> 9) & 1)
+    return debit, frequence, echantillons, longueur, (mot >> 6) & 3 == 3
+
+
+def _duree_mp3(f: Any, fin: int) -> int | None:
+    """La durée d'un mp3 : saute le tag ID3v2, lit la première trame ; le
+    nombre de trames de son en-tête Xing/Info ou VBRI, sinon (débit
+    constant) la taille du flux et le débit, confirmé par la trame suivante."""
+    debut = 0
+    tete = f.read(10)
+    if tete[:3] == b"ID3" and len(tete) == 10:
+        debut = 10 + sum(b << s for b, s in zip(tete[6:10], (21, 14, 7, 0)))
+    f.seek(debut)
+    premiere = f.read(200)
+    trame = _trame_mp3(premiere)
+    if trame is None:
+        return None
+    debit, frequence, echantillons, longueur, mono = trame
+    mpeg1 = echantillons == 1152
+    annexe = (17 if mono else 32) if mpeg1 else (9 if mono else 17)
+    xing = premiere[4 + annexe : 4 + annexe + 12]
+    nombre = None
+    if xing[:4] in (b"Xing", b"Info") and int.from_bytes(xing[4:8], "big") & 1:
+        nombre = int.from_bytes(xing[8:12], "big")
+    elif premiere[36:40] == b"VBRI":
+        nombre = int.from_bytes(premiere[50:54], "big")
+    if nombre:
+        return round(nombre * echantillons / frequence)
+    f.seek(debut + longueur)
+    if _trame_mp3(f.read(4)) is None:
+        return None
+    return round((fin - debut) * 8 / debit)
 
 
 def _mvhd(f: Any, fin: int) -> int | None:
@@ -199,10 +268,17 @@ def _composer(
     if resume := _premier(emission, du_api["resume"], "description"):
         morceaux.append(resume[0])
         sources["resume"] = resume[1]
+    # l'équipe et les invités : l'API, sinon le générique de la notice INA
     for cle, libelle in (("equipe", "équipe"), ("invites", "invités")):
         if du_api[cle]:
             morceaux.append(f"{libelle} : {du_api[cle]}")
             sources[cle] = "api_radiofrance"
+        elif noms := next(
+            (getattr(a, cle) for a in emission.entieres("ina") if getattr(a, cle)),
+            (),
+        ):
+            morceaux.append(f"{libelle} : {', '.join(noms)}")
+            sources[cle] = "ina"
     description = " - ".join(["Le Masque et la Plume", *morceaux])
     if duree:
         description = f"durée : {_horaire(duree[0])}  - {description}"
