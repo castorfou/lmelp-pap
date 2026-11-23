@@ -153,7 +153,9 @@ Sans `GH_TOKEN`, l'aperçu fonctionne (le dépôt est public) mais le push est r
 
 ### Collecte
 
-La collecte des sources se lance à la main depuis l'appli (bouton **Collecte** de l'accueil, voir [Collecter les sources depuis l'appli](liste-des-emissions.md#collecter-les-sources-depuis-lappli)) ; aucune tâche planifiée ne la déclenche. Elle écrit dans `/data/cache/` (sur le NAS, `/volume1/docker/lmelp/pap/cache/`), un dossier par source, puis reconstruit la liste dans `/data/processed/`. Sa progression et son bilan sont dans `docker logs lmelp-pap`.
+La collecte des sources se lance à la main depuis l'appli (bouton **Collecte** de l'accueil, voir [Collecter les sources depuis l'appli](liste-des-emissions.md#collecter-les-sources-depuis-lappli)). La collecte écrit dans `/data/cache/` (sur le NAS, `/volume1/docker/lmelp/pap/cache/`), un dossier par source, puis reconstruit la liste dans `/data/processed/`. Sa progression et son bilan sont dans `docker logs lmelp-pap`.
+
+La source `lmelp` fait exception : l'appli la relit dans Mongo toutes les heures et reconstruit la liste quand elle a changé (voir [Suivi horaire de la source lmelp](liste-des-emissions.md#suivi-horaire-de-la-source-lmelp)). Le bouton `lmelp` de la boîte Collecte force la mise à jour sans attendre.
 
 ### Reverse proxy
 

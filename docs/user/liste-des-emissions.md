@@ -52,7 +52,7 @@ uv run --active lmelp-pap emissions --source lmelp --refresh
 
 La commande recopie les émissions vérifiées de la base dans le cache. L'émission a ensuite une ligne `lmelp` dans `attestations.csv`, et son doute `absente de lmelp` disparaît. Un doute `sans fiche radiofrance` signale que l'URL enregistrée dans lmelp ne correspond à aucune fiche radiofrance.fr du cache : l'attestation est alors rattachée par la date. Corriger l'URL dans lmelp, ou rafraîchir aussi `radiofrance` si la fiche est récente.
 
-L'appli fait la même chose sans terminal : bouton **Collecte** de l'accueil (voir [Collecter les sources depuis l'appli](#collecter-les-sources-depuis-lappli)).
+L'appli lancée avec `MONGO_URI` (`lmelp-pap arbitrer`, l'appli sur le NAS) le fait seule : elle relit la source `lmelp` toutes les heures (voir [Suivi horaire de la source lmelp](#suivi-horaire-de-la-source-lmelp)). Le bouton **Collecte** → `lmelp` de l'accueil force la mise à jour sans attendre (voir [Collecter les sources depuis l'appli](#collecter-les-sources-depuis-lappli)).
 
 Les sources se combinent dans une même commande (`--source radiofrance --source lmelp --refresh`). Chaque reconstruction réécrit les fichiers de `data/processed/` : vérifier le changement (`git diff --stat data/processed`), puis le committer. Une fois le commit sur `main`, la page publiée est régénérée à partir des CSV et redéployée (voir « Consulter la liste »).
 
@@ -433,13 +433,32 @@ L'accueil suit le thème clair ou sombre du système. Sans base Mongo, il n'affi
 
 ### Collecter les sources depuis l'appli
 
-Le bouton **Collecte**, en haut à droite de l'accueil, ouvre une boîte avec un bouton par source (`radiofrance`, `ina`, `wayback_podcast`, `anciennes_listes`, `lmelp`) et **Toutes**. La case **Re-collecter** reprend une source même si son cache est complet, comme `--refresh` ; sans elle, une source déjà collectée est seulement relue.
+Le bouton **Collecte**, en haut à droite de l'accueil, ouvre une boîte avec un bouton par source (`radiofrance`, `ina`, `wayback_podcast`, `anciennes_listes`, `lmelp`) et **Toutes**. La case **Re-collecter** reprend une source même si son cache est complet, comme `--refresh` ; sans elle, une source déjà collectée est seulement relue. La source `lmelp`, qui se relit en quelques secondes, est toujours re-collectée.
 
 La collecte tourne en fond, dans le serveur : la boîte se ferme et la page reste utilisable. Pendant la collecte, le bouton de l'en-tête affiche la source en cours (« Collecte : radiofrance… ») et la boîte, rouverte, sa dernière ligne de progression (« radiofrance : page 3, 60 fiches vues, 12 téléchargées », « ina : fiches détaillées 300/2000 (≈ 31 min restantes) »). À la fin, la liste est reconstruite depuis le cache, avec les arbitrages, la page relit ses données et un message donne le nombre d'émissions avant et après, et les compteurs qui ont changé.
 
 Une seule collecte tourne à la fois : une demande pendant une collecte, depuis cette page ou une autre, est refusée et la boîte affiche la raison (« une collecte est déjà en cours (radiofrance) : attendez sa fin »). Une source en échec (réseau, par exemple) n'arrête pas les suivantes : le message final la nomme, et la trace est dans les logs. Sans `MONGO_URI`, la source `lmelp` est sautée et son cache précédent reste valable.
 
 La collecte écrit dans le dossier du cache de l'appli (`--cache`, ou `PAP_CACHE`) ; la source INA demande Chromium (voir « Prérequis pour la source INA »).
+
+### Suivi horaire de la source lmelp
+
+pap et lmelp partagent la même base Mongo. Avec `MONGO_URI`, l'appli relit la source `lmelp` au démarrage puis toutes les heures, dans le fil qui vérifie les URL d'intégral et localise les notices INA, en lecture seule comme la collecte. Elle compare les émissions vérifiées lues au cache `lmelp/emissions.json` :
+
+- **identique** : rien n'est réécrit ni reconstruit ;
+- **différent** (émission vérifiée ajoutée, retirée, ou titre, date, fichier ou page modifiés) : le cache est réécrit, puis la liste est reconstruite avec les arbitrages, comme après une collecte. Une émission vérifiée dans le back-office de lmelp entre ainsi dans la liste au plus tard au tour horaire suivant.
+
+Le tour passe sans rien faire pendant une collecte lancée depuis l'accueil (une seule collecte à la fois), et si Mongo est injoignable : le cache précédent reste valable. Une collecte demandée pendant un tour attend sa fin, de quelques secondes. Rien n'est publié : la publication sur GitHub reste un clic sur **Publier**.
+
+Chaque tour qui change la liste, ou qui passe, laisse une ligne dans les logs :
+
+```text
+2026-11-23 14:00:03 INFO    arbitrer : source lmelp : 1 émission vérifiée ajoutée, 0 retirée, 0 modifiée ; liste 2841 → 2842 émissions
+2026-11-23 15:00:03 INFO    arbitrer : source lmelp : tour sauté (collecte en cours)
+2026-11-23 16:00:13 WARNING arbitrer : source lmelp : tour sauté (Mongo injoignable : nas923:27017: timed out)
+```
+
+Un tour sans changement n'écrit qu'une ligne `DEBUG`, absente des logs au niveau par défaut. La commande `lmelp-pap emissions` lit toujours le cache, sans suivi : hors de l'appli, `--source lmelp --refresh` reste le moyen de le mettre à jour.
 
 ### Sans enregistrement et localisé : faire avancer une émission
 

@@ -262,6 +262,64 @@ def collecter_anciennes_listes(dossier: Path, progres: Progres | None = None) ->
             time.sleep(_DELAI_WAYBACK)
 
 
+def lire_base_lmelp(base: Any) -> list[dict[str, str]]:
+    """Les émissions vérifiées d'une base Mongo de lmelp (pymongo ou mongomock),
+    en lecture seule, triées par date de publication : celles de la collection
+    ``emissions``, avec la page radiofrance.fr de leur épisode."""
+    champs = ["titre", "titre_corrige", "date", "episode_page_url"]
+    episodes = {
+        str(e["_id"]): e
+        for e in base.episodes.find({}, [*champs, "audio_rel_filename", "masked"])
+    }
+    retenus = [episodes.get(str(e["episode_id"])) for e in base.emissions.find()]
+    emissions = [
+        {
+            "page": e["episode_page_url"],
+            "titre": e.get("titre_corrige") or e["titre"],
+            "publication": e["date"].replace(tzinfo=UTC).isoformat(),
+            "fichier": e.get("audio_rel_filename") or "",
+        }
+        for e in retenus
+        if e and not e.get("masked") and e.get("episode_page_url")
+    ]
+    return sorted(emissions, key=lambda e: e["publication"])
+
+
+def ecrire_lmelp(dossier: Path, emissions: list[dict[str, str]]) -> None:
+    """Écrit les émissions vérifiées dans le cache de la source ``lmelp``."""
+    dossier.mkdir(parents=True, exist_ok=True)
+    (dossier / "emissions.json").write_text(
+        json.dumps(emissions, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+
+
+def lire_cache_lmelp(dossier: Path) -> list[dict[str, str]]:
+    """Les émissions vérifiées du cache ``lmelp`` ; aucune sans cache."""
+    fichier = dossier / "emissions.json"
+    if not fichier.exists():
+        return []
+    emissions: list[dict[str, str]] = json.loads(fichier.read_text(encoding="utf-8"))
+    return emissions
+
+
+def ecarts_lmelp(
+    avant: list[dict[str, str]], apres: list[dict[str, str]]
+) -> tuple[int, int, int]:
+    """Les émissions vérifiées ajoutées, retirées et modifiées entre deux
+    lectures de lmelp, reconnues à leur page radiofrance.fr."""
+    anciennes = {e["page"]: e for e in avant}
+    nouvelles = {e["page"]: e for e in apres}
+    return (
+        len(nouvelles.keys() - anciennes.keys()),
+        len(anciennes.keys() - nouvelles.keys()),
+        sum(
+            1
+            for p in nouvelles.keys() & anciennes.keys()
+            if nouvelles[p] != anciennes[p]
+        ),
+    )
+
+
 def collecter_lmelp(dossier: Path, progres: Progres | None = None) -> None:
     """Les émissions vérifiées de la base Mongo de lmelp, en lecture seule.
 
@@ -279,35 +337,14 @@ def collecter_lmelp(dossier: Path, progres: Progres | None = None) -> None:
     )
     with client:
         base = client[os.environ.get("MONGO_DB", "masque_et_la_plume")]
-        champs = ["titre", "titre_corrige", "date", "episode_page_url"]
-        episodes = {
-            str(e["_id"]): e
-            for e in base.episodes.find({}, [*champs, "audio_rel_filename", "masked"])
-        }
-        retenus = [episodes.get(str(e["episode_id"])) for e in base.emissions.find()]
-    emissions = [
-        {
-            "page": e["episode_page_url"],
-            "titre": e.get("titre_corrige") or e["titre"],
-            "publication": e["date"].replace(tzinfo=UTC).isoformat(),
-            "fichier": e.get("audio_rel_filename") or "",
-        }
-        for e in retenus
-        if e and not e.get("masked") and e.get("episode_page_url")
-    ]
-    if len(emissions) < len(retenus):
+        emissions = lire_base_lmelp(base)
+        ignorees = base.emissions.count_documents({}) - len(emissions)
+    if ignorees:
         log.info(
-            f"lmelp : {len(retenus) - len(emissions)} émissions sans épisode, "
+            f"lmelp : {ignorees} émissions sans épisode, "
             "masquées ou sans page radiofrance.fr, ignorées"
         )
-    (dossier / "emissions.json").write_text(
-        json.dumps(
-            sorted(emissions, key=lambda e: e["publication"]),
-            ensure_ascii=False,
-            indent=1,
-        ),
-        encoding="utf-8",
-    )
+    ecrire_lmelp(dossier, emissions)
 
 
 # --- Registre des sources ----------------------------------------------------
