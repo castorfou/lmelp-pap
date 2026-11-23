@@ -382,7 +382,7 @@ Traceback (most recent call last):
 
 **Actions.** Une vérification lancée par le bouton est « manuelle » ; la raison d'une vérification automatique est indiquée (jamais vérifiée, base vide, date de la précédente, nouvelles URL). Chaque arbitrage donne sa sorte, l'émission, la décision (thèmes, existence, date retenue, rapprochement, renvoi à l'écoute) et sa justification ; chaque annulation, l'émission ou l'attestation et le nombre d'arbitrages retirés. Avec Mongo, ces deux lignes finissent par « (pap_arbitrages) ». Un rapatriement trace chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »). Les appels à l'API Radio France donnent leur résultat, le nombre de requêtes et la durée, jamais le contenu reçu. Une collecte donne les sources demandées, le début et l'issue de chaque source (collectée, déjà complète, sautée, en échec) avec sa durée, ses lignes de progression (module `collecte` : une par page de la liste radiofrance.fr, une toutes les 100 fiches INA), le refus d'une deuxième demande avec sa raison, et le bilan (durée, émissions avant et après, attestations).
 
-**Requêtes HTTP.** Chaque requête donne sa méthode, son chemin, son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`, `GET /api/collectes`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »).
+**Requêtes HTTP.** Chaque requête donne sa méthode, son chemin sans la query string (celle de `POST /api/fichiers` porte la provenance du fichier), son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`, `GET /api/collectes`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »). Un client parti avant la fin de la réponse (page rechargée pendant `GET /api/donnees`) laisse une seule ligne, sans trace : « GET /api/donnees : client parti (BrokenPipeError) ».
 
 **Erreurs.** Niveau `WARNING` : échec passager d'une vérification d'URL (réseau, 5xx, 429, 403), échec d'un essai ou d'un rapatriement, erreur de l'API Radio France, fichier audio introuvable. Niveau `ERROR`, avec le type de l'exception et la trace : exception imprévue pendant une requête (Mongo injoignable, par exemple ; la page reçoit une 500 au message générique `{"erreur": "erreur interne"}`, le détail ne reste que dans les logs), dans la planification de la vérification, ou dans une tâche de fond (« vérification en échec », « rapatriement en échec » : la tâche s'arrête sans bilan ; « collecte ina en échec : … » : la collecte passe à la source suivante). Mongo injoignable n'empêche pas le démarrage : la ligne « Mongo : injoignable … » le signale et l'appli sert la liste.
 
@@ -553,7 +553,7 @@ Une publication est **refusée**, sans rien pousser, quand :
 - un fichier contient ce qui ne se publie pas (voir plus haut) ;
 - avec Mongo, `pap_arbitrages` est vide alors que `arbitrages.csv` (celui des données, ou celui du clone) porte des arbitrages : l'import initial n'est pas fait, et publier exporterait un fichier vide qui effacerait les arbitrages publiés. Lancer d'abord `lmelp-pap arbitrages importer` (voir plus haut). Le résumé est refusé de même, et le démarrage de l'appli l'annonce par un avertissement.
 
-La boîte affiche la raison du refus, et une alerte ntfy (priorité haute) la transmet. Après un conflit, le clone est remis à l'état de `main` : les CSV se régénèrent à chaque publication, la suivante repart de `main` et y repose les fichiers du NAS, sans intervention. Une publication réussie envoie une notification ntfy « pap - liste publiée » avec le commit et le résumé ; une publication sans changement, une notification « pap - rien à publier » en priorité basse.
+La boîte affiche la raison du refus, et une alerte ntfy (priorité haute) la transmet. ntfy est un service externe : l'alerte ne garde d'un chemin du NAS que son dernier nom (« pap_arbitrages est vide mais arbitrages.csv porte 214 arbitrages… »), et jamais le jeton ; la ligne de log garde le chemin complet. Après un conflit, le clone est remis à l'état de `main` : les CSV se régénèrent à chaque publication, la suivante repart de `main` et y repose les fichiers du NAS, sans intervention. Une publication réussie envoie une notification ntfy « pap - liste publiée » avec le commit et le résumé ; une publication sans changement, une notification « pap - rien à publier » en priorité basse.
 
 Logs :
 
@@ -598,15 +598,15 @@ Avec une base Mongo (`MONGO_URI` et `MONGO_DB`, dans l'environnement ou le fichi
 
   ```
   2026-11-22 17:40:02 INFO    arbitrer : localisation INA : 273 enregistrements localisés créés (273 notices des Archives Radio Pro)
-  2026-11-22 17:45:10 INFO    arbitrer : enregistrement localisé ajouté : 2008-03-02 (source « Jean D., forum », premier échange forum)
-  2026-11-22 17:46:31 INFO    arbitrer : piste en lot : 3 émissions localisées (source « Jean D., forum »)
-  2026-11-22 17:50:02 INFO    arbitrer : échange noté : 2008-03-02, piste piste:3f2a… (Jean D., forum), courriel, relance le 2026-12-22
+  2026-11-22 17:45:10 INFO    arbitrer : enregistrement localisé ajouté : 2008-03-02, piste piste:3f2a…, premier échange forum
+  2026-11-22 17:46:31 INFO    arbitrer : piste en lot : 3 émissions localisées
+  2026-11-22 17:50:02 INFO    arbitrer : échange noté : 2008-03-02, piste piste:3f2a…, courriel, relance le 2026-12-22
   2026-11-22 17:52:40 INFO    arbitrer : URL enregistrée : 2008-03-09 https://exemple.org/masque.mp3 → téléchargeable
-  2026-11-22 17:55:12 INFO    arbitrer : fichier téléversé : 2008-03-16 2008/masque 2008-03-16.mp3, 52428800 octets (provenance « Jean D., cassette numérisée », piste piste:3f2a…)
+  2026-11-22 17:55:12 INFO    arbitrer : fichier téléversé : 2008-03-16 2008/masque 2008-03-16.mp3, 52428800 octets, piste piste:3f2a…
   2026-11-22 17:56:03 INFO    arbitrer : fichier refusé 2008-03-16 : 2008/masque 2008-03-16.mp3 : nom de fichier déjà pris
   ```
 
-  Chaque refus laisse sa ligne, avec son motif : `piste refusée …`, `échange refusé …`, `URL refusée …`, `fichier refusé …`.
+  Chaque refus laisse sa ligne, avec son motif : `piste refusée …`, `échange refusé …`, `URL refusée …`, `fichier refusé …`. Ces lignes ne donnent ni le détenteur, ni l'interlocuteur, ni le texte d'un échange, ni la provenance d'un fichier : ils peuvent nommer un particulier. Elles s'en tiennent à l'émission, la piste, le canal, la taille et les comptes ; le détail reste dans la base et sur la page.
 - Chaque émission porte un badge : le niveau de son enregistrement le plus avancé, ou **dans lmelp** si lmelp l'atteste, état qui l'emporte sur la maturité.
 - Le filtre **Maturité** retient un niveau, « dans lmelp », ou les émissions sans enregistrement suivi.
 
