@@ -149,7 +149,7 @@ Le bouton **Publier** de l'accueil commite les CSV de la liste et les décisions
 2026-11-23 10:53:49 INFO    cli : publication : vers https://github.com/castorfou/lmelp-pap.git (main), clone /data/depot, GH_TOKEN présent, ntfy lmelp
 ```
 
-Sans `GH_TOKEN`, l'aperçu fonctionne (le dépôt est public) mais le push est refusé, avec sa raison dans la boîte, les logs et ntfy. Après un conflit au rebase, supprimer `/volume1/docker/lmelp/pap/depot` fait repartir le clone de `main`.
+Sans `GH_TOKEN`, l'aperçu fonctionne (le dépôt est public) mais le push est refusé, avec sa raison dans la boîte, les logs et ntfy. Après un conflit au rebase, l'appli remet le clone à l'état de `main` : la publication suivante repart de là sans intervention (voir [Publier la liste sur GitHub](liste-des-emissions.md#publier-la-liste-sur-github)).
 
 ### Collecte
 
