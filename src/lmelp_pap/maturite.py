@@ -170,7 +170,18 @@ SOURCE_URL = "url"  # la source d'une URL saisie à la main
 
 
 class UrlError(ValueError):
-    """Une URL saisie impossible : pas en http(s)."""
+    """Une URL saisie impossible : pas en http(s), ou un nom de fichier
+    impossible."""
+
+
+# Les noms de fichier qu'une URL ne peut pas donner : ils désignent un dossier.
+NOMS_INTERDITS = (".", "..")
+
+
+def _nom_d_origine(url: str) -> str:
+    """Le nom de fichier d'une URL, sans paramètres (``?jeton=…``) ni
+    fragment ; vide si son chemin finit par « / »."""
+    return urlsplit(url).path.rsplit("/", 1)[-1]
 
 
 def url_saisie(
@@ -187,6 +198,8 @@ def url_saisie(
         or any(c.isspace() for c in url)
     ):
         raise UrlError(f"URL invalide : {url!r} (attendu : une URL http(s))")
+    if (nom := _nom_d_origine(url)) in NOMS_INTERDITS:
+        raise UrlError(f"URL invalide : {url!r} (nom de fichier {nom!r} impossible)")
     return Enregistrement(
         url=url,
         emission_id=emission_id,
@@ -573,10 +586,11 @@ def rapatrier(
             "seul un enregistrement téléchargeable se rapatrie"
         )
     quand = maintenant or datetime.now(UTC)
-    # le nom d'origine, sans paramètres (``?jeton=…``) ni fragment
-    nom = urlsplit(enregistrement.url).path.rsplit("/", 1)[-1] or (
-        f"{enregistrement.emission_id}.mp3"
-    )
+    nom = _nom_d_origine(enregistrement.url) or f"{enregistrement.emission_id}.mp3"
+    if nom in NOMS_INTERDITS:
+        raise RapatriementError(
+            f"{enregistrement.url} : nom de fichier {nom!r} impossible"
+        )
     relatif = enregistrement.fichier or f"{enregistrement.emission_id[:4]}/{nom}"
     final = dossier / relatif
     if (

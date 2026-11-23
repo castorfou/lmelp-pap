@@ -22,7 +22,7 @@ import pytest
 from bson import ObjectId
 
 from lmelp_pap.arbitrer import creer_serveur
-from lmelp_pap.maturite import Depot
+from lmelp_pap.maturite import Depot, Enregistrement
 from tests.test_commande import _cache_rempli
 from tests.test_logs import messages
 from tests.test_maturite import SON, Flux, Reponse, Session
@@ -1632,3 +1632,43 @@ def test_un_corps_json_invalide_est_refuse_en_400_et_logue(
         "POST /api/urls refusée (400)" in m
         for m in messages(capfd.readouterr().err, "http")
     )
+
+
+def test_une_url_au_nom_de_fichier_impossible_est_refusee_et_loguee(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    corps = {"emission_id": "1967-01-01", "url": "https://exemple.org/dl/.."}
+
+    assert _post_erreur(f"{url}/api/urls", corps) == 400
+    time.sleep(0.1)
+    assert any(
+        "URL refusée 1967-01-01" in m and "nom de fichier '..' impossible" in m
+        for m in messages(capfd.readouterr().err, "arbitrer")
+    )
+
+
+def test_une_url_enregistree_entre_le_controle_et_l_ecriture_n_est_pas_ecrasee(
+    url: str, depot: Depot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # une autre requête (ou un autre processus) a déjà rapatrié cette URL,
+    # mais le contrôle des URL connues l'a lue juste avant
+    depot.enregistrer(
+        Enregistrement(
+            url=SAISIE,
+            emission_id="1967-01-01",
+            source="url",
+            niveau="rapatrie",
+            entrees={"rapatrie": datetime.now(UTC)},
+        )
+    )
+    monkeypatch.setattr(depot, "tous", list)
+
+    corps = {"emission_id": "1967-01-01", "url": SAISIE}
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _post_json(f"{url}/api/urls", corps)
+
+    assert erreur.value.code == 400
+    assert "déjà connue" in json.load(erreur.value)["erreur"]
+    monkeypatch.undo()
+    (existant,) = [e for e in depot.tous() if e.url == SAISIE]
+    assert existant.niveau == "rapatrie"

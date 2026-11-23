@@ -699,9 +699,10 @@ class Atelier:
                 str(demande.get("note") or ""),
                 datetime.now(UTC),
             )
-            if any(e.url == fait.url for e in depot.tous()):
+            # l'URL est l'identifiant du document : l'écrire seulement si elle
+            # est absente est atomique, même entre deux requêtes ou processus
+            if not depot.ajouter_absents([fait]):
                 raise DemandeInvalideError(f"{fait.url} : URL déjà connue")
-            depot.enregistrer(fait)
         except (DemandeInvalideError, UrlError) as erreur:
             log.info(f"URL refusée {emission_id} : {erreur}")
             raise DemandeInvalideError(str(erreur)) from erreur

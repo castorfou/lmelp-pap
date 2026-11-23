@@ -905,6 +905,26 @@ def test_une_url_avec_parametres_se_rapatrie_sous_son_nom_de_fichier(
     assert fait.fichier == "1978/masque.mp3"
 
 
+@pytest.mark.parametrize("fin", [".", ".."])
+def test_une_url_dont_le_nom_de_fichier_est_un_point_ne_se_rapatrie_pas(
+    tmp_path: Any, fin: str
+) -> None:
+    e = replace(telechargeable(), url=f"https://exemple.org/dl/{fin}")
+    dossier = tmp_path / "audios"
+
+    with pytest.raises(RapatriementError, match="nom de fichier"):
+        rapatrier(e, dossier, SessionFlux(), AUJOURDHUI)
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+@pytest.mark.parametrize("fin", [".", ".."])
+def test_une_url_saisie_dont_le_nom_de_fichier_est_un_point_est_refusee(
+    fin: str,
+) -> None:
+    with pytest.raises(UrlError, match="nom de fichier"):
+        url_saisie("1978-04-02", f"https://exemple.org/dl/{fin}", "", HIER)
+
+
 def _televerser(tmp_path: Any, **options: Any) -> Enregistrement:
     contenu = options.pop("contenu", SON)
     reglages: dict[str, Any] = {
