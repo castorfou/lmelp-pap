@@ -97,6 +97,7 @@ l'arbitrage de rapprochement, ses ``rapprochements`` : chaque attestation
 ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 """
 
+import csv
 import json
 import logging
 import shutil
@@ -175,6 +176,7 @@ from lmelp_pap.maturite import (
     verifier,
 )
 from lmelp_pap.page import construire_page, donnees_page, icone
+from lmelp_pap.publication import DOSSIER as DOSSIER_PUBLIE
 from lmelp_pap.publication import PUBLIABLES, Publication, PublicationError
 from lmelp_pap.radiofrance_api import (
     QUOTA,
@@ -1216,26 +1218,58 @@ class Atelier:
 
     def apercu_publication(self) -> dict[str, Any]:
         """Ce que « Publier » changerait sur GitHub (``Publication.apercu``),
-        décisions exportées et liste reconstruite."""
+        décisions exportées et liste reconstruite. Lève ``PublicationError``
+        si la publication effacerait des arbitrages non importés."""
         publication = self._publication()
+        if raison := self.arbitrages_a_importer():
+            raise PublicationError(raison)
         with tempfile.TemporaryDirectory() as dossier:
             fichiers = self._a_publier(Path(dossier))
-            tous = self.depot.tous() if self.depot is not None else []
-            return publication.apercu(fichiers, enregistrements=tous)
+            return publication.apercu(fichiers, enregistrements=self._enregistrements())
 
     def publier(self, _demande: dict[str, Any]) -> dict[str, Any]:
         """Publie la liste sur GitHub : arbitrages et qualifications exportés
         de Mongo, liste reconstruite, commit, ``pull --rebase`` et push
-        (``Publication.publier``). Rend son résultat, avec ``resume``."""
+        (``Publication.publier``). Rend son résultat, avec ``resume``. Refuse
+        (log, alerte ntfy) si ``pap_arbitrages`` est vide alors que le fichier
+        des arbitrages en porte : l'export les effacerait."""
         publication = self._publication()
+        if raison := self.arbitrages_a_importer():
+            return {**publication.refuser(raison), "resume": ""}
         with tempfile.TemporaryDirectory() as dossier:
             fichiers = self._a_publier(Path(dossier))
-            tous = self.depot.tous() if self.depot is not None else []
             try:
-                resume = publication.apercu(fichiers, enregistrements=tous)["resume"]
+                resume = publication.apercu(
+                    fichiers, enregistrements=self._enregistrements()
+                )["resume"]
             except PublicationError:
                 resume = ""  # la publication refuse à son tour, et alerte
             return {**publication.publier(fichiers, resume=resume), "resume": resume}
+
+    def arbitrages_a_importer(self) -> str | None:
+        """Avec Mongo, ``pap_arbitrages`` vide alors que le fichier des
+        arbitrages (ou celui du clone de la publication) en porte : l'import
+        initial n'est pas fait, et publier exporterait un fichier vide. Rend
+        alors la raison, en clair ; sinon ``None``."""
+        if self.arbitrages is None or self.arbitrages.nombre():
+            return None
+        fichiers = [self.fichier]
+        if self.publication is not None:
+            fichiers.append(
+                self.publication.configuration.clone / DOSSIER_PUBLIE / "arbitrages.csv"
+            )
+        for fichier in fichiers:
+            if n := _lignes_csv(fichier):
+                return (
+                    f"{ARBITRAGES_MONGO} est vide mais {fichier} porte {n} "
+                    f"arbitrage{_s(n)} : publier les effacerait ; lancer "
+                    f"d'abord « lmelp-pap arbitrages importer »"
+                )
+        return None
+
+    def _enregistrements(self) -> list[Enregistrement]:
+        """Les enregistrements du dépôt, ou aucun sans Mongo."""
+        return self.depot.tous() if self.depot is not None else []
 
     def _a_publier(self, dossier: Path) -> dict[str, Path]:
         """Exporte les décisions (Mongo vers ``arbitrages.csv`` et
@@ -1617,6 +1651,14 @@ def _localisations(
 
 def _iso_jour(jour: date | None) -> str | None:
     return jour.isoformat() if jour else None
+
+
+def _lignes_csv(chemin: Path) -> int:
+    """Le nombre de lignes d'un CSV, hors en-tête ; 0 s'il est absent."""
+    if not chemin.is_file():
+        return 0
+    with chemin.open(encoding="utf-8", newline="") as f:
+        return sum(1 for ligne in csv.DictReader(f) if any(ligne.values()))
 
 
 def _aujourd_hui() -> date:

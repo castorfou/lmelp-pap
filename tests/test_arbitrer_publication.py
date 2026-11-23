@@ -18,9 +18,9 @@ from lmelp_pap.arbitrages import ArbitragesMongo
 from lmelp_pap.arbitrer import Atelier, PublicationIndisponibleError, creer_serveur
 from lmelp_pap.liste import Arbitrage
 from lmelp_pap.maturite import Depot
-from lmelp_pap.publication import Configuration, Publication
+from lmelp_pap.publication import Configuration, Publication, PublicationError
 from tests.test_commande import _cache_rempli
-from tests.test_logs import _demarrer_la_commande
+from tests.test_logs import _demarrer_la_commande, lignes
 from tests.test_publication import Notifications, git
 
 
@@ -112,6 +112,98 @@ def test_l_apercu_de_l_atelier_compte_les_arbitrages_a_publier(
     assert apercu["a_publier"] is True
     assert apercu["arbitrages"] == {"ajoutes": 1, "retires": 0}
     assert "1 arbitrage ajouté" in apercu["resume"]
+
+
+LIGNE_ARBITRAGE = "ina,RD_7,existence,n'existe pas,écouté,2026-11-01\n"
+
+
+def _fichier_d_arbitrages(chemin: Path) -> str:
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_text(
+        "source,source_id,sorte,valeur,justification,date\n" + LIGNE_ARBITRAGE,
+        encoding="utf-8",
+    )
+    return chemin.read_text(encoding="utf-8")
+
+
+def test_publier_avec_pap_arbitrages_vide_refuse_d_effacer_le_fichier(
+    distant: Path,
+    cache: Path,
+    depot: Depot,
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    sortie = tmp_path / "sortie"
+    avant = _fichier_d_arbitrages(sortie / "arbitrages.csv")
+    notifications = Notifications()
+    publication = Publication(
+        Configuration(clone=tmp_path / "depot", distant=str(distant)),
+        notifier=notifications,
+    )
+    atelier = Atelier(cache, sortie, depot=depot, publication=publication)
+    capfd.readouterr()
+    main = git(distant, "rev-parse", "main")
+
+    resultat = atelier.publier({})
+
+    assert resultat["statut"] == "refusee"
+    assert "lmelp-pap arbitrages importer" in resultat["detail"]
+    assert git(distant, "rev-parse", "main") == main
+    assert (sortie / "arbitrages.csv").read_text(encoding="utf-8") == avant
+    (alerte,) = notifications.recues
+    assert alerte["titre"] == "publication refusée" and alerte["priorite"] == 4
+    assert any(
+        niveau == "ERROR" and "lmelp-pap arbitrages importer" in m
+        for niveau, _, m in lignes(capfd.readouterr().err)
+    )
+    with pytest.raises(PublicationError, match="lmelp-pap arbitrages importer"):
+        atelier.apercu_publication()
+    assert (sortie / "arbitrages.csv").read_text(encoding="utf-8") == avant
+
+
+def test_publier_avec_pap_arbitrages_vide_protege_aussi_ceux_du_clone(
+    distant: Path, cache: Path, depot: Depot, tmp_path: Path
+) -> None:
+    sortie = tmp_path / "sortie"
+    atelier = Atelier(
+        cache, sortie, depot=depot, publication=_publication(distant, tmp_path)
+    )
+    ArbitragesMongo(depot.base).ajouter(_arbitrage())
+    assert atelier.publier({})["statut"] == "publiee"
+    # pap_arbitrages vidé, plus de fichier local : le clone garde ceux publiés
+    depot.base["pap_arbitrages"].delete_many({})
+    (sortie / "arbitrages.csv").unlink()
+    main = git(distant, "rev-parse", "main")
+
+    assert atelier.publier({})["statut"] == "refusee"
+    assert git(distant, "rev-parse", "main") == main
+
+
+def test_publier_avec_pap_arbitrages_vide_et_aucun_arbitrage_ailleurs_publie(
+    distant: Path, cache: Path, depot: Depot, tmp_path: Path
+) -> None:
+    atelier = Atelier(
+        cache,
+        tmp_path / "sortie",
+        depot=depot,
+        publication=_publication(distant, tmp_path),
+    )
+
+    assert atelier.publier({})["statut"] == "publiee"
+
+
+def test_le_demarrage_avertit_quand_pap_arbitrages_est_a_importer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    depot: Depot,
+) -> None:
+    _fichier_d_arbitrages(tmp_path / "sortie" / "arbitrages.csv")
+
+    journal = _demarrer_la_commande(tmp_path, monkeypatch, capfd, depot=depot)
+
+    (alerte,) = [m for m in journal if "pap_arbitrages est vide" in m]
+    assert "1 arbitrage" in alerte and "lmelp-pap arbitrages importer" in alerte
 
 
 def test_sans_publication_configuree_publier_est_indisponible(

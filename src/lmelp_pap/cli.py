@@ -67,17 +67,17 @@ def _parser() -> argparse.ArgumentParser:
     )
     page.add_argument("--donnees", type=Path, default=donnees)
     page.add_argument("--sortie", type=Path, default=Path("docs/emissions/index.html"))
-    echanges = commandes.add_parser(
+    sous_arbitrages = commandes.add_parser(
         "arbitrages",
         help="importe arbitrages.csv dans Mongo (pap_arbitrages), ou l'en exporte",
     )
-    echanges.add_argument(
+    sous_arbitrages.add_argument(
         "sens",
         choices=["importer", "exporter"],
         help="importer : ajoute les arbitrages absents du fichier ; exporter : "
         "réécrit le fichier avec ceux de Mongo",
     )
-    echanges.add_argument(
+    sous_arbitrages.add_argument(
         "--fichier",
         type=Path,
         default=arbitrages or Path(donnees or "data/processed") / "arbitrages.csv",
@@ -253,6 +253,11 @@ def _arbitrer(args: argparse.Namespace) -> int:
     log.info(f"Mongo : {_etat_mongo(depot)}")
     log.info(f"liste : {atelier.nombre_emissions()} émissions")
     log.info(f"arbitrages : {atelier.origine_arbitrages()}")
+    try:
+        if raison := atelier.arbitrages_a_importer():
+            log.warning(f"arbitrages : {raison}")
+    except Exception as erreur:  # noqa: BLE001 — Mongo injoignable : démarrer quand même
+        log.warning(f"arbitrages : {type(erreur).__name__} en comptant pap_arbitrages")
     log.info(
         f"dossiers : cache {args.cache}, données {args.sortie}, "
         f"arbitrages {atelier.fichier}, audios {args.audios}, "

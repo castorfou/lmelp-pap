@@ -197,7 +197,7 @@ def test_un_conflit_au_rebase_refuse_la_publication_sans_toucher_main(
     assert not (clone / ".git" / "rebase-apply").exists()
 
 
-def test_apres_un_conflit_la_publication_reste_refusee_jusqu_a_resolution(
+def test_apres_un_conflit_le_clone_revient_au_distant_et_la_suivante_passe(
     distant: Path, poste: Path, sortie: Path, tmp_path: Path
 ) -> None:
     publication = _publication(distant, tmp_path)
@@ -210,12 +210,17 @@ def test_apres_un_conflit_la_publication_reste_refusee_jusqu_a_resolution(
     (sortie / "arbitrages.csv").write_text(
         ARBITRAGES + "ina,RD_2,existence,n'existe pas,,2026-11-11\n"
     )
-    publication.publier(_fichiers(sortie))
+    assert publication.publier(_fichiers(sortie))["statut"] == "refusee"
+    # le clone ne garde pas le commit en conflit : il est au distant
+    assert git(tmp_path / "depot", "rev-parse", "HEAD") == avant
 
     resultat = publication.publier(_fichiers(sortie))
 
-    assert resultat["statut"] == "refusee"
-    assert git(distant, "rev-parse", "main") == avant
+    # les CSV se régénèrent à chaque publication : la suivante repart du
+    # distant et passe
+    assert resultat["statut"] == "publiee"
+    assert git(distant, "rev-parse", "main~1") == avant
+    assert "RD_2" in _distant(distant, "data/processed/arbitrages.csv")
 
 
 @pytest.mark.parametrize(
@@ -350,6 +355,33 @@ def test_l_apercu_sans_changement_n_a_rien_a_publier(
     assert apercu["resume"] == "aucun changement"
 
 
+def _refuser_les_push(distant: Path) -> Path:
+    crochet = distant / "hooks" / "pre-receive"
+    crochet.write_text("#!/bin/sh\necho 'branche protégée' >&2\nexit 1\n")
+    crochet.chmod(0o755)
+    return crochet
+
+
+def test_l_apercu_compte_le_commit_local_qu_un_push_en_echec_a_laisse(
+    distant: Path, sortie: Path, tmp_path: Path
+) -> None:
+    publication = _publication(distant, tmp_path)
+    crochet = _refuser_les_push(distant)
+    assert publication.publier(_fichiers(sortie))["statut"] == "refusee"
+    crochet.unlink()
+    # emissions.csv est déjà sur le distant ; le commit local porte, lui,
+    # l'arbitrage RD_1
+    seulement = {"emissions.csv": sortie / "emissions.csv"}
+
+    apercu = publication.apercu(seulement)
+
+    assert apercu["a_publier"] is True
+    assert apercu["en_attente"] == ["data/processed/arbitrages.csv"]
+    assert "en attente" in apercu["resume"]
+    assert publication.publier(seulement)["statut"] == "publiee"
+    assert "RD_1" in _distant(distant, "data/processed/arbitrages.csv")
+
+
 def test_l_apercu_compte_les_enregistrements_qui_ont_change_de_niveau(
     distant: Path, sortie: Path, tmp_path: Path
 ) -> None:
@@ -440,7 +472,7 @@ def test_un_refus_alerte_par_ntfy_et_se_logue_en_erreur(
     )
 
 
-def test_rien_a_publier_ne_notifie_pas_mais_se_logue(
+def test_rien_a_publier_notifie_en_priorite_basse_et_se_logue(
     distant: Path, sortie: Path, tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
     notifications = Notifications()
@@ -450,7 +482,9 @@ def test_rien_a_publier_ne_notifie_pas_mais_se_logue(
 
     publication.publier(_fichiers(sortie))
 
-    assert notifications.recues == []
+    (recue,) = notifications.recues
+    assert recue["titre"] == "rien à publier"
+    assert recue["priorite"] == 2
     assert any(
         "rien à publier" in m for m in messages(capfd.readouterr().err, "publication")
     )

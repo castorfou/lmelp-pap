@@ -1,4 +1,4 @@
-"""La publication de la liste sur GitHub (décision #60, ADR 0004).
+"""La publication de la liste sur GitHub (ADR 0004).
 
 L'appli du NAS garde un clone du dépôt (``Configuration.clone``). Publier y
 copie les CSV de la liste et les décisions exportées dans ``data/processed/``,
@@ -6,10 +6,11 @@ les commite (``chore(data): publication depuis le NAS``), fait un
 ``pull --rebase`` puis pousse sur ``main``, jamais en force. Le push déclenche
 ``docs.yml``, qui reconstruit la page GitHub Pages.
 
-Le clone reste d'une publication à l'autre, à l'état de la dernière : un
-conflit au rebase (quelqu'un a changé les mêmes lignes sur ``main``) refuse la
-publication, et la refuse encore tant que ``main`` n'est pas réglé à la main
-ou que le clone n'est pas supprimé (il se reclone alors depuis ``main``).
+Le clone reste d'une publication à l'autre. Un conflit au rebase (quelqu'un a
+changé les mêmes lignes sur ``main``) refuse la publication et remet le clone
+au distant : les CSV se régénèrent à chaque publication, la suivante repart
+de ``main``. Un push en échec (réseau, branche protégée) laisse, lui, le
+commit local, que la publication suivante pousse.
 """
 
 import base64
@@ -111,24 +112,22 @@ class Publication:
 
         Rend ``statut`` : ``publiee`` (avec ``commit``, le sha poussé),
         ``rien`` (aucun changement, aucun commit) ou ``refusee`` (avec
-        ``detail``). Une publication réussie ou refusée laisse sa ligne de log
-        et sa notification ntfy."""
+        ``detail``). Chaque issue laisse sa ligne de log et sa notification
+        ntfy (« rien à publier » en priorité basse)."""
         branche = self.configuration.branche
         with self._verrou:
             log.info(f"publication demandée vers {branche} : {resume or '-'}")
             try:
                 resultat = self._publier(fichiers, resume)
             except PublicationError as erreur:
-                log.error(f"publication refusée : {erreur}")
-                self._notifier(
-                    "publication refusée",
-                    str(erreur),
-                    priorite=4,
-                    tags=["warning"],
-                )
-                return {"statut": "refusee", "detail": str(erreur)}
+                return self.refuser(str(erreur))
         if resultat["statut"] == "rien":
             log.info("publication : rien à publier, aucun commit")
+            self._notifier(
+                "rien à publier",
+                f"aucun changement par rapport à {branche}, aucun commit",
+                priorite=2,
+            )
             return resultat
         court = resultat["commit"][:7]
         log.info(f"publication : {court} poussé sur {branche} ({resume or '-'})")
@@ -138,6 +137,13 @@ class Publication:
             tags=["books"],
         )
         return resultat
+
+    def refuser(self, raison: str) -> dict[str, Any]:
+        """Refuse la publication pour ``raison`` : ligne de log en erreur et
+        alerte ntfy ; rend le résultat ``refusee``."""
+        log.error(f"publication refusée : {raison}")
+        self._notifier("publication refusée", raison, priorite=4, tags=["warning"])
+        return {"statut": "refusee", "detail": raison}
 
     def apercu(
         self,
@@ -149,7 +155,9 @@ class Publication:
         ``modifiees``), ``arbitrages`` et ``qualifications`` (lignes
         ``ajoutes``, ``retires``), ``niveaux`` (par niveau, les
         ``enregistrements`` entrés dans un niveau depuis ``depuis``, la date
-        de la dernière publication), ``fichiers`` changés, ``a_publier`` et
+        de la dernière publication), ``fichiers`` changés, ``en_attente`` (les
+        autres fichiers que les commits locaux, laissés par un push en échec,
+        changent et que la publication pousserait), ``a_publier`` et
         ``resume`` en clair. Lève ``PublicationError`` si le distant est
         injoignable ou un fichier interdit."""
         with self._verrou:
@@ -158,6 +166,7 @@ class Publication:
             self._preparer_clone()
             distants = {nom: self._distant(nom) for nom in fichiers}
             depuis = self._derniere_publication()
+            en_attente = self._en_attente(fichiers)
         locaux = {
             nom: chemin.read_text(encoding="utf-8") for nom, chemin in fichiers.items()
         }
@@ -181,7 +190,8 @@ class Publication:
             "niveaux": dict(sorted(niveaux.items())),
             "depuis": depuis.isoformat() if depuis else None,
             "fichiers": changes,
-            "a_publier": bool(changes),
+            "en_attente": en_attente,
+            "a_publier": bool(changes or en_attente),
         }
         apercu["resume"] = _resume(apercu)
         return apercu
@@ -193,6 +203,16 @@ class Publication:
             self.configuration.clone,
         )
         return fait.stdout if fait.returncode == 0 else ""
+
+    def _en_attente(self, fichiers: Mapping[str, Path]) -> list[str]:
+        """Les chemins que les commits locaux du clone changent par rapport au
+        distant, hors ``fichiers`` (que la publication réécrit de toute
+        façon) : ce qu'un push en échec a laissé à pousser."""
+        reecrits = {f"{DOSSIER}/{nom}" for nom in fichiers}
+        changes = self._git_lignes(
+            "diff", "--name-only", f"origin/{self.configuration.branche}", "HEAD"
+        )
+        return sorted(set(changes) - reecrits)
 
     def _derniere_publication(self) -> datetime | None:
         """La date du dernier commit du distant sur ``data/processed/``."""
@@ -264,17 +284,19 @@ class Publication:
         self._git("fetch", "-q", "origin", self.configuration.branche)
 
     def _rebaser(self) -> None:
-        """``pull --rebase`` sur le distant ; un conflit l'abandonne et refuse
-        la publication."""
+        """``pull --rebase`` sur le distant ; un conflit l'abandonne, remet le
+        clone au distant (ses CSV se régénèrent à chaque publication : la
+        suivante repart de là) et refuse la publication."""
         branche = self.configuration.branche
         if self._git_ok("pull", "-q", "--rebase", "origin", branche):
             return
-        conflits = self._git_ok_sortie("diff", "--name-only", "--diff-filter=U")
+        conflits = self._git_lignes("diff", "--name-only", "--diff-filter=U")
         self._git_ok("rebase", "--abort")
+        self._git_ok("reset", "-q", "--hard", f"origin/{branche}")
         raise PublicationError(
             f"conflit au rebase sur {branche} : {', '.join(conflits) or '?'} "
-            "(rien n'est poussé ; régler main à la main, ou supprimer le clone "
-            f"{self.configuration.clone})"
+            "(rien n'est poussé ; le clone est remis au distant, la prochaine "
+            "publication repart de là)"
         )
 
     def _en_avance(self) -> bool:
@@ -291,7 +313,7 @@ class Publication:
         """Une commande git dans le clone ; vrai si elle réussit."""
         return self._executer(args, self.configuration.clone).returncode == 0
 
-    def _git_ok_sortie(self, *args: str) -> list[str]:
+    def _git_lignes(self, *args: str) -> list[str]:
         """Les lignes de sortie d'une commande git dans le clone."""
         return self._executer(args, self.configuration.clone).stdout.split()
 
@@ -377,7 +399,7 @@ def _change_depuis(enregistrement: Enregistrement, depuis: datetime | None) -> b
     )
 
 
-def _n(n: int, singulier: str, pluriel: str) -> str:
+def _accorder(n: int, singulier: str, pluriel: str) -> str:
     """« 1 arbitrage ajouté », « 2 arbitrages ajoutés »."""
     return f"{n} {singulier if n <= 1 else pluriel}"
 
@@ -388,7 +410,7 @@ def _resume(apercu: dict[str, Any]) -> str:
     e = apercu["emissions"]
     if n := sum(len(v) for v in e.values()):
         detail = ", ".join(
-            _n(len(e[cle]), mot, mot + "s")
+            _accorder(len(e[cle]), mot, mot + "s")
             for cle, mot in (
                 ("ajoutees", "ajoutée"),
                 ("retirees", "retirée"),
@@ -396,17 +418,22 @@ def _resume(apercu: dict[str, Any]) -> str:
             )
             if e[cle]
         )
-        morceaux.append(f"{_n(n, 'émission changée', 'émissions changées')} ({detail})")
+        morceaux.append(
+            f"{_accorder(n, 'émission changée', 'émissions changées')} ({detail})"
+        )
     for cle, nom in (("arbitrages", "arbitrage"), ("qualifications", "qualification")):
         d = apercu[cle]
         if d["ajoutes"]:
-            morceaux.append(_n(d["ajoutes"], f"{nom} ajouté", f"{nom}s ajoutés"))
+            morceaux.append(_accorder(d["ajoutes"], f"{nom} ajouté", f"{nom}s ajoutés"))
         if d["retires"]:
-            morceaux.append(_n(d["retires"], f"{nom} retiré", f"{nom}s retirés"))
+            morceaux.append(_accorder(d["retires"], f"{nom} retiré", f"{nom}s retirés"))
     if n := sum(apercu["niveaux"].values()):
         detail = ", ".join(f"{k} {v}" for k, v in apercu["niveaux"].items())
-        quoi = _n(n, "enregistrement a", "enregistrements ont")
+        quoi = _accorder(n, "enregistrement a", "enregistrements ont")
         morceaux.append(f"{quoi} changé de niveau ({detail})")
+    if apercu["en_attente"]:
+        noms = ", ".join(c.rsplit("/", 1)[-1] for c in apercu["en_attente"])
+        morceaux.append(f"commit local en attente de push ({noms})")
     if morceaux:
         return ", ".join(morceaux)
     if apercu["fichiers"]:
