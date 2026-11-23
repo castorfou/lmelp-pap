@@ -29,9 +29,18 @@ API :
 - ``POST /api/qualifications`` : qualifie l'enregistrement rapatrié d'une
   émission (``emission_id``, ``verdict`` : ``favorable`` ou ``ecarte``,
   ``motif``, obligatoire pour un écart) ;
-- ``POST /api/localisations`` : ajoute à une émission un enregistrement
-  localisé saisi à la main (``emission_id``, ``source`` en texte libre,
-  obligatoire, ``note``) ;
+- ``POST /api/localisations`` : ajoute à une émission (``emission_id``) ou à
+  plusieurs (``emissions``) un enregistrement localisé saisi à la main
+  (``source`` en texte libre, obligatoire, ``note``, ``premier_echange``
+  facultatif : ``canal``, ``texte``) ;
+- ``POST /api/echanges`` : note un échange au journal d'une piste
+  (``emission_id``, ``enregistrement``, ``date``, ``canal``,
+  ``interlocuteur``, ``texte`` obligatoire, ``relance``) ;
+- ``POST /api/urls`` : ajoute à une émission un enregistrement téléchargeable
+  (``emission_id``, ``url`` http(s), ``note``) ;
+- ``POST /api/fichiers?emission_id=…&nom=…&provenance=…&datation=…`` : le
+  corps est un fichier audio, écrit dans le dossier audio ; l'enregistrement
+  (celui de ``piste``, sinon un nouveau) passe à rapatrié ;
 - ``GET /api/radiofrance/<emission_id>`` : la diffusion de l'émission dans
   l'Open API Radio France, lue à la demande (module ``radiofrance_api``) :
   ``statut`` (``trouvee``, ``introuvable``, ``sans_cle``, ``erreur`` avec son
@@ -82,7 +91,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from lmelp_pap import audio
 from lmelp_pap.arbitrages import (
@@ -112,13 +121,20 @@ from lmelp_pap.liste import (
 from lmelp_pap.maturite import (
     ESSAIS,
     Depot,
+    Echange,
+    EchangeError,
     Enregistrement,
+    FichierError,
+    Lisible,
     PisteError,
     QualificationError,
     RapatriementError,
     RapatriementInterrompuError,
     Resultat,
+    UrlError,
     Verification,
+    dernier_echange,
+    echange,
     ecrire_qualifications,
     integraux,
     localisations_ina,
@@ -126,7 +142,11 @@ from lmelp_pap.maturite import (
     piste,
     qualifier,
     rapatrier,
+    relance_emission,
+    relance_piste,
     retenu,
+    televerser,
+    url_saisie,
     verification_due,
     verifier,
 )
@@ -334,6 +354,7 @@ class Atelier:
         self.audios = audios or AUDIOS
         self.audios_lmelp = audios_lmelp or AUDIOS_LMELP
         self._verrou_remise = threading.Lock()  # une mise à disposition à la fois
+        self._verrou_fichiers = threading.Lock()  # un téléversement à la fois
         # l'API Radio France, avec son cache en mémoire partagé par l'écoute
         # et la mise à disposition
         self._radiofrance = LecteurDiffusions(session)
@@ -479,27 +500,185 @@ class Atelier:
         return creations
 
     def ajouter_localise(self, demande: dict[str, Any]) -> dict[str, Any]:
-        """Ajoute à une émission un enregistrement localisé saisi à la main
-        (``emission_id``, ``source`` en texte libre, ``note``)."""
+        """Ajoute à une ou plusieurs émissions (``emission_id``, ou la liste
+        ``emissions``) un enregistrement localisé saisi à la main : ``source``
+        (le détenteur, en texte libre), ``note``, et ``premier_echange``
+        facultatif (``canal``, ``texte``), noté aujourd'hui avec le détenteur
+        pour interlocuteur. Tout est vérifié avant d'écrire : un refus ne
+        localise aucune émission."""
         depot = self._depot()
-        emission_id = demande.get("emission_id")
+        ids = demande.get("emissions")
+        if ids is None:
+            ids = [demande.get("emission_id")]
+        cible = ", ".join(str(i) for i in ids) if isinstance(ids, list) else "?"
         source = str(demande.get("source") or "")
+        premier = demande.get("premier_echange")
+        maintenant = datetime.now(UTC)
+        try:
+            if not isinstance(ids, list) or not ids:
+                raise DemandeInvalideError(
+                    "« emissions » : une liste non vide attendue"
+                )
+            if premier is not None and not isinstance(premier, dict):
+                raise DemandeInvalideError("« premier_echange » : un objet attendu")
+            with self._verrou:
+                faits = []
+                for emission_id in ids:
+                    emission = self._emission(emission_id)
+                    localise = piste(
+                        emission.id, source, str(demande.get("note") or ""), maintenant
+                    )
+                    premier_echange = (
+                        echange(
+                            localise,
+                            _aujourd_hui(),
+                            str(premier.get("canal") or ""),
+                            localise.source,
+                            str(premier.get("texte") or ""),
+                            None,
+                            maintenant,
+                        )
+                        if premier is not None
+                        else None
+                    )
+                    faits.append((localise, premier_echange))
+                for localise, premier_echange in faits:
+                    depot.enregistrer(localise)
+                    if premier_echange:
+                        depot.ajouter_echange(premier_echange)
+        except (DemandeInvalideError, PisteError, EchangeError) as erreur:
+            log.info(f"piste refusée {cible} : {erreur}")
+            raise DemandeInvalideError(str(erreur)) from erreur
+        for localise, premier_echange in faits:
+            log.info(
+                f"enregistrement localisé ajouté : {localise.emission_id} "
+                f"(source « {localise.source} »"
+                f"{', premier échange ' + premier_echange.canal if premier_echange else ''})"
+            )
+        if len(faits) > 1:
+            log.info(
+                f"piste en lot : {len(faits)} émissions localisées "
+                f"(source « {faits[0][0].source} »)"
+            )
+        return self.donnees()
+
+    def noter_echange(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Note un échange au journal d'un enregistrement localisé
+        (``emission_id``, ``enregistrement`` : l'identifiant de la piste,
+        facultatif si l'émission n'en a qu'une ; ``date`` AAAA-MM-JJ,
+        aujourd'hui par défaut ; ``canal``, ``interlocuteur``, ``texte``
+        obligatoire, ``relance`` facultative). Ni la maturité ni la date
+        d'entrée ne changent."""
+        depot = self._depot()
+        emission_id = str(demande.get("emission_id") or "?")
         try:
             with self._verrou:
-                emission = self._emission(emission_id)
-                localise = piste(
-                    emission.id,
-                    source,
-                    str(demande.get("note") or ""),
-                    datetime.now(UTC),
+                emission = self._emission(demande.get("emission_id"))
+            pistes = [
+                e
+                for e in depot.tous()
+                if e.emission_id == emission.id and e.niveau == "localise"
+            ]
+            voulue = demande.get("enregistrement")
+            if voulue:
+                pistes = [e for e in pistes if e.url == voulue]
+                if not pistes:
+                    raise DemandeInvalideError(
+                        f"{voulue} : pas un enregistrement localisé de {emission.id}"
+                    )
+            elif not pistes:
+                raise DemandeInvalideError(
+                    f"{emission.id} : aucun enregistrement localisé"
                 )
-                depot.enregistrer(localise)
-        except (DemandeInvalideError, PisteError) as erreur:
-            log.info(f"piste refusée {emission_id or '?'} : {erreur}")
+            elif len(pistes) > 1:
+                raise DemandeInvalideError(
+                    f"{emission.id} a {len(pistes)} pistes : « enregistrement » "
+                    "dit laquelle"
+                )
+            choisie = pistes[0]
+            fait = echange(
+                choisie,
+                _jour(demande.get("date"), "date") or _aujourd_hui(),
+                str(demande.get("canal") or ""),
+                str(demande.get("interlocuteur") or ""),
+                str(demande.get("texte") or ""),
+                _jour(demande.get("relance"), "relance"),
+                datetime.now(UTC),
+            )
+            depot.ajouter_echange(fait)
+        except (DemandeInvalideError, EchangeError) as erreur:
+            log.info(f"échange refusé {emission_id} : {erreur}")
             raise DemandeInvalideError(str(erreur)) from erreur
         log.info(
-            f"enregistrement localisé ajouté : {localise.emission_id} "
-            f"(source « {localise.source} »)"
+            f"échange noté : {fait.emission_id}, piste {fait.enregistrement} "
+            f"({choisie.source}), {fait.canal}"
+            + (f", relance le {fait.relance.isoformat()}" if fait.relance else "")
+        )
+        return self.donnees()
+
+    def ajouter_url(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Ajoute à une émission un enregistrement téléchargeable saisi à la
+        main (``emission_id``, ``url`` http(s) obligatoire, ``note``) : il
+        part avec le prochain lot de téléchargement."""
+        depot = self._depot()
+        emission_id = str(demande.get("emission_id") or "?")
+        try:
+            with self._verrou:
+                emission = self._emission(demande.get("emission_id"))
+            fait = url_saisie(
+                emission.id,
+                str(demande.get("url") or ""),
+                str(demande.get("note") or ""),
+                datetime.now(UTC),
+            )
+            if any(e.url == fait.url for e in depot.tous()):
+                raise DemandeInvalideError(f"{fait.url} : URL déjà connue")
+            depot.enregistrer(fait)
+        except (DemandeInvalideError, UrlError) as erreur:
+            log.info(f"URL refusée {emission_id} : {erreur}")
+            raise DemandeInvalideError(str(erreur)) from erreur
+        log.info(f"URL enregistrée : {fait.emission_id} {fait.url} → téléchargeable")
+        return self.donnees()
+
+    def televerser(
+        self, parametres: dict[str, str], flux: Lisible, taille: int
+    ) -> dict[str, Any]:
+        """Écrit un fichier audio téléversé dans le dossier audio
+        (``<année>/<nom>``) et rend son enregistrement rapatrié : celui de la
+        piste ``piste`` s'il vient d'une piste, sinon un nouveau.
+        ``parametres`` : ``emission_id``, ``nom``, ``provenance``
+        (obligatoire), ``datation`` (``DATATIONS``), ``note``, ``piste``."""
+        depot = self._depot()
+        emission_id = parametres.get("emission_id") or "?"
+        try:
+            with self._verrou:
+                emission = self._emission(parametres.get("emission_id"))
+            origine = None
+            if voulue := parametres.get("piste"):
+                origine = next((e for e in depot.tous() if e.url == voulue), None)
+                if origine is None:
+                    raise DemandeInvalideError(f"{voulue} : piste inconnue")
+            with self._verrou_fichiers:
+                fait = televerser(
+                    emission.id,
+                    parametres.get("nom", ""),
+                    flux,
+                    taille,
+                    self.audios,
+                    parametres.get("provenance", ""),
+                    parametres.get("datation", ""),
+                    parametres.get("note", ""),
+                    datetime.now(UTC),
+                    origine,
+                )
+            depot.enregistrer(fait)
+        except (DemandeInvalideError, FichierError) as erreur:
+            log.info(f"fichier refusé {emission_id} : {erreur}")
+            raise DemandeInvalideError(str(erreur)) from erreur
+        log.info(
+            f"fichier téléversé : {fait.emission_id} {fait.fichier}, "
+            f"{fait.taille} octets (provenance « {fait.provenance} »"
+            f"{', piste ' + fait.url if origine else ''})"
         )
         return self.donnees()
 
@@ -1053,7 +1232,20 @@ class Atelier:
         }
         if self.depot is not None:
             maturites = Maturites(self.depot)
+            journal: dict[str, list[Echange]] = {}
+            for x in self.depot.echanges():
+                journal.setdefault(x.enregistrement, []).append(x)
             for e in emissions:
+                localises = [x for x in maturites.de(e["id"]) if x.niveau == "localise"]
+                echanges = [x for loc in localises for x in journal.get(loc.url, [])]
+                relance = relance_emission(echanges)
+                e["relance"] = relance.isoformat() if relance else None
+                recent = dernier_echange(echanges)
+                e["dernier_echange"] = (
+                    {"date": recent.date.isoformat(), "canal": recent.canal}
+                    if recent
+                    else None
+                )
                 plus_avance = meilleur(maturites.de(e["id"]))
                 e["dans_lmelp"] = maturites.dans_lmelp(self._emissions[e["id"]])
                 integration = maturites.integration_lmelp(e["id"])
@@ -1061,7 +1253,7 @@ class Atelier:
                     integration.isoformat() if integration else None
                 )
                 e["maturite"] = plus_avance.niveau if plus_avance else None
-                e["localisations"] = _localisations(maturites.de(e["id"]))
+                e["localisations"] = _localisations(localises, journal)
                 echecs = [x.echec for x in maturites.de(e["id"]) if x.echec]
                 dernier = max(echecs, key=lambda v: v.date, default=None)
                 e["echec_rapatriement"] = (
@@ -1081,6 +1273,15 @@ class Atelier:
                     if plus_avance and plus_avance.niveau in plus_avance.entrees
                     else None
                 )
+            # les détenteurs déjà saisis, proposés à la saisie d'une piste
+            donnees["detenteurs"] = sorted(
+                {
+                    x.source
+                    for liste in maturites.par_emission.values()
+                    for x in liste
+                    if x.url.startswith("piste:")
+                }
+            )
             donnees["maturite_active"] = True
         return donnees
 
@@ -1149,23 +1350,59 @@ class Atelier:
         }
 
 
-def _localisations(enregistrements: list[Enregistrement]) -> list[dict[str, Any]]:
+def _localisations(
+    localises: list[Enregistrement], journal: dict[str, list[Echange]]
+) -> list[dict[str, Any]]:
     """Les enregistrements localisés d'une émission, du plus ancien au plus
-    récent : leur source, leur note, l'URL de leur notice INA et leur date
-    d'entrée dans le niveau (toujours notée en y entrant)."""
-    localises = sorted(
-        (x for x in enregistrements if x.niveau == "localise"),
-        key=lambda x: x.entrees["localise"],
-    )
+    récent : leur identifiant, leur source, leur note, l'URL de leur notice
+    INA, leur date d'entrée dans le niveau (toujours notée en y entrant), leur
+    relance et leur journal des échanges, du plus récent au plus ancien."""
     return [
         {
+            "id": x.url,
             "source": x.source,
             "note": x.note,
             "notice": x.url if x.url.startswith("http") else None,
             "depuis": x.entrees["localise"].isoformat(),
+            "relance": _iso_jour(relance_piste(journal.get(x.url, []))),
+            "journal": [
+                {
+                    "date": j.date.isoformat(),
+                    "canal": j.canal,
+                    "interlocuteur": j.interlocuteur,
+                    "texte": j.texte,
+                    "relance": _iso_jour(j.relance),
+                }
+                for j in sorted(
+                    journal.get(x.url, []),
+                    key=lambda j: (j.date, j.note_le),
+                    reverse=True,
+                )
+            ],
         }
-        for x in localises
+        for x in sorted(localises, key=lambda x: x.entrees["localise"])
     ]
+
+
+def _iso_jour(jour: date | None) -> str | None:
+    return jour.isoformat() if jour else None
+
+
+def _aujourd_hui() -> date:
+    """Le jour local du serveur."""
+    return datetime.now().astimezone().date()
+
+
+def _jour(texte: object, champ: str) -> date | None:
+    """Un jour AAAA-MM-JJ d'une demande, ou ``None`` s'il est absent."""
+    if texte in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(texte))
+    except ValueError:
+        raise DemandeInvalideError(
+            f"{champ} invalide : {texte!r} (attendu : AAAA-MM-JJ)"
+        ) from None
 
 
 def _episode(document: dict[str, Any]) -> str:
@@ -1181,7 +1418,27 @@ def _iso(quand: datetime) -> str:
     return (quand if quand.tzinfo else quand.replace(tzinfo=UTC)).isoformat()
 
 
-# Les routes POST : l'action de l'atelier, appelée avec le corps JSON.
+class _Lecture:
+    """Le corps d'une requête, lu au plus ``taille`` octets."""
+
+    def __init__(self, flux: Any, taille: int):
+        self._flux = flux
+        self.reste = taille
+
+    def read(self, n: int = -1) -> bytes:
+        n = self.reste if n < 0 else min(n, self.reste)
+        morceau: bytes = self._flux.read(n) if n else b""
+        self.reste -= len(morceau)
+        return morceau
+
+    def vider(self) -> None:
+        """Lit et jette ce qui reste du corps."""
+        while self.reste and self.read(1 << 20):
+            pass
+
+
+# Les routes POST : l'action de l'atelier, appelée avec le corps JSON
+# (``/api/fichiers`` à part : le corps est le fichier).
 ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/arbitrages": Atelier.arbitrer,
     "/api/annulations": Atelier.annuler,
@@ -1190,6 +1447,8 @@ ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/rapatriements/arret": lambda atelier, _: atelier.arreter_rapatriement(),
     "/api/qualifications": Atelier.qualifier,
     "/api/localisations": Atelier.ajouter_localise,
+    "/api/echanges": Atelier.noter_echange,
+    "/api/urls": Atelier.ajouter_url,
     "/api/remises": Atelier.mettre_a_disposition,
     "/api/remises/annulation": Atelier.annuler_mise_a_disposition,
 }
@@ -1323,12 +1582,16 @@ def creer_serveur(
         def _post(self) -> None:
             """Une action de ``ACTIONS_POST`` sur le corps JSON de la requête ;
             chaque erreur connue donne son statut (``ERREURS_POST``)."""
+            chemin, _, requete = self.path.partition("?")
             action = ACTIONS_POST.get(self.path)
-            if action is None:
+            if action is None and chemin != "/api/fichiers":
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
                 return
             try:
-                self._json(action(atelier, self._demande()))
+                if action is None:
+                    self._json(self._fichier(dict(parse_qsl(requete))))
+                else:
+                    self._json(action(atelier, self._demande()))
             except tuple(ERREURS_POST) as e:
                 statut = next(s for t, s in ERREURS_POST.items() if isinstance(e, t))
                 log_http.info(f"POST {self.path} refusée ({statut.value}) : {e}")
@@ -1343,6 +1606,17 @@ def creer_serveur(
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
                 return
             audio.servir(self, chemin)
+
+        def _fichier(self, parametres: dict[str, str]) -> dict[str, Any]:
+            """Un fichier audio téléversé : le corps brut de la requête, ses
+            champs dans la query string. Un refus lit quand même le reste du
+            corps, pour que le navigateur reçoive la réponse."""
+            taille = int(self.headers.get("Content-Length") or 0)
+            flux = _Lecture(self.rfile, taille)
+            try:
+                return atelier.televerser(parametres, flux, taille)
+            finally:
+                flux.vider()
 
         def _demande(self) -> dict[str, Any]:
             """Le corps JSON de la requête, un objet."""

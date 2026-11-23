@@ -5,8 +5,9 @@ Le réseau est simulé par une session factice, Mongo par mongomock.
 """
 
 import hashlib
+import io
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import mongomock
@@ -15,17 +16,23 @@ import requests
 
 from lmelp_pap import liste
 from lmelp_pap.maturite import (
+    CANAUX,
     NIVEAUX,
     Depot,
+    Echange,
+    EchangeError,
     Enregistrement,
+    FichierError,
     PisteError,
     Qualification,
     QualificationError,
     RapatriementError,
     RapatriementInterrompuError,
+    UrlError,
     Verification,
     appliquer,
     classer,
+    echange,
     ecrire_qualifications,
     integraux,
     localisations_ina,
@@ -34,7 +41,11 @@ from lmelp_pap.maturite import (
     piste,
     qualifier,
     rapatrier,
+    relance_emission,
+    relance_piste,
     retenu,
+    televerser,
+    url_saisie,
     verification_due,
     verifier,
 )
@@ -764,3 +775,220 @@ def test_la_localisation_ne_touche_pas_une_piste(depot: Depot) -> None:
     depot.ajouter_absents(localisations_ina([_emission("1956-01-22", NOTICE_PH)], HIER))
     assert e in depot.tous()
     assert len(depot.tous()) == 2
+
+
+# ---------- Journal des échanges d'un enregistrement localisé ----------
+
+
+def test_un_echange_se_note_sur_une_piste() -> None:
+    p = piste("1978-04-02", "Jean D.", "", HIER)
+    x = echange(
+        p,
+        date(2026, 11, 21),
+        "courriel",
+        " Jean ",
+        " relancé ",
+        date(2026, 12, 1),
+        AUJOURDHUI,
+    )
+    assert (x.enregistrement, x.emission_id) == (p.url, "1978-04-02")
+    assert (x.date, x.canal, x.interlocuteur, x.texte) == (
+        date(2026, 11, 21),
+        "courriel",
+        "Jean",
+        "relancé",
+    )
+    assert x.relance == date(2026, 12, 1)
+    assert x.note_le == AUJOURDHUI
+
+
+@pytest.mark.parametrize(
+    ("canal", "texte"), [("courriel", "   "), ("pigeon", "relancé"), ("", "relancé")]
+)
+def test_un_echange_demande_un_texte_et_un_canal_connu(canal: str, texte: str) -> None:
+    p = piste("1978-04-02", "Jean D.", "", HIER)
+    with pytest.raises(EchangeError):
+        echange(p, date(2026, 11, 21), canal, "", texte, None, AUJOURDHUI)
+
+
+def test_un_echange_ne_se_note_que_sur_un_enregistrement_localise() -> None:
+    with pytest.raises(EchangeError):
+        echange(
+            enregistrement("rapatrie"),
+            date(2026, 11, 21),
+            "courriel",
+            "",
+            "x",
+            None,
+            AUJOURDHUI,
+        )
+
+
+def test_les_canaux_d_un_echange() -> None:
+    assert CANAUX == (
+        "courriel",
+        "téléphone",
+        "forum",
+        "courrier",
+        "sur place",
+        "autre",
+    )
+
+
+def _echange(p: Enregistrement, jour: int, relance: date | None) -> Echange:
+    return echange(
+        p, date(2026, 11, jour), "courriel", "", f"le {jour}", relance, AUJOURDHUI
+    )
+
+
+def test_la_relance_d_une_piste_est_celle_de_son_dernier_echange() -> None:
+    p = piste("1978-04-02", "Jean D.", "", HIER)
+    premier = _echange(p, 3, date(2026, 11, 10))
+    dernier = _echange(p, 15, None)
+    assert relance_piste([premier]) == date(2026, 11, 10)
+    assert relance_piste([dernier, premier]) is None
+    assert relance_piste([]) is None
+
+
+def test_la_relance_d_une_emission_est_la_plus_proche_de_ses_pistes() -> None:
+    a = piste("1978-04-02", "Jean D.", "", HIER)
+    b = piste("1978-04-02", "Paul M.", "", HIER)
+    c = piste("1978-04-02", "Luc", "", HIER)
+    journal = [
+        _echange(a, 3, date(2026, 12, 20)),
+        _echange(b, 4, date(2026, 12, 5)),
+        _echange(c, 5, None),
+    ]
+    assert relance_emission(journal) == date(2026, 12, 5)
+    assert relance_emission([]) is None
+
+
+def test_le_depot_garde_le_journal_d_une_piste(depot: Depot) -> None:
+    p = piste("1978-04-02", "Jean D.", "", HIER)
+    depot.enregistrer(p)
+    x = _echange(p, 3, date(2026, 12, 20))
+    depot.ajouter_echange(x)
+    assert depot.echanges() == [x]
+    # noter un échange ne touche pas l'enregistrement
+    assert depot.tous() == [p]
+
+
+# ---------- Les sorties d'une émission sans enregistrement ou localisée ----------
+
+
+def test_une_url_saisie_cree_un_enregistrement_telechargeable() -> None:
+    e = url_saisie("1978-04-02", " https://exemple.org/masque.mp3 ", " forum ", HIER)
+    assert e.url == "https://exemple.org/masque.mp3"
+    assert (e.emission_id, e.niveau, e.note) == (
+        "1978-04-02",
+        "telechargeable",
+        "forum",
+    )
+    assert e.entrees == {"telechargeable": HIER}
+    assert retenu([e]) == e  # il part avec le prochain lot de téléchargement
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["", "ftp://exemple.org/a.mp3", "exemple.org/a.mp3", "https://", "https://a b"],
+)
+def test_une_url_saisie_doit_etre_http(url: str) -> None:
+    with pytest.raises(UrlError):
+        url_saisie("1978-04-02", url, "", HIER)
+
+
+def test_une_url_avec_parametres_se_rapatrie_sous_son_nom_de_fichier(
+    tmp_path: Any,
+) -> None:
+    e = url_saisie("1978-04-02", "https://exemple.org/dl/masque.mp3?jeton=1", "", HIER)
+    fait = rapatrier(e, tmp_path, SessionFlux(), AUJOURDHUI)
+    assert fait.fichier == "1978/masque.mp3"
+
+
+def _televerser(tmp_path: Any, **options: Any) -> Enregistrement:
+    contenu = options.pop("contenu", SON)
+    reglages: dict[str, Any] = {
+        "emission_id": "1978-04-02",
+        "nom": "masque 1978.mp3",
+        "flux": io.BytesIO(contenu),
+        "taille": len(contenu),
+        "dossier": tmp_path,
+        "provenance": "Jean D., cassette numérisée",
+        "datation": "etiquette",
+        "note": "face B",
+        "maintenant": AUJOURDHUI,
+        **options,
+    }
+    return televerser(**reglages)
+
+
+def test_un_fichier_televerse_cree_un_enregistrement_rapatrie(tmp_path: Any) -> None:
+    e = _televerser(tmp_path)
+    assert (e.niveau, e.entrees) == ("rapatrie", {"rapatrie": AUJOURDHUI})
+    assert e.fichier == "1978/masque 1978.mp3"
+    assert (tmp_path / "1978" / "masque 1978.mp3").read_bytes() == SON
+    assert (e.sha256, e.taille) == (hashlib.sha256(SON).hexdigest(), len(SON))
+    assert (e.source, e.provenance, e.datation, e.note) == (
+        "Jean D., cassette numérisée",
+        "Jean D., cassette numérisée",
+        "etiquette",
+        "face B",
+    )
+    assert e.url.startswith("fichier:")
+
+
+def test_un_fichier_venu_d_une_piste_rapatrie_cette_piste(tmp_path: Any) -> None:
+    p = piste("1978-04-02", "Jean D.", "cassettes", HIER)
+    e = _televerser(tmp_path, piste=p)
+    assert (e.url, e.source, e.niveau) == (p.url, "Jean D.", "rapatrie")
+    assert e.entrees == {"localise": HIER, "rapatrie": AUJOURDHUI}
+
+
+def test_un_fichier_ne_rapatrie_pas_la_piste_d_une_autre_emission(
+    tmp_path: Any,
+) -> None:
+    p = piste("1980-01-06", "Jean D.", "", HIER)
+    with pytest.raises(FichierError):
+        _televerser(tmp_path, piste=p)
+
+
+def test_un_nom_de_fichier_deja_pris_est_refuse_sans_rien_ecraser(
+    tmp_path: Any,
+) -> None:
+    (tmp_path / "1978").mkdir()
+    (tmp_path / "1978" / "masque 1978.mp3").write_bytes(b"ancien")
+    with pytest.raises(FichierError, match="déjà"):
+        _televerser(tmp_path)
+    assert (tmp_path / "1978" / "masque 1978.mp3").read_bytes() == b"ancien"
+    assert sorted(p.name for p in (tmp_path / "1978").iterdir()) == ["masque 1978.mp3"]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"provenance": "  "},
+        {"datation": "devinée"},
+        {"nom": "notes.txt"},
+        {"nom": "../1979/a.mp3"},
+        {"nom": ""},
+        {"contenu": b""},
+    ],
+)
+def test_un_fichier_sans_provenance_ou_mal_nomme_est_refuse(
+    tmp_path: Any, options: dict[str, Any]
+) -> None:
+    with pytest.raises(FichierError):
+        _televerser(tmp_path, **options)
+    assert not (tmp_path / "1978").exists()
+
+
+def test_un_fichier_tronque_ne_laisse_rien(tmp_path: Any) -> None:
+    with pytest.raises(FichierError):
+        _televerser(tmp_path, flux=io.BytesIO(SON[:10]))
+    assert not (tmp_path / "1978").exists()
+
+
+def test_le_depot_garde_la_provenance_d_un_fichier(tmp_path: Any, depot: Depot) -> None:
+    e = _televerser(tmp_path)
+    depot.enregistrer(e)
+    assert depot.tous() == [e]

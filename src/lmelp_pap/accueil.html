@@ -120,6 +120,32 @@
   dialog.boite .champ { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; font-size: 13px; }
   dialog.boite .champ input, dialog.boite .champ textarea { font: inherit; padding: 6px 8px; border: 1px solid var(--trait); border-radius: 6px; background: var(--fond, transparent); color: var(--texte); }
   dialog.boite .attente { display: flex; gap: 10px; align-items: center; }
+  /* Ligne dépliée de « sans enregistrement » et « localisé » : ce qu'on sait
+     ou le journal à gauche, les trois sorties en onglets à droite */
+  tr.deplie > td { background: var(--ligne); cursor: default; }
+  tr.deplie .deux { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { tr.deplie .deux { grid-template-columns: 1fr; } }
+  tr.deplie h4 { margin: 2px 0 6px; font-size: 13px; }
+  .journal { list-style: none; margin: 4px 0 10px; padding: 0; border-left: 2px solid var(--trait); }
+  .journal li { padding: 3px 0 5px 10px; position: relative; }
+  .journal li::before { content: ""; position: absolute; left: -5px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--localise); }
+  .journal .meta { color: var(--doux); font-size: 12px; }
+  .journal .texte { white-space: pre-wrap; }
+  .relance { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .relance.due { color: #b3261e; } .relance.bientot { color: #9a6700; } .relance.loin { color: var(--doux); font-weight: 400; }
+  .formulaire { display: grid; gap: 6px; font-size: 13px; }
+  .formulaire label { display: grid; gap: 2px; }
+  .formulaire label.case { display: flex; gap: 6px; align-items: center; }
+  .formulaire .ligne { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+  .formulaire .ligne .large { flex: 1; min-width: 160px; }
+  .formulaire .ligne button.primaire { margin-left: auto; }
+  .formulaire input:not([type=checkbox]), .formulaire textarea, .formulaire select { font: inherit; padding: 4px 8px; border: 1px solid var(--trait); border-radius: 6px; background: var(--carte); color: var(--texte); }
+  .formulaire .oblig::after { content: " *"; color: #b3261e; }
+  .formulaire .raccourci { padding: 1px 8px; font-size: 12px; }
+  .onglets { display: inline-flex; border: 1px solid var(--trait); border-radius: 6px; overflow: hidden; margin-bottom: 6px; }
+  .onglets button { border: 0; border-radius: 0; border-right: 1px solid var(--trait); }
+  .onglets button:last-child { border-right: 0; }
+  .onglets button[aria-selected="true"] { background: var(--entete); color: var(--entete-texte); }
   .rouet { flex: none; width: 18px; height: 18px; border: 2px solid var(--trait); border-top-color: var(--qualifie); border-radius: 50%; animation: tourner 1s linear infinite; }
   @keyframes tourner { to { transform: rotate(360deg); } }
 </style>
@@ -145,8 +171,6 @@ const ETAT = Object.fromEntries(ETATS.map(e => [e.cle, e]));
 // Les actions disponibles, par état : { libelle, lot, executer(emissions) }. La
 // colonne Action et les boutons de lot n'apparaissent que pour un état qui en a une.
 const ACTIONS = {
-  // une piste (un passionné, les archives de Radio France…) : source libre et note
-  sans: { libelle: "Ajouter un enregistrement localisé", lot: false, executer: ids => saisirPiste(ids[0]) },
   telechargeable: { libelle: "Télécharger", lot: true, executer: ids => lancerRapatriement(ids) },
   // ouvre (ou referme) le lecteur sous la ligne de l'émission
   rapatrie: { libelle: "Écouter et qualifier", lot: false, executer: ids => { vue.ecoute = vue.ecoute === ids[0] ? null : ids[0]; rendre(); } },
@@ -323,37 +347,182 @@ async function qualifier(id, demande) {
   }
 }
 
-// ---------- Piste : un enregistrement localisé saisi à la main ----------
-// POST /api/localisations ; la source (texte libre) est obligatoire.
-function saisirPiste(id) {
+// ---------- Sans enregistrement et localisé : la ligne dépliée ----------
+// Un clic sur une ligne la déplie en pleine largeur juste en dessous (un second
+// clic la referme, une seule à la fois). À gauche : le journal des échanges
+// (localisé) ou ce qu'on sait (sans enregistrement) ; à droite, « Faire
+// avancer » : trois onglets, piste (→ localisé), URL (→ téléchargeable),
+// fichier (→ rapatrié). Écritures : POST /api/echanges, /api/localisations,
+// /api/urls et /api/fichiers (le corps est le fichier, les champs dans l'adresse).
+const CANAUX = ["courriel", "téléphone", "forum", "courrier", "sur place", "autre"];
+const DATATIONS = [["etiquette", "étiquette de la cassette ou du fichier"], ["antenne", "annonce à l'antenne"], ["contenu", "déduite du contenu"], ["inconnue", "inconnue"]];
+let DETENTEURS = [];
+// le jour local, AAAA-MM-JJ, et l'écart en jours d'un jour à aujourd'hui
+const jourLocal = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const ecartJours = j => Math.round((Date.parse(j) - Date.parse(jourLocal())) / JOUR_MS);
+const dansJours = n => jourLocal(new Date(Date.now() + n * JOUR_MS));
+const jourFr = j => new Date(j + "T12:00:00").toLocaleDateString("fr-FR");
+// La relance : rouge si elle est due, ambre dans les 7 jours, gris au-delà.
+function relanceHtml(j) {
+  if (!j) return `<span class="doux">—</span>`;
+  const n = ecartJours(j), classe = n <= 0 ? "due" : n <= 7 ? "bientot" : "loin";
+  return `<span class="relance ${classe}" title="relance prévue le ${esc(jourFr(j))}">${n < 0 ? `due depuis ${-n} j` : n === 0 ? "aujourd'hui" : `dans ${n} j`}</span>`;
+}
+const dernierHtml = e => e.dernier ? `${Math.max(0, -ecartJours(e.dernier.date))} j <span class="doux">· ${esc(e.dernier.canal)}</span>` : `<span class="doux">aucun</span>`;
+const options = (liste, choisie) => liste.map(([v, t]) => `<option value="${esc(v)}"${v === choisie ? " selected" : ""}>${esc(t)}</option>`).join("");
+const canaux = () => options(CANAUX.map(c => [c, c]));
+let numeroListe = 0;
+
+function journalHtml(e) {
+  const plusieurs = e.localisations.length > 1;
+  const entrees = e.localisations.flatMap(l => (l.journal || []).map(x => ({ ...x, piste: l.source })))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  if (!entrees.length) return `<p class="doux">Aucun échange noté : l'ancienneté se compte depuis l'entrée dans l'état.</p>`;
+  return `<ul class="journal">${entrees.map(x => `<li><div class="meta">${esc(jourFr(x.date))} · ${esc(x.canal)}${x.interlocuteur ? ` · ${esc(x.interlocuteur)}` : ""}${plusieurs ? ` · piste ${esc(x.piste)}` : ""}${x.relance ? ` · relance ${relanceHtml(x.relance)}` : ""}</div><div class="texte">${esc(x.texte)}</div></li>`).join("")}</ul>`;
+}
+function ceQuOnSait(e) {
+  const lignes = e.attestations.map(a => `<li>${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${esc(a.source)}</a>` : esc(a.source)}${a.titre ? ` <span class="doux">· ${esc(a.titre)}</span>` : ""}</li>`).join("");
+  return `<h4>Ce qu'on sait</h4><ul class="sources">${lignes}</ul><p class="doux">Aucun enregistrement connu.</p>`;
+}
+
+// Les formulaires : du HTML, puis leur branchement sur le conteneur.
+function formEchange(e) {
+  const pistes = e.localisations;
+  return `<div class="formulaire" data-form="echange">
+    <div class="ligne"><label>Date<input type="date" name="date" value="${jourLocal()}"></label>
+      <label>Canal<select name="canal">${canaux()}</select></label>
+      ${pistes.length > 1 ? `<label>Piste<select name="piste">${options(pistes.map(l => [l.id, l.source]))}</select></label>` : ""}
+      <label class="large">Interlocuteur<input name="interlocuteur" value="${esc(pistes[0]?.source || "")}"></label></div>
+    <label><span class="oblig">Texte de l'échange</span><textarea name="texte" rows="2" placeholder="ex. relancé par courriel, il cherche la cassette du 12 mars"></textarea></label>
+    <div class="ligne"><label>Prochaine relance<input type="date" name="relance"></label>
+      <span>${[7, 15, 30].map(j => `<button type="button" class="raccourci" data-jours="${j}">+${j} j</button>`).join(" ")}</span>
+      <button class="primaire" name="ok" disabled>Noter l'échange</button></div>
+    <p class="echec" data-erreur hidden></p></div>`;
+}
+function formPiste(ids, autre) {
+  const liste = `detenteurs-${++numeroListe}`;
+  const cible = ids.length > 1 ? `${ids.length} émissions : ${ids.slice(0, 6).join(", ")}${ids.length > 6 ? "…" : ""}` : "";
+  return `<div class="formulaire" data-form="piste">
+    <label><span class="oblig">Détenteur</span><input name="source" list="${liste}" autocomplete="off" placeholder="ex. Jean D. (passionné), cassettes 1978-1982"></label>
+    <datalist id="${liste}">${DETENTEURS.map(s => `<option value="${esc(s)}">`).join("")}</datalist>
+    <label>Note<textarea name="note" rows="2" placeholder="ce qu'on sait de son fonds"></textarea></label>
+    <label class="case"><input type="checkbox" name="premier" checked> noter aussi le premier échange (aujourd'hui)</label>
+    <div class="ligne"><label>Canal<select name="canal">${canaux()}</select></label><label class="large"><span class="oblig">Texte du premier échange</span><input name="texte" placeholder="ex. message reçu sur le forum"></label></div>
+    <div class="ligne">${cible ? `<span class="doux">${esc(cible)}</span>` : ""}<button class="primaire" name="ok" disabled>${ids.length > 1 ? `Localiser les ${ids.length} émissions` : autre ? "Ajouter la piste" : "Localiser"}</button></div>
+    <p class="echec" data-erreur hidden></p></div>`;
+}
+function formUrl() {
+  return `<div class="formulaire" data-form="url">
+    <label><span class="oblig">URL de l'intégral</span><input name="url" type="url" placeholder="https://…/fichier.mp3"></label>
+    <label>Note<input name="note" placeholder="d'où vient ce lien"></label>
+    <div class="ligne"><button class="primaire" name="ok" disabled>Enregistrer l'URL</button></div>
+    <p class="echec" data-erreur hidden></p></div>`;
+}
+function formFichier(e) {
+  const pistes = e.localisations;
+  return `<div class="formulaire" data-form="fichier">
+    <label><span class="oblig">Fichier audio</span><input type="file" name="fichier" accept="audio/*"></label>
+    ${pistes.length ? `<label>Vient de<select name="piste">${options([...pistes.map(l => [l.id, `la piste ${l.source}`]), ["", "aucune piste (nouvel enregistrement)"]])}</select></label>` : ""}
+    <label><span class="oblig">Provenance</span><input name="provenance" value="${esc(pistes[0]?.source || "")}" placeholder="qui l'a fourni, sous quelle forme (cassette numérisée, fichier…)"></label>
+    <label>La date est établie par<select name="datation">${options(DATATIONS)}</select></label>
+    <label>Note<input name="note" placeholder="ex. face B, coupure à 38 min"></label>
+    <div class="ligne"><button class="primaire" name="ok" disabled>Téléverser</button></div>
+    <p class="echec" data-erreur hidden></p></div>`;
+}
+// Les trois sorties, dans l'ordre : [clé, onglet, où elle mène, formulaire]
+const SORTIES = e => [
+  e.etat === "sans"
+    ? ["piste", "Une piste", "quelqu'un ou un fonds détient l'enregistrement → localisé", () => formPiste([e.id], false)]
+    : ["piste", "Une autre piste", "un autre détenteur → l'émission reste localisée", () => formPiste([e.id], true)],
+  ["url", "URL", "un lien vers le fichier intégral → téléchargeable, il part avec le prochain lot de téléchargement", formUrl],
+  ["fichier", "Fichier", "le fichier reçu (cassette numérisée, envoi…) → rapatrié, à écouter et qualifier", () => formFichier(e)],
+];
+function deplie(e, colonnesN) {
+  const sorties = SORTIES(e), cle = vue.onglet || "piste", sortie = sorties.find(s => s[0] === cle) || sorties[0];
+  const gauche = e.etat === "localise" ? `<h4>Journal des échanges</h4>${journalHtml(e)}<h4>Noter un échange</h4>${formEchange(e)}` : ceQuOnSait(e);
+  return `<tr class="deplie"><td colspan="${colonnesN}"><div class="deux"><div class="gauche">${gauche}</div>
+    <div class="droite"><h4>Faire avancer</h4><div class="onglets" role="tablist">${sorties.map(([k, t]) => `<button role="tab" data-onglet="${k}" aria-selected="${k === sortie[0]}">${t}</button>`).join("")}</div>
+    <div class="doux" style="margin-bottom:6px">${esc(sortie[2])}</div>${sortie[3]()}</div></div></td></tr>`;
+}
+// Envoie une demande ; en cas de refus, le message s'affiche dans le formulaire.
+async function envoyer(form, chemin, corps, message, apres) {
+  const avant = compter(EMISSIONS), ok = form.querySelector("[name=ok]"), erreur = form.querySelector("[data-erreur]");
+  ok.disabled = true; erreur.hidden = true;
+  try {
+    const json = !(corps instanceof Blob);
+    const r = await fetch(chemin, { method: "POST", headers: { "Content-Type": json ? "application/json" : (corps.type || "application/octet-stream") }, body: json ? JSON.stringify(corps) : corps });
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.erreur || r.statusText);
+    if (apres) apres();
+    preparer(t); rendre(); notifier(message, avant);
+  } catch (err) {
+    erreur.textContent = `Refusé : ${err.message}`; erreur.hidden = false; ok.disabled = false;
+  }
+}
+function brancherEchange(f, e) {
+  const v = n => f.querySelector(`[name=${n}]`);
+  v("piste")?.addEventListener("change", () => { v("interlocuteur").value = e.localisations.find(l => l.id === v("piste").value)?.source || ""; });
+  f.querySelectorAll("[data-jours]").forEach(b => b.addEventListener("click", () => { v("relance").value = dansJours(+b.dataset.jours); }));
+  v("texte").addEventListener("input", () => { v("ok").disabled = !v("texte").value.trim(); });
+  v("ok").addEventListener("click", () => envoyer(f, "/api/echanges", {
+    emission_id: e.id, enregistrement: v("piste")?.value || e.localisations[0]?.id, date: v("date").value, canal: v("canal").value,
+    interlocuteur: v("interlocuteur").value.trim(), texte: v("texte").value.trim(), relance: v("relance").value || null,
+  }, `Échange noté : ${e.id}`));
+}
+function brancherPiste(f, ids, fini) {
+  const v = n => f.querySelector(`[name=${n}]`);
+  const maj = () => { v("ok").disabled = !v("source").value.trim() || (v("premier").checked && !v("texte").value.trim()); };
+  ["source", "texte"].forEach(n => v(n).addEventListener("input", maj));
+  v("premier").addEventListener("change", () => { v("canal").disabled = v("texte").disabled = !v("premier").checked; maj(); });
+  v("ok").addEventListener("click", () => {
+    const source = v("source").value.trim();
+    const corps = { emissions: ids, source, note: v("note").value.trim() };
+    if (v("premier").checked) corps.premier_echange = { canal: v("canal").value, texte: v("texte").value.trim() };
+    envoyer(f, "/api/localisations", corps, `${ids.length > 1 ? `${ids.length} émissions localisées` : `${ids[0]} localisé`} : ${source}`, fini);
+  });
+}
+function brancherUrl(f, e) {
+  const v = n => f.querySelector(`[name=${n}]`);
+  v("url").addEventListener("input", () => { v("ok").disabled = !/^https?:\/\/\S+$/i.test(v("url").value.trim()); });
+  v("ok").addEventListener("click", () => envoyer(f, "/api/urls", { emission_id: e.id, url: v("url").value.trim(), note: v("note").value.trim() }, `${e.id} téléchargeable`));
+}
+function brancherFichier(f, e) {
+  const v = n => f.querySelector(`[name=${n}]`);
+  const maj = () => { v("ok").disabled = !(v("fichier").files.length && v("provenance").value.trim()); };
+  v("fichier").addEventListener("change", maj); v("provenance").addEventListener("input", maj);
+  v("piste")?.addEventListener("change", () => {
+    const l = e.localisations.find(x => x.id === v("piste").value);
+    if (l) v("provenance").value = l.source;
+    maj();
+  });
+  v("ok").addEventListener("click", () => {
+    const fichier = v("fichier").files[0];
+    const champs = { emission_id: e.id, nom: fichier.name, provenance: v("provenance").value.trim(), datation: v("datation").value, note: v("note").value.trim() };
+    if (v("piste")?.value) champs.piste = v("piste").value;
+    envoyer(f, "/api/fichiers?" + new URLSearchParams(champs), fichier, `${e.id} rapatrié : ${fichier.name}`);
+  });
+}
+function brancherDeplie(tr, e) {
+  tr.querySelectorAll("[data-onglet]").forEach(b => b.addEventListener("click", () => { vue.onglet = b.dataset.onglet; rendre(); }));
+  const f = sel => tr.querySelector(`[data-form="${sel}"]`);
+  if (f("echange")) brancherEchange(f("echange"), e);
+  if (f("piste")) brancherPiste(f("piste"), [e.id]);
+  if (f("url")) brancherUrl(f("url"), e);
+  if (f("fichier")) brancherFichier(f("fichier"), e);
+}
+function basculerDeplie(id) {
+  vue.deplie = vue.deplie === id ? null : id; vue.onglet = null; rendre();
+}
+// « Une piste pour la sélection (n) » : la saisie de piste dans la boîte de la
+// page, pour toutes les émissions cochées.
+function pisteEnLot(ids) {
   const d = $("boite");
-  d.innerHTML = `<h3 id="boite-titre">Ajouter un enregistrement localisé</h3>
-    <p>Émission du ${esc(id)} : qui la détient, et ce qu'on en sait.</p>
-    <label class="champ">Source<input id="piste-source" placeholder="ex. Jean D., forum, cassettes 1978-1982" autocomplete="off"></label>
-    <label class="champ">Note<textarea id="piste-note" rows="3"></textarea></label>
-    <p class="echec" id="piste-erreur" hidden></p>
-    <div class="choix"><button value="non">Annuler</button><button class="primaire" value="oui" disabled>Ajouter</button></div>`;
-  const source = $("piste-source"), note = $("piste-note"), ajouter = d.querySelector(".primaire");
+  d.innerHTML = `<h3 id="boite-titre">Une piste pour ${ids.length} émission${ids.length > 1 ? "s" : ""}</h3>${formPiste(ids, false)}<div class="choix"><button value="non">Annuler</button></div>`;
   const fermer = () => { d.oncancel = null; if (d.open) d.close(); };
-  source.addEventListener("input", () => { ajouter.disabled = !source.value.trim(); });
-  source.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ajouter.disabled) ajouter.click(); });
   d.querySelector('button[value="non"]').addEventListener("click", fermer);
   d.oncancel = ev => { ev.preventDefault(); fermer(); };
-  ajouter.addEventListener("click", async () => {
-    const avant = compter(EMISSIONS);
-    ajouter.disabled = true;
-    try {
-      const r = await fetch("/api/localisations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emission_id: id, source: source.value.trim(), note: note.value.trim() }) });
-      const t = await r.json();
-      if (!r.ok) throw new Error(t.erreur || r.statusText);
-      fermer(); preparer(t); rendre();
-      notifier(`${id} localisé`, avant);
-    } catch (err) {
-      const e = $("piste-erreur"); e.textContent = `Échec : ${err.message}`; e.hidden = false;
-      ajouter.disabled = !source.value.trim();
-    }
-  });
-  d.showModal(); source.focus();
+  brancherPiste(d.querySelector('[data-form="piste"]'), ids, () => { fermer(); vue.choix.clear(); });
+  d.showModal(); d.querySelector("[name=source]").focus();
 }
 
 // ---------- Rapatriements : un lot tourne côté serveur, le bandeau le suit ----------
@@ -452,7 +621,7 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const JOUR_MS = 86400000;
 
 let EMISSIONS = [], ANNEES = [], maturiteActive = false;
-const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set(), ecoute: null, fiche: null, refus: [] };
+const vue = { annee: null, etat: null, survol: null, tri: null, sens: -1, choix: new Set(), ecoute: null, fiche: null, refus: [], deplie: null, onglet: null };
 
 // Une émission attestée par lmelp, ou dont un enregistrement valide y est entré
 // (dans_lmelp), y est déjà : cet état l'emporte sur la maturité.
@@ -462,6 +631,7 @@ function etatDe(e) {
 }
 function preparer(d) {
   maturiteActive = !!d.maturite_active;
+  DETENTEURS = d.detenteurs || [];
   EMISSIONS = d.emissions.map(e => ({
     id: e.id, date: e.date, annee: +e.date.slice(0, 4), titre: e.titre || "Sans titre",
     themes: e.themes || [], sources: [...new Set(e.attestations.map(a => a.source))],
@@ -471,6 +641,8 @@ function preparer(d) {
     pages: e.attestations.filter(a => a.source === "radiofrance" && a.url && !a.extrait).map(a => ({ url: a.url, titre: a.titre || "" })),
     integration: e.integration_lmelp || null,
     localisations: e.localisations || [],
+    attestations: e.attestations.map(a => ({ source: a.source, titre: a.titre || "", url: a.url || "" })),
+    relance: e.relance || null, dernier: e.dernier_echange || null,
     entree: e.maturite_depuis || null,
     depuis: e.maturite_depuis ? Math.max(0, Math.floor((Date.now() - Date.parse(e.maturite_depuis)) / JOUR_MS)) : null,
   }));
@@ -615,8 +787,14 @@ function colonnes(cle) {
   // dans lmelp : l'heure où le back-office a fait un épisode d'un enregistrement remis par pap
   if (cle === "lmelp") c.push({ k: "integration", t: "Intégrée", v: e => e.integration || "",
     h: e => e.integration ? new Date(e.integration).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).replace(" ", " à ") : '<span class="doux">—</span>' });
-  // localisé : qui détient l'enregistrement (la notice INA, ou la source d'une piste), et la note
-  if (cle === "localise") c.push({ k: "sources", t: "Sources", v: e => e.localisations.map(l => l.source).join(","), h: detenteurs });
+  // localisé : qui détient l'enregistrement (la notice INA, ou la source d'une piste) et la
+  // note, la relance la plus proche de ses pistes et le dernier échange
+  if (cle === "localise") c.push(
+    { k: "sources", t: "Détenteur", v: e => e.localisations.map(l => l.source).join(","), h: detenteurs },
+    // sans relance : après toutes les relances, en tri croissant
+    { k: "relance", t: "Relance", v: e => e.relance || "9999-12-31", h: e => relanceHtml(e.relance) },
+    { k: "echange", t: "Dernier échange", v: e => e.dernier ? e.dernier.date : "", h: dernierHtml });
+  else if (cle === "sans") c.push({ k: "sources", t: "Attestée par", v: e => e.sources.join(","), h: e => `<span class="doux">${esc(e.sources.join(", "))}</span>` });
   else if (cle !== "lmelp") c.push({ k: "sources", t: "Sources", v: e => e.sources.join(","), h: e => `<span class="doux">${esc(e.sources.join(", "))}</span>` });
   if (cle !== "lmelp") {
     c.push({ k: "depuis", t: "Depuis", v: e => e.depuis ?? -1, h: depuis });
@@ -625,6 +803,11 @@ function colonnes(cle) {
 }
 function pageEtat(racine) {
   const s = ETAT[vue.etat], cols = colonnes(vue.etat), action = ACTIONS[vue.etat];
+  // sans enregistrement et localisé : la ligne se déplie sur ses sorties ;
+  // sans enregistrement : des cases, pour une piste sur plusieurs émissions
+  const travail = vue.etat === "sans" || vue.etat === "localise";
+  const lot = action && action.lot, cases = lot || vue.etat === "sans";
+  const libelleLot = () => lot ? `${action.libelle} : sélection (${vue.choix.size})` : `Une piste pour la sélection (${vue.choix.size})`;
   const tri = cols.find(c => c.k === vue.tri) || cols[0];
   const tous = EMISSIONS.filter(e => e.etat === vue.etat);
   const liste = tous.filter(e => !vue.annee || e.annee === vue.annee)
@@ -632,8 +815,9 @@ function pageEtat(racine) {
   racine.innerHTML = `<button class="retour">← Accueil</button>
     <div class="carte"><h2 style="margin-top:0"><span class="pastille" style="background:${couleur(s.cle)}"></span>${s.nom} : ${liste.length} émission(s) ${vue.annee ? `en ${vue.annee} <button id="effacer-annee">× toutes les années</button>` : ""}</h2><div id="h"></div>
     <div class="doux">Cliquer une année filtre la liste.</div></div>
-    ${action && action.lot ? `<div class="lot"><button class="primaire" id="lot-selection">${esc(action.libelle)} : sélection (${vue.choix.size})</button><button id="lot">${esc(action.libelle)} : tout (${liste.length})</button></div>` : ""}
-    <div class="carte" style="margin-top:8px"><table><thead><tr>${action && action.lot ? `<th><input type="checkbox" id="tous" aria-label="Tout sélectionner"></th>` : ""}${cols.map(c => `<th class="triable" data-k="${c.k}">${c.t}${tri.k === c.k ? (vue.sens > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}${action ? "<th>Action</th>" : ""}</tr></thead><tbody></tbody></table></div>`;
+    ${lot ? `<div class="lot"><button class="primaire" id="lot-selection">${esc(libelleLot())}</button><button id="lot">${esc(action.libelle)} : tout (${liste.length})</button></div>` : ""}
+    ${vue.etat === "sans" ? `<div class="lot"><button class="primaire" id="lot-piste">${esc(libelleLot())}</button><span class="doux">un détenteur de plusieurs dates : cocher les émissions, puis une seule saisie</span></div>` : ""}
+    <div class="carte" style="margin-top:8px"><table><thead><tr>${cases ? `<th><input type="checkbox" id="tous" aria-label="Tout sélectionner"></th>` : ""}${cols.map(c => `<th class="triable" data-k="${c.k}">${c.t}${tri.k === c.k ? (vue.sens > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}${action ? "<th>Action</th>" : ""}</tr></thead><tbody></tbody></table></div>`;
   racine.querySelector(".retour").addEventListener("click", () => { vue.etat = null; rendre(); scrollTo(0, 0); });
   $("effacer-annee")?.addEventListener("click", () => { vue.annee = null; rendre(); });
   racine.querySelectorAll("th.triable").forEach(th => th.addEventListener("click", () => {
@@ -651,12 +835,17 @@ function pageEtat(racine) {
     if (await question(ids, true)) action.executer(ids);
   });
   $("lot-selection")?.addEventListener("click", async () => { const ids = [...vue.choix]; if (ids.length && await question(ids)) action.executer(ids); });
+  $("lot-piste")?.addEventListener("click", () => {
+    const ids = [...vue.choix].sort();
+    if (!ids.length) { toast("Cocher d'abord des émissions"); return; }
+    pisteEnLot(ids);
+  });
   $("tous")?.addEventListener("change", ev => { liste.forEach(e => ev.target.checked ? vue.choix.add(e.id) : vue.choix.delete(e.id)); rendre(); });
   const tb = racine.querySelector("tbody");
-  const lot = action && action.lot;
   // qualifié et valide : un clic sur la ligne déplie ce que lmelp reçoit
   const depliable = vue.etat === "valide" || vue.etat === "qualifie";
-  tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}"${depliable ? ' class="depliable" title="Voir la fiche remise à lmelp"' : ""}>${lot ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action${action.discret ? ' class="discret"' : ""}>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
+  const classe = depliable ? ' class="depliable" title="Voir la fiche remise à lmelp"' : travail ? ' class="depliable" title="Déplier : faire avancer cette émission"' : "";
+  tb.innerHTML = liste.slice(0, 300).map(e => `<tr data-id="${esc(e.id)}"${classe}>${cases ? `<td><input type="checkbox" ${vue.choix.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.date)}"></td>` : ""}${cols.map(c => `<td>${c.h(e)}</td>`).join("")}${action ? `<td><button data-action${action.discret ? ' class="discret"' : ""}>${esc(action.libelle)}</button></td>` : ""}</tr>`).join("") +
     (liste.length > 300 ? `<tr><td colspan="6" class="doux">… ${liste.length - 300} de plus</td></tr>` : "");
   const ecoutee = vue.etat === "rapatrie" && liste.find(e => e.id === vue.ecoute);
   if (ecoutee) {
@@ -668,6 +857,14 @@ function pageEtat(racine) {
     const tr = tb.querySelector(`tr[data-id="${CSS.escape(ouverte.id)}"]`);
     if (tr) tr.insertAdjacentHTML("afterend", fiche(ouverte, tr.children.length));
   }
+  const depliee = travail && liste.find(e => e.id === vue.deplie);
+  if (depliee) {
+    const tr = tb.querySelector(`tr[data-id="${CSS.escape(depliee.id)}"]`);
+    if (tr) { tr.insertAdjacentHTML("afterend", deplie(depliee, tr.children.length)); brancherDeplie(tr.nextElementSibling, depliee); }
+  }
+  if (travail) tb.querySelectorAll("tr.depliable").forEach(tr => tr.addEventListener("click", ev => {
+    if (!ev.target.closest("button, a, input")) basculerDeplie(tr.dataset.id);
+  }));
   if (depliable) tb.querySelectorAll("tr.depliable").forEach(tr => tr.addEventListener("click", ev => {
     if (!ev.target.closest("button, a, input")) ouvrirFiche(tr.dataset.id);
   }));
@@ -675,10 +872,10 @@ function pageEtat(racine) {
     const ids = [b.closest("tr").dataset.id];
     if (await question(ids)) action.executer(ids);
   }));
-  if (lot) tb.querySelectorAll("input[type=checkbox]").forEach(c => c.addEventListener("change", () => {
+  if (cases) tb.querySelectorAll("tr[data-id] > td > input[type=checkbox]").forEach(c => c.addEventListener("change", () => {
     const id = c.closest("tr").dataset.id;
     c.checked ? vue.choix.add(id) : vue.choix.delete(id);
-    $("lot-selection").textContent = `${action.libelle} : sélection (${vue.choix.size})`;
+    ($("lot-selection") || $("lot-piste")).textContent = libelleLot();
   }));
 }
 
@@ -686,7 +883,9 @@ function pageEtat(racine) {
 // Le tri à l'ouverture d'une page d'état, toujours décroissant : l'ancienneté
 // dans l'état pour une file de travail, sauf « rapatrié », qu'on écoute de
 // l'émission la plus récente à la plus ancienne ; la date pour un état sans action.
-const TRI_PAR_DEFAUT = { rapatrie: "date" };
+const TRI_PAR_DEFAUT = { rapatrie: "date", localise: "relance" };
+// localisé : la relance la plus proche (ou la plus en retard) d'abord
+const SENS_PAR_DEFAUT = { localise: 1 };
 const triParDefaut = etat => TRI_PAR_DEFAUT[etat] || (ETAT[etat].action ? "depuis" : "date");
 // Le tri choisi sur une page d'état est retenu, page par page, dans ce navigateur.
 const CLE_TRIS = "pap-tris";
@@ -698,10 +897,10 @@ function memoriserTri(etat, tri, sens) {
 // Le tri d'une page à son ouverture : le dernier choisi, sinon celui par défaut.
 function appliquerTri(etat) {
   const m = trisMemorises()[etat];
-  vue.tri = m ? m.tri : triParDefaut(etat); vue.sens = m ? m.sens : -1;
+  vue.tri = m ? m.tri : triParDefaut(etat); vue.sens = m ? m.sens : (SENS_PAR_DEFAUT[etat] || -1);
 }
 function ouvrir(etat) {
-  vue.etat = etat; vue.choix.clear(); vue.ecoute = null; vue.fiche = null; appliquerTri(etat);
+  vue.etat = etat; vue.choix.clear(); vue.ecoute = null; vue.fiche = null; vue.deplie = null; vue.onglet = null; appliquerTri(etat);
   rendre(); scrollTo(0, 0);
 }
 function lireAdresse() {

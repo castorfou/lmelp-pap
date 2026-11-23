@@ -9,6 +9,7 @@ import json
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -1237,3 +1238,317 @@ def test_sans_planification_la_localisation_ina_n_a_pas_lieu(
 ) -> None:
     time.sleep(0.2)
     assert depot.tous() == []
+
+
+# ---------- Journal des échanges, piste en lot, URL et fichier ----------
+
+
+def _emission(donnees: dict[str, Any], emission_id: str) -> dict[str, Any]:
+    return next(e for e in donnees["emissions"] if e["id"] == emission_id)
+
+
+def _localiser(url: str, *emissions: str, **corps: Any) -> Any:
+    return _post_json(
+        f"{url}/api/localisations",
+        {"emissions": list(emissions), "source": "Jean D.", "note": "", **corps},
+    )
+
+
+def _piste(url: str, emission_id: str = "1967-01-01") -> str:
+    donnees = _localiser(url, emission_id)
+    return str(_emission(donnees, emission_id)["localisations"][-1]["id"])
+
+
+def _noter(url: str, **corps: Any) -> Any:
+    return _post_json(
+        f"{url}/api/echanges",
+        {"emission_id": "1967-01-01", "canal": "courriel", "texte": "relancé", **corps},
+    )
+
+
+def test_un_echange_se_note_au_journal_de_la_piste(url: str) -> None:
+    piste = _piste(url)
+    donnees = _noter(
+        url,
+        enregistrement=piste,
+        date="2026-11-02",
+        interlocuteur="Jean",
+        relance="2026-12-01",
+    )
+    (localisation,) = _emission(donnees, "1967-01-01")["localisations"]
+    assert localisation["journal"] == [
+        {
+            "date": "2026-11-02",
+            "canal": "courriel",
+            "interlocuteur": "Jean",
+            "texte": "relancé",
+            "relance": "2026-12-01",
+        }
+    ]
+    assert localisation["relance"] == "2026-12-01"
+
+
+def test_le_journal_va_du_plus_recent_au_plus_ancien(url: str) -> None:
+    _piste(url)
+    _noter(url, date="2026-11-02", texte="premier")
+    donnees = _noter(url, date="2026-11-10", texte="second", canal="forum")
+    emission = _emission(donnees, "1967-01-01")
+    journal = emission["localisations"][0]["journal"]
+    assert [x["texte"] for x in journal] == ["second", "premier"]
+    assert emission["dernier_echange"] == {"date": "2026-11-10", "canal": "forum"}
+
+
+def test_un_echange_est_date_d_aujourd_hui_par_defaut(url: str) -> None:
+    _piste(url)
+    donnees = _noter(url)
+    (x,) = _emission(donnees, "1967-01-01")["localisations"][0]["journal"]
+    assert x["date"] == datetime.now().astimezone().date().isoformat()
+
+
+def test_la_relance_d_une_emission_est_la_plus_proche_de_ses_pistes(
+    url: str,
+) -> None:
+    premiere = _piste(url)
+    seconde = _piste(url)  # une autre piste : l'émission reste localisée
+    _noter(url, enregistrement=premiere, relance="2026-12-20")
+    donnees = _noter(url, enregistrement=seconde, relance="2026-12-05")
+    emission = _emission(donnees, "1967-01-01")
+    assert emission["maturite"] == "localise"
+    assert len(emission["localisations"]) == 2
+    assert emission["relance"] == "2026-12-05"
+
+
+def test_avec_plusieurs_pistes_l_echange_dit_laquelle(url: str) -> None:
+    _piste(url)
+    _piste(url)
+    assert _post_erreur(f"{url}/api/echanges", {
+        "emission_id": "1967-01-01", "canal": "courriel", "texte": "relancé"
+    }) == 400  # fmt: skip
+
+
+def test_noter_un_echange_ne_change_ni_la_maturite_ni_sa_date(url: str) -> None:
+    _piste(url)
+    avant = _emission(_get(f"{url}/api/donnees"), "1967-01-01")
+    apres = _emission(_noter(url, relance="2027-01-01"), "1967-01-01")
+    assert apres["maturite"] == avant["maturite"] == "localise"
+    assert apres["maturite_depuis"] == avant["maturite_depuis"]
+
+
+@pytest.mark.parametrize(
+    "corps",
+    [
+        {"texte": "  "},
+        {"canal": "pigeon"},
+        {"date": "hier"},
+        {"relance": "2026-13-01"},
+        {"emission_id": "1900-01-01"},
+        {"enregistrement": "piste:inconnue"},
+    ],
+)
+def test_un_echange_invalide_est_refuse(url: str, corps: dict[str, Any]) -> None:
+    _piste(url)
+    base = {"emission_id": "1967-01-01", "canal": "courriel", "texte": "relancé"}
+    assert _post_erreur(f"{url}/api/echanges", {**base, **corps}) == 400
+
+
+def test_un_echange_sur_une_emission_sans_piste_est_refuse(url: str) -> None:
+    corps = {"emission_id": "1967-01-01", "canal": "courriel", "texte": "relancé"}
+    assert _post_erreur(f"{url}/api/echanges", corps) == 400
+
+
+def test_le_journal_survit_a_un_redemarrage_et_ne_s_exporte_pas(
+    tmp_path: Path, depot: Depot
+) -> None:
+    for adresse in _demarrer(tmp_path, depot=depot):
+        _piste(adresse)
+        _noter(adresse, texte="Jean D. cherche la cassette")
+    # un nouveau serveur, sur la même base
+    (tmp_path / "bis").mkdir()
+    for adresse in _demarrer(tmp_path / "bis", depot=depot):
+        (localisation,) = _emission(_get(f"{adresse}/api/donnees"), "1967-01-01")[
+            "localisations"
+        ]
+        assert localisation["journal"][0]["texte"] == "Jean D. cherche la cassette"
+    csv = [*tmp_path.glob("sortie/*.csv"), *tmp_path.glob("bis/sortie/*.csv")]
+    assert csv
+    assert not any("cassette" in f.read_text(encoding="utf-8") for f in csv)
+
+
+def test_un_echange_laisse_une_trace_dans_les_logs(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    piste = _piste(url)
+    _noter(url, relance="2026-12-01")
+    _post_erreur(f"{url}/api/echanges", {"emission_id": "1967-01-01", "texte": ""})
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert f"échange noté : 1967-01-01, piste {piste} (Jean D.), courriel" in logs
+    assert "relance le 2026-12-01" in logs
+    assert "échange refusé 1967-01-01 : " in logs
+
+
+def test_une_piste_en_lot_localise_chaque_emission_avec_la_meme_source(
+    url: str,
+) -> None:
+    ids = ("1967-01-01", "1956-01-22", "2017-01-01")
+    donnees = _localiser(
+        url, *ids, note="cassettes", premier_echange={"canal": "forum", "texte": "vu"}
+    )
+    for emission_id in ids:
+        emission = _emission(donnees, emission_id)
+        assert emission["maturite"] == "localise"
+        (localisation,) = emission["localisations"]
+        assert (localisation["source"], localisation["note"]) == (
+            "Jean D.",
+            "cassettes",
+        )
+        (premier,) = localisation["journal"]
+        assert (premier["canal"], premier["texte"]) == ("forum", "vu")
+        assert premier["interlocuteur"] == "Jean D."
+    assert donnees["detenteurs"] == ["Jean D."]
+
+
+def test_une_piste_sans_premier_echange_n_en_note_aucun(url: str) -> None:
+    donnees = _localiser(url, "1967-01-01")
+    assert _emission(donnees, "1967-01-01")["localisations"][0]["journal"] == []
+
+
+def test_une_piste_en_lot_refusee_ne_localise_rien(url: str) -> None:
+    corps: dict[str, Any] = {
+        "emissions": ["1967-01-01", "1900-01-01"],
+        "source": "Jean D.",
+    }
+    assert _post_erreur(f"{url}/api/localisations", corps) == 400
+    corps = {
+        "emissions": ["1967-01-01"],
+        "source": "Jean D.",
+        "premier_echange": {"canal": "forum", "texte": " "},
+    }
+    assert _post_erreur(f"{url}/api/localisations", corps) == 400
+    assert _emission(_get(f"{url}/api/donnees"), "1967-01-01")["maturite"] is None
+
+
+def test_une_piste_en_lot_laisse_une_trace_dans_les_logs(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _localiser(url, "1967-01-01", "1956-01-22")
+    time.sleep(0.1)
+    assert "piste en lot : 2 émissions localisées (source « Jean D. »)" in (
+        capfd.readouterr().err
+    )
+
+
+SAISIE = "https://exemple.org/archives/masque-1967.mp3"
+
+
+def test_une_url_saisie_rend_l_emission_telechargeable_puis_rapatriee(
+    url: str, tmp_path: Path
+) -> None:
+    donnees = _post_json(
+        f"{url}/api/urls", {"emission_id": "1967-01-01", "url": SAISIE, "note": "x"}
+    )
+    assert _emission(donnees, "1967-01-01")["maturite"] == "telechargeable"
+
+    _post_json(f"{url}/api/rapatriements", {"emissions": ["1967-01-01"]})
+    _attendre_rapatriements(url)
+
+    emission = _emission(_get(f"{url}/api/donnees"), "1967-01-01")
+    assert emission["maturite"] == "rapatrie"
+    assert emission["fichier_audio"] == "1967/masque-1967.mp3"
+    assert (tmp_path / "audios" / "1967" / "masque-1967.mp3").read_bytes() == SON
+
+
+@pytest.mark.parametrize("saisie", ["", "ftp://exemple.org/a.mp3", "masque.mp3"])
+def test_une_url_invalide_est_refusee(url: str, saisie: str) -> None:
+    corps = {"emission_id": "1967-01-01", "url": saisie}
+    assert _post_erreur(f"{url}/api/urls", corps) == 400
+
+
+def test_une_url_laisse_une_trace_dans_les_logs(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _post_json(f"{url}/api/urls", {"emission_id": "1967-01-01", "url": SAISIE})
+    _post_erreur(f"{url}/api/urls", {"emission_id": "1967-01-01", "url": "x"})
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert f"URL enregistrée : 1967-01-01 {SAISIE} → téléchargeable" in logs
+    assert "URL refusée 1967-01-01 : URL invalide" in logs
+
+
+def _televerser(url: str, contenu: bytes = SON, **champs: str) -> Any:
+    parametres = {
+        "emission_id": "1967-01-01",
+        "nom": "masque 1967.mp3",
+        "provenance": "Jean D., cassette",
+        "datation": "antenne",
+        "note": "face A",
+        **champs,
+    }
+    requete = urllib.request.Request(
+        f"{url}/api/fichiers?{urllib.parse.urlencode(parametres)}",
+        data=contenu,
+        headers={"Content-Type": "audio/mpeg"},
+        method="POST",
+    )
+    with urllib.request.urlopen(requete) as r:
+        return json.load(r)
+
+
+def test_un_fichier_televerse_rend_l_emission_rapatriee_et_s_ecoute(
+    url: str, tmp_path: Path
+) -> None:
+    donnees = _televerser(url)
+    emission = _emission(donnees, "1967-01-01")
+    assert emission["maturite"] == "rapatrie"
+    assert emission["fichier_audio"] == "1967/masque 1967.mp3"
+    assert (tmp_path / "audios" / "1967" / "masque 1967.mp3").read_bytes() == SON
+    with urllib.request.urlopen(f"{url}/audios/1967/masque%201967.mp3") as r:
+        assert r.read() == SON
+
+
+def test_un_fichier_venu_d_une_piste_rapatrie_la_piste(url: str, depot: Depot) -> None:
+    piste = _piste(url)
+    _televerser(url, piste=piste)
+    (enregistrement,) = depot.tous()
+    assert (enregistrement.url, enregistrement.niveau) == (piste, "rapatrie")
+    assert enregistrement.provenance == "Jean D., cassette"
+
+
+def _refus(url: str, **champs: Any) -> tuple[int, str]:
+    with pytest.raises(urllib.error.HTTPError) as erreur:
+        _televerser(url, **champs)
+    return erreur.value.code, json.load(erreur.value)["erreur"]
+
+
+def test_un_fichier_sans_provenance_est_refuse(url: str) -> None:
+    assert _refus(url, provenance="")[0] == 400
+
+
+def test_un_nom_de_fichier_deja_pris_est_refuse(url: str, tmp_path: Path) -> None:
+    _televerser(url)
+    code, message = _refus(url, emission_id="1967-01-01")
+    assert code == 400
+    assert "déjà pris" in message
+    assert (tmp_path / "audios" / "1967" / "masque 1967.mp3").read_bytes() == SON
+
+
+def test_un_fichier_d_une_emission_inconnue_est_refuse(url: str) -> None:
+    assert _refus(url, emission_id="1900-01-01")[0] == 400
+
+
+def test_sans_mongo_pas_de_fichier(url_sans_mongo: str) -> None:
+    assert _refus(url_sans_mongo)[0] == 503
+
+
+def test_un_fichier_laisse_une_trace_dans_les_logs(
+    url: str, capfd: pytest.CaptureFixture[str]
+) -> None:
+    _televerser(url)
+    _refus(url, provenance="")
+    time.sleep(0.1)
+    logs = capfd.readouterr().err
+    assert (
+        f"fichier téléversé : 1967-01-01 1967/masque 1967.mp3, {len(SON)} octets "
+        "(provenance « Jean D., cassette »)"
+    ) in logs
+    assert "fichier refusé 1967-01-01 : un fichier demande sa provenance" in logs
