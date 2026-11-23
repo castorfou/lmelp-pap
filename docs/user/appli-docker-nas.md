@@ -29,7 +29,7 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `PAP_AUDIOS_LMELP` | `/audios-lmelp` | dossier audio du back-office lmelp, où vont les enregistrements mis à disposition |
 | `RADIOFRANCE_API_TOKEN` | aucune | jeton de l'API Radio France, lue seulement au moment d'une mise à disposition pour compléter la description |
 | `PAP_VERIFICATION_JOURS` | `7` | jours entre deux vérifications complètes des URL d'intégral (la première part seule au démarrage sur une base neuve) |
-| `PAP_URL_PUBLIQUE` | aucune | adresse publique de l'appli (par exemple `https://pap.lmelp.ascot63.synology.me`), donnée dans les logs de démarrage |
+| `PAP_URL_PUBLIQUE` | aucune | adresse publique de l'appli (par exemple `https://lmelp-pap.ascot63.synology.me`), donnée dans les logs de démarrage |
 | `PAP_TELEVERSEMENT_MAX` | `2147483648` (2 Gio) | taille maximale, en octets, d'un fichier audio téléversé ; au-delà, refus 413 |
 | `PAP_DEPOT_GIT` | `/data/depot` | clone du dépôt où **Publier** commite ; sans cette variable (hors de l'image), la publication est désactivée |
 | `GH_TOKEN` | aucune | jeton GitHub à granularité fine du push de la publication (voir [Publication sur GitHub](#publication-sur-github)) |
@@ -52,7 +52,7 @@ L'appli écrit ses logs sur la sortie d'erreur du conteneur : `docker logs lmelp
 2026-11-21 10:53:49 INFO    cli : liste : 2123 émissions
 2026-11-21 10:53:49 INFO    cli : arbitrages : collection pap_arbitrages
 2026-11-21 10:53:49 INFO    cli : dossiers : cache /data/cache, données /data/processed, arbitrages /data/processed/arbitrages.csv, audios /data/audios, audios lmelp /audios-lmelp
-2026-11-21 10:53:49 INFO    cli : page publique : https://pap.lmelp.ascot63.synology.me
+2026-11-21 10:53:49 INFO    cli : page publique : https://lmelp-pap.ascot63.synology.me
 ```
 
 L'adresse d'écoute est celle du conteneur (`0.0.0.0:8090`) ; l'adresse vue depuis le réseau est celle de `PAP_URL_PUBLIQUE`, ligne absente sans cette variable. Mongo est `connecté`, `absent (MONGO_URI non défini)` ou `injoignable (base …) : <erreur>` : le démarrage tente un `ping` et compte les émissions sans lire la base : l'appli démarre dans tous les cas. Les arbitrages viennent de la `collection pap_arbitrages` avec `MONGO_URI`, sinon du `fichier …` des arbitrages. Les lignes qui suivent (requêtes, actions, erreurs) sont décrites dans [la liste des émissions](liste-des-emissions.md#logs).
@@ -162,7 +162,7 @@ L'appli s'ouvre par un nom d'hôte, via le reverse proxy natif de DSM : **Portai
 - Reverse Proxy Name : pap
 - Source
     - Protocol : HTTPS
-    - Hostname : `pap.lmelp.ascot63.synology.me`
+    - Hostname : `lmelp-pap.ascot63.synology.me`
     - Port : 443
     - Enable HSTS
     - Access control profile : réseau local
@@ -171,4 +171,14 @@ L'appli s'ouvre par un nom d'hôte, via le reverse proxy natif de DSM : **Portai
     - Hostname : `localhost`
     - Port : `8085` (port publié sur le NAS, `PAP_PORT` de docker-lmelp)
 
-L'appli est alors servie sur `https://pap.lmelp.ascot63.synology.me`, depuis le réseau local. Ce nom se résout vers le NAS par la réécriture DNS d'AdGuard sur le réseau de la maison. Depuis un autre réseau relié par VPN, dont les DNS ne sont pas ceux d'AdGuard, le nom tombe sur la page « introuvable » de DSM. On passe alors par le nom de machine du NAS : `http://<NAS>:8085/`.
+L'appli est alors servie sur `https://lmelp-pap.ascot63.synology.me`, depuis le réseau local. Ce nom se résout vers le NAS par la réécriture DNS d'AdGuard sur le réseau de la maison. Depuis un autre réseau relié par VPN, dont les DNS ne sont pas ceux d'AdGuard, le nom tombe sur la page « introuvable » de DSM. On passe alors par le nom de machine du NAS : `http://<NAS>:8085/`.
+
+Le nom d'hôte reste à un seul niveau sous `ascot63.synology.me`, car le certificat Let's Encrypt du NAS couvre `ascot63.synology.me` et `*.ascot63.synology.me`. Un joker ne couvre qu'un niveau : `lmelp-pap.ascot63.synology.me` est couvert, `pap.lmelp.ascot63.synology.me` ne l'est pas. Avec un nom à deux niveaux, Firefox affiche « Something doesn't look right » sans exception possible, à cause de HSTS. La commande suivante affiche les noms couverts par le certificat servi :
+
+```bash
+echo | openssl s_client -connect lmelp-pap.ascot63.synology.me:443 \
+  -servername lmelp-pap.ascot63.synology.me 2>/dev/null \
+  | openssl x509 -noout -subject -ext subjectAltName
+```
+
+Le changement de nom se reporte à trois endroits : la règle du proxy inversé, la réécriture DNS d'AdGuard et `PAP_URL_PUBLIQUE` dans la stack.
