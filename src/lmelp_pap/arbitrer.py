@@ -218,6 +218,8 @@ log = logging.getLogger(__name__)
 # Les requêtes HTTP du serveur, dans leur propre logger.
 log_http = logging.getLogger("lmelp_pap.http")
 
+# Le client a fermé la connexion avant la fin de la réponse.
+CLIENT_PARTI = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 # Les requêtes que le journal des requêtes tait : la santé (sondée toutes les
 # 30 s par Docker) et les sondages de l'avancement par la page.
 SILENCIEUSES = {
@@ -1846,6 +1848,12 @@ def creer_serveur(
                         HTTPStatus.INTERNAL_SERVER_ERROR,
                     )
 
+        def _chemin(self) -> str:
+            """Le chemin de la requête sans sa query string, pour les logs :
+            celle de ``POST /api/fichiers`` porte la provenance d'un fichier,
+            qui peut nommer un particulier."""
+            return urlsplit(self.path).path
+
         def send_response(self, code: int, message: str | None = None) -> None:
             self.repondu = True
             super().send_response(code, message)
@@ -1981,13 +1989,21 @@ def creer_serveur(
             cache: str = "no-store",
         ) -> None:
             """Envoie la réponse, par défaut jamais mise en cache par le
-            navigateur."""
-            self.send_response(statut)
-            self.send_header("Content-Type", type_)
-            self.send_header("Content-Length", str(len(corps)))
-            self.send_header("Cache-Control", cache)
-            self.end_headers()
-            self.wfile.write(corps)
+            navigateur. Un client parti avant la fin (page rechargée pendant
+            la requête) n'est pas une panne : une ligne courte, sans trace."""
+            try:
+                self.send_response(statut)
+                self.send_header("Content-Type", type_)
+                self.send_header("Content-Length", str(len(corps)))
+                self.send_header("Cache-Control", cache)
+                self.end_headers()
+                self.wfile.write(corps)
+            except CLIENT_PARTI as erreur:
+                self.close_connection = True
+                log_http.info(
+                    f"{self.command} {self._chemin()} : client parti "
+                    f"({type(erreur).__name__})"
+                )
 
         def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
             """Une ligne par requête (méthode, chemin, statut, client), hors

@@ -4,6 +4,7 @@
 import json
 import logging
 import re
+import socketserver
 import threading
 import time
 import urllib.error
@@ -150,6 +151,34 @@ def test_une_erreur_interne_ne_donne_au_client_qu_un_message_generique(
     assert reponse.value.code == 500
     assert json.loads(reponse.value.read()) == {"erreur": "erreur interne"}
     assert "mongodb://secret@nas923:27018" in _logs(capfd)
+
+
+@pytest.mark.parametrize(
+    "deconnexion", [BrokenPipeError, ConnectionResetError, ConnectionAbortedError]
+)
+def test_un_client_parti_avant_la_reponse_n_est_pas_une_erreur(
+    serveur: Any,
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    deconnexion: type[OSError],
+) -> None:
+    """La page rechargée pendant ``GET /api/donnees`` : la réponse ne trouve
+    plus de client. Une ligne courte, ni erreur ni trace."""
+
+    def client_parti(self: object, donnees: bytes) -> int:
+        raise deconnexion(32, "Broken pipe")
+
+    monkeypatch.setattr(socketserver._SocketWriter, "write", client_parti)  # type: ignore[attr-defined]
+    capfd.readouterr()
+
+    with pytest.raises((urllib.error.URLError, ConnectionError, OSError)):
+        urllib.request.urlopen(f"{serveur.url}/api/donnees").read()
+
+    sortie = _logs(capfd)
+    assert "Traceback" not in sortie
+    assert [n for n, _, _ in lignes(sortie) if n in ("ERROR", "WARNING")] == []
+    parti = [m for _, _, m in lignes(sortie) if "client parti" in m]
+    assert parti == [f"GET /api/donnees : client parti ({deconnexion.__name__})"]
 
 
 # --- au seam de la commande : le démarrage ----------------------------------
