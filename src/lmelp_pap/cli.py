@@ -12,7 +12,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 from lmelp_pap import logs
-from lmelp_pap.arbitrages import lire_arbitrages
+from lmelp_pap.arbitrages import ArbitragesMongo, lire_arbitrages
 from lmelp_pap.arbitrer import AUDIOS, AUDIOS_LMELP, creer_serveur
 from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
@@ -66,6 +66,22 @@ def _parser() -> argparse.ArgumentParser:
     )
     page.add_argument("--donnees", type=Path, default=donnees)
     page.add_argument("--sortie", type=Path, default=Path("docs/emissions/index.html"))
+    echanges = commandes.add_parser(
+        "arbitrages",
+        help="importe arbitrages.csv dans Mongo (pap_arbitrages), ou l'en exporte",
+    )
+    echanges.add_argument(
+        "sens",
+        choices=["importer", "exporter"],
+        help="importer : ajoute les arbitrages absents du fichier ; exporter : "
+        "réécrit le fichier avec ceux de Mongo",
+    )
+    echanges.add_argument(
+        "--fichier",
+        type=Path,
+        default=arbitrages or Path(donnees or "data/processed") / "arbitrages.csv",
+        help="fichier des arbitrages (par défaut : arbitrages.csv des données)",
+    )
     arbitrer = commandes.add_parser(
         "arbitrer",
         help="ouvre la liste en mode arbitrage dans un serveur local",
@@ -114,13 +130,16 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page`` et
+    """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page``, ``arbitrages`` et
     ``arbitrer``. Rend le code de sortie."""
     args = _parser().parse_args(argv)
     logs.configurer()
 
     if args.commande == "arbitrer":
         return _arbitrer(args)
+
+    if args.commande == "arbitrages":
+        return _echanger_arbitrages(args)
 
     if args.commande == "page":
         args.sortie.parent.mkdir(parents=True, exist_ok=True)
@@ -166,6 +185,21 @@ def _etat_mongo(depot: Depot | None) -> str:
     return f"connecté (base {base})"
 
 
+def _echanger_arbitrages(args: argparse.Namespace) -> int:
+    """Importe le fichier des arbitrages dans ``pap_arbitrages``, ou l'en
+    exporte ; chacun laisse sa ligne de log."""
+    depot = depot_depuis_env()
+    if depot is None:
+        log.error(f"arbitrages : MONGO_URI absent, rien à {args.sens}")
+        return 1
+    arbitrages = ArbitragesMongo(depot.base)
+    if args.sens == "importer":
+        arbitrages.importer(args.fichier)
+    else:
+        arbitrages.exporter(args.fichier)
+    return 0
+
+
 def _arbitrer(args: argparse.Namespace) -> int:
     """Sert l'appli (la page en mode arbitrage) jusqu'à l'arrêt du processus."""
     log.info("lecture du cache et construction de la liste…")
@@ -192,6 +226,7 @@ def _arbitrer(args: argparse.Namespace) -> int:
     # ni l'un ni l'autre ne lit la base : l'appli démarre même sans elle
     log.info(f"Mongo : {_etat_mongo(depot)}")
     log.info(f"liste : {atelier.nombre_emissions()} émissions")
+    log.info(f"arbitrages : {atelier.origine_arbitrages()}")
     log.info(
         f"dossiers : cache {args.cache}, données {args.sortie}, "
         f"arbitrages {atelier.fichier}, audios {args.audios}, "

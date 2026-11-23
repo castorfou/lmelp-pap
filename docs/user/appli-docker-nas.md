@@ -30,7 +30,7 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `PAP_VERIFICATION_JOURS` | `7` | jours entre deux vérifications complètes des URL d'intégral (la première part seule au démarrage sur une base neuve) |
 | `PAP_URL_PUBLIQUE` | aucune | adresse publique de l'appli (par exemple `https://pap.lmelp.ascot63.synology.me`), donnée dans les logs de démarrage |
 | `PUID` / `PGID` | `1000` / `1000` | propriétaire des fichiers créés dans `/data` |
-| `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité |
+| `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) et des arbitrages (collection `pap_arbitrages`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité et garde ses arbitrages dans `arbitrages.csv` |
 
 Le conteneur démarre en root, attribue à son utilisateur `appuser` l'UID et le GID `PUID`/`PGID`, reprend la propriété de tout `/data` (y compris les fichiers d'un déploiement précédent), puis sert l'appli sous cet utilisateur. Les fichiers restent ainsi lisibles et supprimables depuis l'hôte.
 
@@ -43,11 +43,12 @@ L'appli écrit ses logs sur la sortie d'erreur du conteneur : `docker logs lmelp
 2026-11-21 10:53:49 INFO    cli : lmelp-pap 0.1.0 : écoute sur 0.0.0.0:8090
 2026-11-21 10:53:49 INFO    cli : Mongo : connecté (base masque_et_la_plume)
 2026-11-21 10:53:49 INFO    cli : liste : 2123 émissions
+2026-11-21 10:53:49 INFO    cli : arbitrages : collection pap_arbitrages
 2026-11-21 10:53:49 INFO    cli : dossiers : cache /data/cache, données /data/processed, arbitrages /data/processed/arbitrages.csv, audios /data/audios, audios lmelp /audios-lmelp
 2026-11-21 10:53:49 INFO    cli : page publique : https://pap.lmelp.ascot63.synology.me
 ```
 
-L'adresse d'écoute est celle du conteneur (`0.0.0.0:8090`) ; l'adresse vue depuis le réseau est celle de `PAP_URL_PUBLIQUE`, ligne absente sans cette variable. Mongo est `connecté`, `absent (MONGO_URI non défini)` ou `injoignable (base …) : <erreur>` : le démarrage tente un `ping` et compte les émissions sans lire la base : l'appli démarre dans tous les cas. Les lignes qui suivent (requêtes, actions, erreurs) sont décrites dans [la liste des émissions](liste-des-emissions.md#logs).
+L'adresse d'écoute est celle du conteneur (`0.0.0.0:8090`) ; l'adresse vue depuis le réseau est celle de `PAP_URL_PUBLIQUE`, ligne absente sans cette variable. Mongo est `connecté`, `absent (MONGO_URI non défini)` ou `injoignable (base …) : <erreur>` : le démarrage tente un `ping` et compte les émissions sans lire la base : l'appli démarre dans tous les cas. Les arbitrages viennent de la `collection pap_arbitrages` avec `MONGO_URI`, sinon du `fichier …` des arbitrages. Les lignes qui suivent (requêtes, actions, erreurs) sont décrites dans [la liste des émissions](liste-des-emissions.md#logs).
 
 ## Lancer l'image sur un poste
 
@@ -103,6 +104,16 @@ Pour la mise à disposition de lmelp, le service `pap` monte aussi le dossier au
 L'entrypoint ne reprend pas la propriété de ce dossier : il appartient au back-office, et doit seulement être inscriptible par `PUID`/`PGID`. pap y crée `<année>/<nom>` et n'écrase jamais un fichier existant.
 
 Watchtower met le conteneur à jour après chaque publication de l'image sur `main`.
+
+### Arbitrages
+
+Avec `MONGO_URI`, les arbitrages vivent dans la collection `pap_arbitrages` de la base de lmelp, couverte par sa sauvegarde (`mongodump --db=masque_et_la_plume`). Une fois, au premier déploiement, importer le fichier amorcé dans `pap/processed` :
+
+```bash
+docker exec -u appuser lmelp-pap lmelp-pap arbitrages importer
+```
+
+L'import est idempotent : le relancer n'ajoute que les arbitrages absents. `docker exec -u appuser lmelp-pap lmelp-pap arbitrages exporter` réécrit `/data/processed/arbitrages.csv` avec les arbitrages de Mongo (voir [Arbitrages dans Mongo](liste-des-emissions.md#arbitrages-dans-mongo)). `-u appuser` laisse le fichier au propriétaire `PUID`/`PGID` ; la ligne de log de la commande s'affiche dans le terminal du `docker exec`, pas dans `docker logs`.
 
 ### Reverse proxy
 
