@@ -116,8 +116,10 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qsl, unquote, urlsplit
+
+from pymongo.errors import PyMongoError
 
 from lmelp_pap import audio
 from lmelp_pap.arbitrages import (
@@ -135,7 +137,16 @@ from lmelp_pap.arbitrages import (
     retirer_arbitrages,
     valeur,
 )
-from lmelp_pap.collecte import SOURCES, collecter, lire_cache
+from lmelp_pap.collecte import (
+    SOURCES,
+    TERMINEE,
+    collecter,
+    ecarts_lmelp,
+    ecrire_lmelp,
+    lire_base_lmelp,
+    lire_cache,
+    lire_cache_lmelp,
+)
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import (
     JOURS,
@@ -297,6 +308,10 @@ class MaturiteIndisponibleError(RuntimeError):
     """La maturité des enregistrements demande une base Mongo."""
 
 
+# L'issue d'un tour du suivi de la source lmelp (``Atelier.suivre_lmelp``).
+SuiviLmelp = Literal["sautee", "identique", "mise_a_jour"]
+
+
 class TropGrosError(ValueError):
     """Un corps de requête plus gros que permis (``PAP_TELEVERSEMENT_MAX``)."""
 
@@ -434,6 +449,9 @@ class Atelier:
             arrete=False,
             rapatriees=[],  # émissions rapatriées (ou déjà là) pendant le lot
         )
+        # une seule collecte à la fois : celle de l'interface ou le suivi
+        # horaire de lmelp (``suivre_lmelp``)
+        self._verrou_collecte = threading.Lock()
         self._collecte = Tache(
             "collecte",
             sources=[],
@@ -757,12 +775,70 @@ class Atelier:
         )
         return self.donnees()
 
+    def suivre_lmelp(self) -> SuiviLmelp:
+        """Relit la source ``lmelp`` dans Mongo (lecture seule) et, si elle a
+        changé, réécrit son cache et reconstruit la liste. Passe son tour
+        pendant une collecte, sans dépôt Mongo ou Mongo injoignable : le cache
+        précédent reste valable. Rend l'issue du tour : ``sautee``,
+        ``identique`` ou ``mise_a_jour``."""
+        if self.depot is None:
+            log.info("source lmelp : tour sauté (MONGO_URI absent)")
+            return "sautee"
+        if self._collecte.etat()["en_cours"] or not self._verrou_collecte.acquire(
+            blocking=False
+        ):
+            log.info("source lmelp : tour sauté (collecte en cours)")
+            return "sautee"
+        try:
+            try:
+                apres = lire_base_lmelp(self.depot.base)
+            except PyMongoError as erreur:
+                detail = str(erreur).splitlines()[0] if str(erreur) else ""
+                log.warning(
+                    "source lmelp : tour sauté (Mongo injoignable"
+                    f"{' : ' + detail if detail else ''})"
+                )
+                return "sautee"
+            dossier = self.cache / "lmelp"
+            avant = lire_cache_lmelp(dossier)
+            if apres == avant and (dossier / TERMINEE).exists():
+                log.debug(f"source lmelp : inchangée ({len(apres)} émissions)")
+                return "identique"
+            ajoutees, retirees, modifiees = ecarts_lmelp(avant, apres)
+            etait_terminee = (dossier / TERMINEE).exists()
+            ecrire_lmelp(dossier, apres)
+            (dossier / TERMINEE).touch()
+            taille = self.nombre_emissions()
+            try:
+                self.recharger_cache()
+            except Exception:
+                # liste non reconstruite : le cache revient à l'état qu'elle
+                # reflète, et le tour suivant retentera
+                ecrire_lmelp(dossier, avant)
+                if not etait_terminee:
+                    (dossier / TERMINEE).unlink()
+                raise
+        finally:
+            self._verrou_collecte.release()
+        log.info(
+            f"source lmelp : {ajoutees} émission{_s(ajoutees)} "
+            f"vérifiée{_s(ajoutees)} ajoutée{_s(ajoutees)}, "
+            f"{retirees} retirée{_s(retirees)}, {modifiees} modifiée{_s(modifiees)} ; "
+            f"liste {taille} → {self.nombre_emissions()} émissions"
+        )
+        return "mise_a_jour"
+
     def planifier_en_continu(self, periode: float = PLANIFICATION) -> None:
-        """Vérifie au démarrage, puis toutes les ``periode`` secondes, si une
-        vérification est due (fil de fond)."""
+        """Au démarrage, puis toutes les ``periode`` secondes (fil de fond) :
+        suit la source ``lmelp`` dans Mongo, puis vérifie si une vérification
+        est due."""
 
         def boucle() -> None:
             while True:
+                try:
+                    self.suivre_lmelp()
+                except Exception:
+                    log.exception("suivi de la source lmelp en échec")
                 try:
                     self.localiser_ina()
                     self.planifier()
@@ -926,6 +1002,10 @@ class Atelier:
             raise TacheEnCoursError(raison)
 
         def travail(tache: Tache) -> dict[str, Any]:
+            with self._verrou_collecte:  # attend la fin d'un suivi de lmelp
+                return collecter_tout(tache)
+
+        def collecter_tout(tache: Tache) -> dict[str, Any]:
             debut = time.monotonic()
             log.info(
                 f"collecte demandée : {', '.join(sources)}"
@@ -942,7 +1022,9 @@ class Atelier:
                     issue = collecter(
                         nom,
                         self.cache,
-                        refresh=refresh,
+                        # lmelp se relit en quelques secondes : son bouton
+                        # force toujours la mise à jour
+                        refresh=refresh or nom == "lmelp",
                         progres=lambda ligne: tache.maj(progression=ligne),
                     )
                 except Exception as erreur:
