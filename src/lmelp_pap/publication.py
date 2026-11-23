@@ -400,7 +400,8 @@ def _change_depuis(enregistrement: Enregistrement, depuis: datetime | None) -> b
 
 
 def _accorder(n: int, singulier: str, pluriel: str) -> str:
-    """« 1 arbitrage ajouté », « 2 arbitrages ajoutés »."""
+    """« 1 arbitrage ajouté », « 2 qualifications ajoutées » : le singulier
+    jusqu'à 1, le pluriel au-delà."""
     return f"{n} {singulier if n <= 1 else pluriel}"
 
 
@@ -421,12 +422,18 @@ def _resume(apercu: dict[str, Any]) -> str:
         morceaux.append(
             f"{_accorder(n, 'émission changée', 'émissions changées')} ({detail})"
         )
-    for cle, nom in (("arbitrages", "arbitrage"), ("qualifications", "qualification")):
+    # l'accord du participe suit le genre du nom : « qualifications ajoutées »
+    for cle, nom, e_ in (
+        ("arbitrages", "arbitrage", ""),
+        ("qualifications", "qualification", "e"),
+    ):
         d = apercu[cle]
-        if d["ajoutes"]:
-            morceaux.append(_accorder(d["ajoutes"], f"{nom} ajouté", f"{nom}s ajoutés"))
-        if d["retires"]:
-            morceaux.append(_accorder(d["retires"], f"{nom} retiré", f"{nom}s retirés"))
+        for champ, participe in (("ajoutes", "ajouté"), ("retires", "retiré")):
+            if d[champ]:
+                accord = participe + e_
+                morceaux.append(
+                    _accorder(d[champ], f"{nom} {accord}", f"{nom}s {accord}s")
+                )
     if n := sum(apercu["niveaux"].values()):
         detail = ", ".join(f"{k} {v}" for k, v in apercu["niveaux"].items())
         quoi = _accorder(n, "enregistrement a", "enregistrements ont")

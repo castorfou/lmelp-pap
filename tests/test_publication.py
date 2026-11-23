@@ -342,6 +342,27 @@ def test_l_apercu_resume_ce_que_la_publication_changera(
     assert "2 arbitrages ajoutés" in apercu["resume"]
 
 
+def test_le_resume_accorde_les_qualifications_au_feminin(
+    distant: Path, sortie: Path, tmp_path: Path
+) -> None:
+    entete = "emission_id,enregistrement,verdict,motif,date\n"
+    (sortie / "qualifications.csv").write_text(
+        entete + "1956-01-22,https://a/1.mp3,bon,,2026-11-10\n"
+    )
+    publication = _publication(distant, tmp_path)
+    publication.publier(_fichiers(sortie))
+    (sortie / "qualifications.csv").write_text(
+        entete
+        + "1956-01-22,https://a/2.mp3,bon,,2026-11-11\n"
+        + "1956-01-22,https://a/3.mp3,bon,,2026-11-11\n"
+    )
+
+    resume = publication.apercu(_fichiers(sortie))["resume"]
+
+    assert "2 qualifications ajoutées" in resume
+    assert "1 qualification retirée" in resume
+
+
 def test_l_apercu_sans_changement_n_a_rien_a_publier(
     distant: Path, sortie: Path, tmp_path: Path
 ) -> None:
