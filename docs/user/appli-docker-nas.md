@@ -30,6 +30,7 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `RADIOFRANCE_API_TOKEN` | aucune | jeton de l'API Radio France, lue seulement au moment d'une mise à disposition pour compléter la description |
 | `PAP_VERIFICATION_JOURS` | `7` | jours entre deux vérifications complètes des URL d'intégral (la première part seule au démarrage sur une base neuve) |
 | `PAP_URL_PUBLIQUE` | aucune | adresse publique de l'appli (par exemple `https://pap.lmelp.ascot63.synology.me`), donnée dans les logs de démarrage |
+| `PAP_TELEVERSEMENT_MAX` | `2147483648` (2 Gio) | taille maximale, en octets, d'un fichier audio téléversé ; au-delà, refus 413 |
 | `PAP_DEPOT_GIT` | `/data/depot` | clone du dépôt où **Publier** commite ; sans cette variable (hors de l'image), la publication est désactivée |
 | `GH_TOKEN` | aucune | jeton GitHub à granularité fine du push de la publication (voir [Publication sur GitHub](#publication-sur-github)) |
 | `PAP_DEPOT_URL` / `PAP_DEPOT_BRANCHE` | `https://github.com/castorfou/lmelp-pap.git` / `main` | dépôt et branche où la publication pousse |
@@ -117,6 +118,12 @@ Avec `MONGO_URI`, les arbitrages vivent dans la collection `pap_arbitrages` de l
 
 ```bash
 docker exec -u appuser lmelp-pap lmelp-pap arbitrages importer
+```
+
+Tant que cet import n'est pas fait (`pap_arbitrages` vide alors que le fichier porte des arbitrages), le démarrage l'annonce par un avertissement et **Publier** refuse : l'export effacerait les arbitrages publiés.
+
+```
+2026-11-23 10:53:49 WARNING cli : arbitrages : pap_arbitrages est vide mais /data/processed/arbitrages.csv porte 214 arbitrages : publier les effacerait ; lancer d'abord « lmelp-pap arbitrages importer »
 ```
 
 L'import est idempotent : le relancer n'ajoute que les arbitrages absents. `docker exec -u appuser lmelp-pap lmelp-pap arbitrages exporter` réécrit `/data/processed/arbitrages.csv` avec les arbitrages de Mongo (voir [Arbitrages dans Mongo](liste-des-emissions.md#arbitrages-dans-mongo)). `-u appuser` laisse le fichier au propriétaire `PUID`/`PGID` ; la ligne de log de la commande s'affiche dans le terminal du `docker exec`, pas dans `docker logs`.
