@@ -152,8 +152,11 @@ def test_publier_avec_pap_arbitrages_vide_refuse_d_effacer_le_fichier(
     assert (sortie / "arbitrages.csv").read_text(encoding="utf-8") == avant
     (alerte,) = notifications.recues
     assert alerte["titre"] == "publication refusée" and alerte["priorite"] == 4
+    # ntfy est externe : le chemin des données (sur le NAS) n'y part pas
+    assert "arbitrages.csv" in str(alerte["message"])
+    assert str(tmp_path) not in str(alerte["message"])
     assert any(
-        niveau == "ERROR" and "lmelp-pap arbitrages importer" in m
+        niveau == "ERROR" and "lmelp-pap arbitrages importer" in m and str(sortie) in m
         for niveau, _, m in lignes(capfd.readouterr().err)
     )
     with pytest.raises(PublicationError, match="lmelp-pap arbitrages importer"):

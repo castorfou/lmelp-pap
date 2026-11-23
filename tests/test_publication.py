@@ -261,6 +261,56 @@ def test_ne_publie_ni_audio_ni_chemin_du_nas_ni_colonne_inconnue(
     assert git(distant, "rev-parse", "main") == avant
 
 
+def test_l_alerte_ntfy_d_un_refus_ne_porte_aucun_chemin_local(
+    distant: Path, sortie: Path, tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """ntfy est un service externe : ni chemin du NAS ni jeton dans l'alerte ;
+    la ligne de log locale garde le détail."""
+    (sortie / "arbitrages.csv").write_text(
+        ARBITRAGES + "ina,RD_1,thème,livres,vu dans /srv/audios/1987,2026\n"
+    )
+    notifications = Notifications()
+    publication = _publication(
+        distant, tmp_path, prives=[Path("/srv/audios")], notifier=notifications
+    )
+    capfd.readouterr()
+
+    publication.publier(_fichiers(sortie))
+
+    (alerte,) = notifications.recues
+    assert "chemin privé" in str(alerte["message"])
+    assert "/srv" not in str(alerte["message"])
+    assert any(
+        "/srv/audios" in m for m in messages(capfd.readouterr().err, "publication")
+    )
+
+
+def test_l_alerte_ntfy_d_un_depot_injoignable_ne_porte_ni_chemin_ni_jeton(
+    tmp_path: Path,
+) -> None:
+    notifications = Notifications()
+    publication = Publication(
+        Configuration(
+            clone=tmp_path / "depot",
+            distant=str(tmp_path / "absent.git"),
+            jeton="github_pat_secret",
+        ),
+        notifier=notifications,
+    )
+    sortie = tmp_path / "processed"
+    sortie.mkdir()
+    (sortie / "arbitrages.csv").write_text(ARBITRAGES)
+
+    resultat = publication.publier(_fichiers(sortie))
+
+    assert resultat["statut"] == "refusee"
+    (alerte,) = notifications.recues
+    message = str(alerte["message"])
+    assert "git clone en échec" in message
+    assert str(tmp_path) not in message and "github_pat_secret" not in message
+    assert "absent.git" in message  # le nom reste, pour comprendre
+
+
 def test_la_configuration_vient_de_l_environnement() -> None:
     env = {"PAP_DEPOT_GIT": "/data/depot", "GH_TOKEN": "github_pat_x"}
 

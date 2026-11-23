@@ -17,6 +17,7 @@ import base64
 import csv
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -24,7 +25,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from lmelp_pap import arbitrages, ecriture, notification
@@ -51,6 +52,9 @@ PUBLIABLES: dict[str, list[str]] = {
 }
 # Ce qu'aucun fichier publié ne contient : les volumes du NAS.
 TOUJOURS_PRIVES = ("/volume1/",)
+# Un chemin absolu local (pas la fin d'une URL ni ``origin/main``) : il
+# commence après un blanc, une parenthèse ou un guillemet.
+CHEMIN_LOCAL = re.compile(r"(?<![^\s(\[\"'«])/[^\s()\[\]\"'«»,;]*")
 
 
 class PublicationError(RuntimeError):
@@ -140,9 +144,16 @@ class Publication:
 
     def refuser(self, raison: str) -> dict[str, Any]:
         """Refuse la publication pour ``raison`` : ligne de log en erreur et
-        alerte ntfy ; rend le résultat ``refusee``."""
+        alerte ntfy ; rend le résultat ``refusee``. ntfy est un service
+        externe : l'alerte ne garde de chaque chemin local que son dernier
+        nom, et jamais le jeton (le log local garde le chemin)."""
         log.error(f"publication refusée : {raison}")
-        self._notifier("publication refusée", raison, priorite=4, tags=["warning"])
+        self._notifier(
+            "publication refusée",
+            sans_chemin(self._masquer(raison)),
+            priorite=4,
+            tags=["warning"],
+        )
         return {"statut": "refusee", "detail": raison}
 
     def apercu(
@@ -364,6 +375,12 @@ class Publication:
         """Le texte sans le jeton."""
         jeton = self.configuration.jeton
         return texte.replace(jeton, "***") if jeton else texte
+
+
+def sans_chemin(texte: str) -> str:
+    """``texte`` où chaque chemin absolu local se réduit à son dernier nom :
+    « /data/processed/arbitrages.csv » devient « arbitrages.csv »."""
+    return CHEMIN_LOCAL.sub(lambda m: PurePosixPath(m[0]).name or "…", texte)
 
 
 def _rangs(texte: str) -> list[list[str]]:
