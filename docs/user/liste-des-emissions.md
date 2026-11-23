@@ -303,7 +303,7 @@ La page garde la frise et les filtres de la page publiée (année, thème, sourc
 - les justifications en un clic, « titre explicite », « écouté l'enregistrement » et « connaissance de l'émission », et un champ libre facultatif ;
 - le bouton **Annuler l'arbitrage**, pour une émission dont le thème, la date ou l'existence est arbitré, ou qui est renvoyée à l'écoute. Il retire tous les arbitrages de l'émission, « existe » compris.
 
-L'outil attache l'arbitrage à l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr, sinon une autre attestation. À chaque décision, il écrit `arbitrages.csv`, reconstruit la liste, réécrit ses CSV, et la page se met à jour aussitôt : l'émission change d'aspect, ou sort de la liste (arbitrée sans le thème livres, ou inexistante). Un message sous le bandeau « Mode arbitrage » confirme la décision.
+L'outil attache l'arbitrage à l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr, sinon une autre attestation. À chaque décision, il l'enregistre (dans Mongo si `MONGO_URI` est défini, sinon dans `arbitrages.csv`, voir [Arbitrages dans Mongo](#arbitrages-dans-mongo)), reconstruit la liste, réécrit ses CSV, et la page se met à jour aussitôt : l'émission change d'aspect, ou sort de la liste (arbitrée sans le thème livres, ou inexistante). Un message sous le bandeau « Mode arbitrage » confirme la décision.
 
 Le panneau **Arbitrages enregistrés** du bandeau liste tous les arbitrages du fichier, du plus récent au plus ancien, chacun avec un bouton **Annuler** : c'est ainsi qu'on annule l'arbitrage d'une émission sortie de la liste. Annuler depuis ce panneau retire du fichier les lignes de cette attestation ; **Annuler l'arbitrage** sous une émission retire celles de toutes ses attestations. L'émission retrouve alors les thèmes que lui donnent les sources. Un arbitrage s'ajoute en fin de fichier et une annulation retire seulement ses lignes : les autres lignes, écrites à la main ou non, restent telles quelles.
 
@@ -321,6 +321,32 @@ Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans l
 | `--sans-navigateur` | N'ouvre pas la page ; l'adresse d'écoute s'affiche dans les logs. |
 
 La page publiée n'a aucun de ces contrôles. Elle reflète les décisions d'une séance d'arbitrage une fois les CSV de `data/processed/` et `arbitrages.csv` committés sur `main`, qui la régénère et la redéploie.
+
+#### Arbitrages dans Mongo
+
+Quand `MONGO_URI` est défini (base `MONGO_DB`, par défaut `masque_et_la_plume`), les arbitrages de l'appli vivent dans la collection Mongo `pap_arbitrages`, qui fait foi : l'appli y écrit chaque décision et chaque annulation, et y relit les arbitrages à chaque reconstruction de la liste. Le fichier `arbitrages.csv` n'est alors ni lu ni écrit par l'appli ; il en est la publication (ADR 0004). Un arbitrage survit ainsi au redémarrage de l'appli. Sans `MONGO_URI`, l'appli lit et écrit `arbitrages.csv` comme décrit plus haut. Si Mongo est illisible à la reconstruction, la liste se construit avec `arbitrages.csv` et un avertissement va aux logs.
+
+La commande `lmelp-pap arbitrages` passe les arbitrages d'un support à l'autre :
+
+```bash
+# Ajoute à pap_arbitrages les arbitrages du fichier qui n'y sont pas encore
+uv run lmelp-pap arbitrages importer
+# Réécrit le fichier avec tous les arbitrages de pap_arbitrages
+uv run lmelp-pap arbitrages exporter
+```
+
+| Option | Effet |
+|---|---|
+| `--fichier FICHIER` | Fichier des arbitrages (par défaut `arbitrages.csv` dans `data/processed`, ou `PAP_ARBITRAGES`, ou `PAP_DONNEES`). |
+
+L'import est idempotent : un arbitrage est reconnu par son attestation, sa sorte, sa valeur et sa date ; importer deux fois le même fichier n'ajoute rien la seconde fois. Il ne retire rien de Mongo. L'export écrit le format de `arbitrages.csv`, dans l'ordre d'entrée des arbitrages (l'ordre du fichier importé, puis celui des décisions), si bien qu'importer puis exporter redonne le même fichier. La commande `lmelp-pap emissions` lit toujours le fichier, sans Mongo : pour construire la liste hors ligne avec les décisions de l'appli, exporter d'abord. pap n'écrit que dans des collections préfixées `pap_`.
+
+Chaque commande laisse une ligne de log :
+
+```
+2026-11-23 09:12:03 INFO    arbitrages : import de data/processed/arbitrages.csv : 187 arbitrages lus, 187 ajoutés à pap_arbitrages
+2026-11-23 09:40:51 INFO    arbitrages : export de pap_arbitrages : 189 arbitrages → data/processed/arbitrages.csv
+```
 
 #### Logs
 
@@ -346,7 +372,7 @@ Traceback (most recent call last):
   …
 ```
 
-**Actions.** Une vérification lancée par le bouton est « manuelle » ; la raison d'une vérification automatique est indiquée (jamais vérifiée, base vide, date de la précédente, nouvelles URL). Chaque arbitrage donne sa sorte, l'émission, la décision (thèmes, existence, date retenue, rapprochement, renvoi à l'écoute) et sa justification ; chaque annulation, l'émission ou l'attestation et le nombre d'arbitrages retirés. Un rapatriement trace chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »). Les appels à l'API Radio France donnent leur résultat, le nombre de requêtes et la durée, jamais le contenu reçu.
+**Actions.** Une vérification lancée par le bouton est « manuelle » ; la raison d'une vérification automatique est indiquée (jamais vérifiée, base vide, date de la précédente, nouvelles URL). Chaque arbitrage donne sa sorte, l'émission, la décision (thèmes, existence, date retenue, rapprochement, renvoi à l'écoute) et sa justification ; chaque annulation, l'émission ou l'attestation et le nombre d'arbitrages retirés. Avec Mongo, ces deux lignes finissent par « (pap_arbitrages) ». Un rapatriement trace chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »). Les appels à l'API Radio France donnent leur résultat, le nombre de requêtes et la durée, jamais le contenu reçu.
 
 **Requêtes HTTP.** Chaque requête donne sa méthode, son chemin, son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »).
 

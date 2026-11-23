@@ -1,8 +1,11 @@
 """Outil local ``lmelp-pap arbitrer`` : la page de la liste en mode arbitrage.
 
 Un serveur HTTP de la bibliothèque standard sert la page et une petite API
-JSON. À chaque arbitrage, il réécrit ``arbitrages.csv``, reconstruit la liste
-depuis le cache, sans réseau, réécrit ses CSV et renvoie les données à jour.
+JSON. À chaque arbitrage, il l'enregistre dans la collection Mongo
+``pap_arbitrages`` (ou, sans Mongo, dans ``arbitrages.csv``), reconstruit la
+liste depuis le cache, sans réseau, réécrit ses CSV et renvoie les données à
+jour. Avec Mongo, ``arbitrages.csv`` n'est ni lu ni écrit : il s'importe et
+s'exporte par ``lmelp-pap arbitrages``.
 
 API :
 
@@ -95,8 +98,12 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from lmelp_pap import audio
 from lmelp_pap.arbitrages import (
+    COLLECTION as ARBITRAGES_MONGO,
+)
+from lmelp_pap.arbitrages import (
     EXISTANTE,
     INEXISTANTE,
+    ArbitragesMongo,
     ajouter_arbitrage,
     decision,
     erreur_de_themes,
@@ -374,6 +381,9 @@ class Atelier:
         )
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
+        # Avec Mongo, les arbitrages vivent dans pap_arbitrages, qui fait foi
+        # (ADR 0004) : le fichier n'est ni lu ni écrit, il s'exporte.
+        self.arbitrages = ArbitragesMongo(depot.base) if depot else None
         self.attestations = lire_cache(cache)
         self._par_cle = {a.cle: a for a in self.attestations}
         self._emissions: dict[str, Emission] = {}
@@ -1113,8 +1123,14 @@ class Atelier:
                 justification=str(demande.get("justification") or "").strip(),
                 date=datetime.now().replace(microsecond=0),
             )
-            ajouter_arbitrage(self.fichier, arbitrage)
-            log.info(f"arbitrage {sorte} {emission.id} : {decision(arbitrage)}")
+            if self.arbitrages is not None:
+                self.arbitrages.ajouter(arbitrage)
+            else:
+                ajouter_arbitrage(self.fichier, arbitrage)
+            log.info(
+                f"arbitrage {sorte} {emission.id} : {decision(arbitrage)}"
+                + self._ou_arbitrages()
+            )
             self._reconstruire()
             donnees = self._donnees()
         self._apres_reconstruction()
@@ -1132,13 +1148,16 @@ class Atelier:
                 raise DemandeInvalideError(
                     "emission_id, ou source et source_id, attendus"
                 )
-            retires = retirer_arbitrages(self.fichier, cles)
+            if self.arbitrages is not None:
+                retires = self.arbitrages.retirer(cles)
+            else:
+                retires = retirer_arbitrages(self.fichier, cles)
             if not retires:
                 raise DemandeInvalideError("aucun arbitrage à annuler")
             cible = demande.get("emission_id") or ":".join(next(iter(cles)))
             log.info(
                 f"annulation {cible} : {retires} arbitrage{_s(retires)} "
-                f"retiré{_s(retires)}"
+                f"retiré{_s(retires)}" + self._ou_arbitrages()
             )
             self._reconstruire()
             donnees = self._donnees()
@@ -1204,11 +1223,35 @@ class Atelier:
             raise DemandeInvalideError(f"émission inconnue : {emission_id!r}")
         return self._emissions[emission_id]
 
+    def _ou_arbitrages(self) -> str:
+        """Où vivent les arbitrages, pour les logs : rien pour le fichier."""
+        return f" ({ARBITRAGES_MONGO})" if self.arbitrages is not None else ""
+
+    def _lire_arbitrages(self) -> list[Arbitrage]:
+        """Les arbitrages de ``pap_arbitrages``, ou du fichier sans Mongo ;
+        Mongo injoignable, ceux du fichier, avec un avertissement : l'appli
+        sert la liste quand même."""
+        if self.arbitrages is None:
+            return lire_arbitrages(self.fichier)
+        try:
+            return self.arbitrages.tous()
+        except Exception as erreur:  # noqa: BLE001 — la liste se sert sans base
+            log.warning(
+                f"{ARBITRAGES_MONGO} illisible ({type(erreur).__name__}) : "
+                f"liste construite avec {self.fichier}"
+            )
+            return lire_arbitrages(self.fichier)
+
+    def origine_arbitrages(self) -> str:
+        """D'où viennent les arbitrages, pour le log du démarrage."""
+        if self.arbitrages is None:
+            return f"fichier {self.fichier}"
+        return f"collection {ARBITRAGES_MONGO}"
+
     def _reconstruire(self) -> None:
-        """Reconstruit la liste avec les arbitrages du fichier et réécrit ses CSV."""
-        liste, doutes = construire_liste(
-            self.attestations, lire_arbitrages(self.fichier)
-        )
+        """Reconstruit la liste avec les arbitrages (Mongo, ou le fichier) et
+        réécrit ses CSV."""
+        liste, doutes = construire_liste(self.attestations, self._lire_arbitrages())
         ecrire_liste(liste, doutes, self.sortie)
         self._emissions = {e.id: e for e in liste}
         self._doutes = {}
@@ -1227,7 +1270,7 @@ class Atelier:
         donnees: dict[str, Any] = {
             "emissions": emissions,
             "arbitrages": [
-                self._arbitrage(a) for a in reversed(lire_arbitrages(self.fichier))
+                self._arbitrage(a) for a in reversed(self._lire_arbitrages())
             ],
         }
         if self.depot is not None:
