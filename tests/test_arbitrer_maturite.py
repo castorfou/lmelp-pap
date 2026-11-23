@@ -1193,13 +1193,21 @@ def test_sans_mongo_pas_de_piste(url_sans_mongo: str) -> None:
 def test_une_piste_laisse_une_trace_dans_les_logs(
     url: str, capfd: pytest.CaptureFixture[str]
 ) -> None:
-    corps = {"emission_id": "1967-01-01", "source": "Jean D., forum"}
-    _post_json(f"{url}/api/localisations", corps)
+    corps = {
+        "emission_id": "1967-01-01",
+        "source": "Jean D., forum",
+        "premier_echange": {"canal": "forum", "texte": "il a la cassette"},
+    }
+    donnees = _post_json(f"{url}/api/localisations", corps)
+    piste = _emission(donnees, "1967-01-01")["localisations"][-1]["id"]
     time.sleep(0.1)
+    logs = capfd.readouterr().err
     assert (
-        "enregistrement localisé ajouté : 1967-01-01 (source « Jean D., forum »)"
-        in capfd.readouterr().err
-    )
+        f"enregistrement localisé ajouté : 1967-01-01, piste {piste}, "
+        "premier échange forum"
+    ) in logs
+    # le détenteur et le texte de l'échange peuvent nommer un particulier
+    assert "Jean" not in logs and "cassette" not in logs
 
 
 def test_les_notices_ina_localisent_les_emissions_au_demarrage(
@@ -1380,11 +1388,13 @@ def test_un_echange_laisse_une_trace_dans_les_logs(
     url: str, capfd: pytest.CaptureFixture[str]
 ) -> None:
     piste = _piste(url)
-    _noter(url, relance="2026-12-01")
+    _noter(url, relance="2026-12-01", interlocuteur="Marie L.")
     _post_erreur(f"{url}/api/echanges", {"emission_id": "1967-01-01", "texte": ""})
     time.sleep(0.1)
     logs = capfd.readouterr().err
-    assert f"échange noté : 1967-01-01, piste {piste} (Jean D.), courriel" in logs
+    assert f"échange noté : 1967-01-01, piste {piste}, courriel" in logs
+    # ni le détenteur, ni l'interlocuteur, ni le texte de l'échange
+    assert "Jean" not in logs and "Marie" not in logs and "relancé" not in logs
     assert "relance le 2026-12-01" in logs
     assert "échange refusé 1967-01-01 : " in logs
 
@@ -1435,9 +1445,9 @@ def test_une_piste_en_lot_laisse_une_trace_dans_les_logs(
 ) -> None:
     _localiser(url, "1967-01-01", "1956-01-22")
     time.sleep(0.1)
-    assert "piste en lot : 2 émissions localisées (source « Jean D. »)" in (
-        capfd.readouterr().err
-    )
+    logs = capfd.readouterr().err
+    assert "piste en lot : 2 émissions localisées" in logs
+    assert "Jean" not in logs
 
 
 SAISIE = "https://exemple.org/archives/masque-1967.mp3"
@@ -1547,13 +1557,20 @@ def test_un_fichier_laisse_une_trace_dans_les_logs(
 ) -> None:
     _televerser(url)
     _refus(url, provenance="")
+    _refus(url, provenance="Jean D., cassette", datation="inconnue")
     time.sleep(0.1)
     logs = capfd.readouterr().err
     assert (
-        f"fichier téléversé : 1967-01-01 1967/masque 1967.mp3, {len(SON)} octets "
-        "(provenance « Jean D., cassette »)"
+        f"fichier téléversé : 1967-01-01 1967/masque 1967.mp3, {len(SON)} octets"
     ) in logs
     assert "fichier refusé 1967-01-01 : un fichier demande sa provenance" in logs
+    # la provenance et la note, ni dans les lignes de l'appli ni dans celles
+    # des requêtes (leur query string)
+    assert "Jean" not in logs and "cassette" not in logs and "face" not in logs
+    assert any(m.startswith("POST /api/fichiers 200") for m in messages(logs, "http"))
+    assert any(
+        m.startswith("POST /api/fichiers refusée (400)") for m in messages(logs, "http")
+    )
 
 
 def _post_brut(

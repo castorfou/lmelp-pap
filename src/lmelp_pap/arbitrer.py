@@ -624,17 +624,16 @@ class Atelier:
         except (DemandeInvalideError, PisteError, EchangeError) as erreur:
             log.info(f"piste refusée {cible} : {erreur}")
             raise DemandeInvalideError(str(erreur)) from erreur
+        # ni le détenteur ni le texte de l'échange : ils peuvent nommer un
+        # particulier, et les logs sortent du NAS
         for localise, premier_echange in faits:
             log.info(
-                f"enregistrement localisé ajouté : {localise.emission_id} "
-                f"(source « {localise.source} »"
-                f"{', premier échange ' + premier_echange.canal if premier_echange else ''})"
+                f"enregistrement localisé ajouté : {localise.emission_id}, "
+                f"piste {localise.url}"
+                f"{', premier échange ' + premier_echange.canal if premier_echange else ''}"
             )
         if len(faits) > 1:
-            log.info(
-                f"piste en lot : {len(faits)} émissions localisées "
-                f"(source « {faits[0][0].source} »)"
-            )
+            log.info(f"piste en lot : {len(faits)} émissions localisées")
         return self.donnees()
 
     def noter_echange(self, demande: dict[str, Any]) -> dict[str, Any]:
@@ -685,8 +684,8 @@ class Atelier:
             log.info(f"échange refusé {emission_id} : {erreur}")
             raise DemandeInvalideError(str(erreur)) from erreur
         log.info(
-            f"échange noté : {fait.emission_id}, piste {fait.enregistrement} "
-            f"({choisie.source}), {fait.canal}"
+            f"échange noté : {fait.emission_id}, piste {fait.enregistrement}, "
+            f"{fait.canal}"
             + (f", relance le {fait.relance.isoformat()}" if fait.relance else "")
         )
         return self.donnees()
@@ -753,8 +752,8 @@ class Atelier:
             raise DemandeInvalideError(str(erreur)) from erreur
         log.info(
             f"fichier téléversé : {fait.emission_id} {fait.fichier}, "
-            f"{fait.taille} octets (provenance « {fait.provenance} »"
-            f"{', piste ' + fait.url if origine else ''})"
+            f"{fait.taille} octets"
+            f"{', piste ' + fait.url if origine else ''}"
         )
         return self.donnees()
 
@@ -1839,7 +1838,7 @@ def creer_serveur(
                 route()
             except Exception as erreur:
                 log.exception(
-                    f"{self.command} {self.path} : erreur interne "
+                    f"{self.command} {self._chemin()} : erreur interne "
                     f"({type(erreur).__name__})"
                 )
                 if not self.repondu:
@@ -1920,7 +1919,7 @@ def creer_serveur(
             except tuple(ERREURS) as e:
                 statut = next(s for t, s in ERREURS.items() if isinstance(e, t))
                 log_http.info(
-                    f"{self.command} {self.path} refusée ({statut.value}) : {e}"
+                    f"{self.command} {self._chemin()} refusée ({statut.value}) : {e}"
                 )
                 self._json({"erreur": str(e)}, statut)
 
@@ -1929,7 +1928,7 @@ def creer_serveur(
             206), pour l'écoute et le saut dans le fichier."""
             chemin = audio.fichier_audio(atelier.audios, self.path)
             if chemin is None:
-                log.warning(f"audio introuvable : {self.path}")
+                log.warning(f"audio introuvable : {self._chemin()}")
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
                 return
             audio.servir(self, chemin)
@@ -2012,7 +2011,7 @@ def creer_serveur(
                 return
             statut = code.value if isinstance(code, HTTPStatus) else code
             log_http.info(
-                f"{self.command} {self.path} {statut} ({self.address_string()})"
+                f"{self.command} {self._chemin()} {statut} ({self.address_string()})"
             )
 
         def log_error(self, format: str, *args: Any) -> None:
