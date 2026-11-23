@@ -39,6 +39,11 @@
   header.app span { color: var(--entete-doux); font-size: 12px; }
   header.app a.vers-liste { margin-left: auto; color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid #fff4; border-radius: 6px; padding: 3px 10px; }
   header.app a.vers-liste:hover { background: #fff2; }
+  /* Collecte des sources : le bouton de l'en-tête suit la collecte en cours */
+  header.app button.collecter { font: inherit; font-size: 13px; color: var(--entete-texte); background: none; border: 1px solid #fff4; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  header.app button.collecter:hover { background: #fff2; }
+  dialog.boite .sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  dialog.boite .recollecte { display: flex; gap: 6px; align-items: center; margin-top: 12px; font-size: 13px; }
   main { max-width: 1180px; margin: 0 auto; padding: 16px 16px 0; }
   h2 { font-size: 15px; margin: 18px 0 8px; }
   .carte { background: var(--carte); border: 1px solid var(--trait); border-radius: 8px; padding: 12px; }
@@ -125,7 +130,7 @@
 </style>
 </head>
 <body>
-<header class="app"><a class="logo" href="/" id="logo">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><a class="vers-liste" href="/liste">Liste et arbitrages</a></header>
+<header class="app"><a class="logo" href="/" id="logo">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><a class="vers-liste" href="/liste">Liste et arbitrages</a><button class="collecter" id="collecter" title="Collecter les sources dans le cache">Collecte</button></header>
 <main id="accueil"></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog class="boite" id="boite" aria-labelledby="boite-titre"></dialog>
@@ -732,6 +737,71 @@ addEventListener("hashchange", () => { lireAdresse(); rendre(); });
 
 fetch("/api/donnees").then(r => r.json()).then(d => { preparer(d); lireAdresse(); rendre(); suivre(); })
   .catch(err => { $("accueil").innerHTML = `<div class="alerte">Serveur injoignable : ${esc(err.message)}</div>`; });
+</script>
+<script>
+// ---------- Collecte des sources : une tâche de fond côté serveur ----------
+// POST /api/collectes lance la collecte d'une source (ou de toutes), avec
+// re-collecte si demandée ; GET /api/collectes la suit (une ligne par seconde).
+// Le bouton de l'en-tête montre la source en cours ; à la fin, les données sont
+// relues. Une demande pendant une collecte est refusée : la boîte le dit.
+const SOURCES_COLLECTE = ["radiofrance", "ina", "wayback_podcast", "anciennes_listes", "lmelp"];
+const COLLECTE = { etat: null, avant: null, minuterie: null };
+function ligneCollecte(t) {
+  if (!t || !t.en_cours) return t && t.bilan ? `Dernière collecte : ${t.bilan.emissions} émissions.` : "";
+  return `En cours : ${t.en_cours_sur || "reconstruction de la liste"} (${t.faites}/${t.total})${t.progression ? " · " + t.progression : ""}`;
+}
+function afficherCollecte() {
+  const t = COLLECTE.etat;
+  $("collecter").textContent = t && t.en_cours ? `Collecte : ${t.en_cours_sur || "liste"}…` : "Collecte";
+  const el = $("collecte-etat");
+  if (el) el.textContent = ligneCollecte(t);
+}
+function ouvrirCollecte() {
+  const d = $("boite");
+  d.innerHTML = `<h3 id="boite-titre">Collecte des sources</h3>
+    <p>Remplit le cache depuis la source, puis reconstruit la liste. Une source déjà collectée n'est reprise qu'avec la re-collecte.</p>
+    <label class="recollecte"><input type="checkbox" id="collecte-refresh">Re-collecter, même si le cache est complet</label>
+    <div class="sources">${SOURCES_COLLECTE.map(s => `<button data-source="${s}">${s}</button>`).join("")}<button class="primaire" data-source="toutes">Toutes</button></div>
+    <p class="doux" id="collecte-etat" aria-live="polite" style="margin-top:12px"></p>
+    <p class="echec" id="collecte-erreur" hidden></p>
+    <div class="choix"><button value="fermer">Fermer</button></div>`;
+  d.oncancel = null;
+  d.querySelectorAll("[data-source]").forEach(b => b.addEventListener("click", () => lancerCollecte(b.dataset.source, $("collecte-refresh").checked)));
+  d.querySelector('[value="fermer"]').addEventListener("click", () => d.close());
+  afficherCollecte();
+  if (!d.open) d.showModal();
+}
+async function lancerCollecte(source, refresh) {
+  const erreur = $("collecte-erreur");
+  erreur.hidden = true;
+  try {
+    const r = await fetch("/api/collectes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source, refresh }) });
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.erreur || r.statusText);
+    COLLECTE.avant = compter(EMISSIONS);
+    suivreCollecte(t);
+  } catch (err) { erreur.textContent = `Collecte refusée : ${err.message}`; erreur.hidden = false; }
+}
+async function suivreCollecte(t) {
+  if (!t) {
+    try { const r = await fetch("/api/collectes"); if (!r.ok) return; t = await r.json(); } catch { return; }
+  }
+  const etaitEnCours = !!(COLLECTE.etat && COLLECTE.etat.en_cours);
+  COLLECTE.etat = t;
+  afficherCollecte();
+  clearTimeout(COLLECTE.minuterie);
+  if (t.en_cours) { COLLECTE.minuterie = setTimeout(() => suivreCollecte(), 1000); return; }
+  if (!etaitEnCours) return;
+  const avant = COLLECTE.avant || compter(EMISSIONS);
+  try { preparer(await (await fetch("/api/donnees")).json()); } catch { /* garde les données */ }
+  rendre();
+  const b = t.bilan;
+  const erreurs = (t.erreurs || []).map(e => e.source).join(", ");
+  notifier(b ? `Collecte terminée : ${b.emissions} émissions (avant ${b.emissions_avant})${erreurs ? ` · échec : ${erreurs}` : ""}` : "Collecte en échec (voir les logs)", avant);
+  COLLECTE.avant = null;
+}
+$("collecter").addEventListener("click", ouvrirCollecte);
+suivreCollecte();
 </script>
 </body>
 </html>

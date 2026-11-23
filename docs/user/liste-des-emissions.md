@@ -52,6 +52,8 @@ uv run --active lmelp-pap emissions --source lmelp --refresh
 
 La commande recopie les émissions vérifiées de la base dans le cache. L'émission a ensuite une ligne `lmelp` dans `attestations.csv`, et son doute `absente de lmelp` disparaît. Un doute `sans fiche radiofrance` signale que l'URL enregistrée dans lmelp ne correspond à aucune fiche radiofrance.fr du cache : l'attestation est alors rattachée par la date. Corriger l'URL dans lmelp, ou rafraîchir aussi `radiofrance` si la fiche est récente.
 
+L'appli fait la même chose sans terminal : bouton **Collecte** de l'accueil (voir [Collecter les sources depuis l'appli](#collecter-les-sources-depuis-lappli)).
+
 Les sources se combinent dans une même commande (`--source radiofrance --source lmelp --refresh`). Chaque reconstruction réécrit les fichiers de `data/processed/` : vérifier le changement (`git diff --stat data/processed`), puis le committer. Une fois le commit sur `main`, la page publiée est régénérée à partir des CSV et redéployée (voir « Consulter la liste »).
 
 ### Prérequis pour la source INA
@@ -367,16 +369,22 @@ L'appli écrit ses logs sur la sortie d'erreur (dans le conteneur : `docker logs
 2026-11-21 11:40:02 INFO    arbitrer : mis à disposition 2014-09-28 : /data/audios/2014/14007-28.09.2014-….m4a → /audios-lmelp/2014/14007-28.09.2014-….m4a (sha256 3f1c0e9a77b2)
 2026-11-21 11:40:02 INFO    arbitrer : mise à disposition refusée 2006-04-23 (niveau qualifie) : 2006/14007-23.04.2006-….m4a existe déjà dans le dossier de lmelp
 2026-11-21 11:40:02 INFO    arbitrer : mise à disposition : 1 mise à disposition, 1 refus
+2026-11-21 11:40:10 INFO    arbitrer : collecte demandée : radiofrance (re-collecte)
+2026-11-21 11:40:10 INFO    arbitrer : collecte radiofrance : début
+2026-11-21 11:40:14 INFO    collecte : radiofrance : page 1, 20 fiches vues, 1 téléchargées
+2026-11-21 11:40:20 INFO    arbitrer : collecte ina refusée : une collecte est déjà en cours (radiofrance) : attendez sa fin
+2026-11-21 11:42:05 INFO    arbitrer : collecte radiofrance : collectée en 1 min 55 s
+2026-11-21 11:42:09 INFO    arbitrer : collecte terminée en 1 min 59 s : 2391 émissions (avant 2390), 9120 attestations
 2026-11-21 11:42:17 ERROR   arbitrer : GET /api/donnees : erreur interne (ServerSelectionTimeoutError)
 Traceback (most recent call last):
   …
 ```
 
-**Actions.** Une vérification lancée par le bouton est « manuelle » ; la raison d'une vérification automatique est indiquée (jamais vérifiée, base vide, date de la précédente, nouvelles URL). Chaque arbitrage donne sa sorte, l'émission, la décision (thèmes, existence, date retenue, rapprochement, renvoi à l'écoute) et sa justification ; chaque annulation, l'émission ou l'attestation et le nombre d'arbitrages retirés. Avec Mongo, ces deux lignes finissent par « (pap_arbitrages) ». Un rapatriement trace chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »). Les appels à l'API Radio France donnent leur résultat, le nombre de requêtes et la durée, jamais le contenu reçu.
+**Actions.** Une vérification lancée par le bouton est « manuelle » ; la raison d'une vérification automatique est indiquée (jamais vérifiée, base vide, date de la précédente, nouvelles URL). Chaque arbitrage donne sa sorte, l'émission, la décision (thèmes, existence, date retenue, rapprochement, renvoi à l'écoute) et sa justification ; chaque annulation, l'émission ou l'attestation et le nombre d'arbitrages retirés. Avec Mongo, ces deux lignes finissent par « (pap_arbitrages) ». Un rapatriement trace chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »). Les appels à l'API Radio France donnent leur résultat, le nombre de requêtes et la durée, jamais le contenu reçu. Une collecte donne les sources demandées, le début et l'issue de chaque source (collectée, déjà complète, sautée, en échec) avec sa durée, ses lignes de progression (module `collecte` : une par page de la liste radiofrance.fr, une toutes les 100 fiches INA), le refus d'une deuxième demande avec sa raison, et le bilan (durée, émissions avant et après, attestations).
 
-**Requêtes HTTP.** Chaque requête donne sa méthode, son chemin, son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »).
+**Requêtes HTTP.** Chaque requête donne sa méthode, son chemin, son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`, `GET /api/collectes`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »).
 
-**Erreurs.** Niveau `WARNING` : échec passager d'une vérification d'URL (réseau, 5xx, 429, 403), échec d'un essai ou d'un rapatriement, erreur de l'API Radio France, fichier audio introuvable. Niveau `ERROR`, avec le type de l'exception et la trace : exception imprévue pendant une requête (Mongo injoignable, par exemple ; la page reçoit une 500 au message générique `{"erreur": "erreur interne"}`, le détail ne reste que dans les logs), dans la planification de la vérification, ou dans une tâche de fond (« vérification en échec », « rapatriement en échec » : la tâche s'arrête sans bilan). Mongo injoignable n'empêche pas le démarrage : la ligne « Mongo : injoignable … » le signale et l'appli sert la liste.
+**Erreurs.** Niveau `WARNING` : échec passager d'une vérification d'URL (réseau, 5xx, 429, 403), échec d'un essai ou d'un rapatriement, erreur de l'API Radio France, fichier audio introuvable. Niveau `ERROR`, avec le type de l'exception et la trace : exception imprévue pendant une requête (Mongo injoignable, par exemple ; la page reçoit une 500 au message générique `{"erreur": "erreur interne"}`, le détail ne reste que dans les logs), dans la planification de la vérification, ou dans une tâche de fond (« vérification en échec », « rapatriement en échec » : la tâche s'arrête sans bilan ; « collecte ina en échec : … » : la collecte passe à la source suivante). Mongo injoignable n'empêche pas le démarrage : la ligne « Mongo : injoignable … » le signale et l'appli sert la liste.
 
 #### API
 
@@ -396,6 +404,8 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `POST /api/remises/annulation` | Annule la mise à disposition d'une émission valide qui n'est pas encore dans lmelp : `{"emission": "2014-09-28"}`. Retire la fiche `pap_remises` et la copie chez lmelp (si elle a encore son empreinte), ramène l'enregistrement à qualifié et renvoie les données à jour. Erreurs : 400 (émission inconnue, déjà dans lmelp, ou sans mise à disposition), 503 (sans base Mongo). |
 | `POST /api/remises` | Met à disposition de lmelp l'enregistrement qualifié de chaque émission : `{"emissions": ["2014-09-28", …]}`, l'une après l'autre. Renvoie les données à jour et `remise` : `mises` (`emission`, `fichier`) et `refus` (`emission`, `detail`). Une émission refusée (déjà dans lmelp, sans enregistrement qualifié, fichier de même nom chez lmelp) ne change rien et n'arrête pas les suivantes. Erreurs : 400 (liste vide), 503 (sans base Mongo). |
 | `GET /audios/<fichier>` | Un fichier du dossier audio (`fichier_audio` d'une émission), entier ou par plage (`Range: bytes=…`, réponse 206 ; 416 hors du fichier). Rien n'est servi hors du dossier audio (404). |
+| `POST /api/collectes` | Lance en fond la collecte d'une source, `{"source": "radiofrance"}`, ou de toutes, `{"source": "toutes"}` ; `"refresh": true` re-collecte une source au cache complet. À la fin, la liste est reconstruite depuis le cache. Rend l'avancement. Erreurs : 400 (source inconnue), 409 (une collecte tourne déjà, avec la source en cours dans le message). |
+| `GET /api/collectes` | L'avancement : `en_cours`, `faites` et `total` (sources), `sources`, `refresh`, `en_cours_sur` (la source en cours), `progression` (sa dernière ligne de progression), `debut`, `erreurs` (`source`, `detail`), et `bilan` une fois finie : `emissions`, `emissions_avant`, `attestations`, et `sources`, l'issue de chacune (`collectee`, `deja_complete`, `sautee`, `echec`). |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
 | `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, `bilan` (`ok`, `net`, `passager`) une fois finie, `derniere` et `prochaine` (dates de la dernière vérification complète et de la suivante). |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
@@ -415,6 +425,16 @@ Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste ou si un
 - La page **dans lmelp** a une colonne **Intégrée** : le jour et l'heure où le back-office a fait un épisode de l'enregistrement remis par pap (création du document `episodes`). Une émission entrée dans lmelp par son flux RSS ou une page radiofrance.fr affiche « — ».
 
 L'accueil suit le thème clair ou sombre du système. Sans base Mongo, il n'affiche que « sans enregistrement » et « dans lmelp », avec un bandeau. « pap », en haut à gauche, ramène à l'accueil sans filtre.
+
+### Collecter les sources depuis l'appli
+
+Le bouton **Collecte**, en haut à droite de l'accueil, ouvre une boîte avec un bouton par source (`radiofrance`, `ina`, `wayback_podcast`, `anciennes_listes`, `lmelp`) et **Toutes**. La case **Re-collecter** reprend une source même si son cache est complet, comme `--refresh` ; sans elle, une source déjà collectée est seulement relue.
+
+La collecte tourne en fond, dans le serveur : la boîte se ferme et la page reste utilisable. Pendant la collecte, le bouton de l'en-tête affiche la source en cours (« Collecte : radiofrance… ») et la boîte, rouverte, sa dernière ligne de progression (« radiofrance : page 3, 60 fiches vues, 12 téléchargées », « ina : fiches détaillées 300/2000 (≈ 31 min restantes) »). À la fin, la liste est reconstruite depuis le cache, avec les arbitrages, la page relit ses données et un message donne le nombre d'émissions avant et après, et les compteurs qui ont changé.
+
+Une seule collecte tourne à la fois : une demande pendant une collecte, depuis cette page ou une autre, est refusée et la boîte affiche la raison (« une collecte est déjà en cours (radiofrance) : attendez sa fin »). Une source en échec (réseau, par exemple) n'arrête pas les suivantes : le message final la nomme, et la trace est dans les logs. Sans `MONGO_URI`, la source `lmelp` est sautée et son cache précédent reste valable.
+
+La collecte écrit dans le dossier du cache de l'appli (`--cache`, ou `PAP_CACHE`) ; la source INA demande Chromium (voir « Prérequis pour la source INA »).
 
 ### Ajouter un enregistrement localisé (piste)
 

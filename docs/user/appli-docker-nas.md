@@ -115,6 +115,10 @@ docker exec -u appuser lmelp-pap lmelp-pap arbitrages importer
 
 L'import est idempotent : le relancer n'ajoute que les arbitrages absents. `docker exec -u appuser lmelp-pap lmelp-pap arbitrages exporter` réécrit `/data/processed/arbitrages.csv` avec les arbitrages de Mongo (voir [Arbitrages dans Mongo](liste-des-emissions.md#arbitrages-dans-mongo)). `-u appuser` laisse le fichier au propriétaire `PUID`/`PGID` ; la ligne de log de la commande s'affiche dans le terminal du `docker exec`, pas dans `docker logs`.
 
+### Collecte
+
+La collecte des sources se lance à la main depuis l'appli (bouton **Collecte** de l'accueil, voir [Collecter les sources depuis l'appli](liste-des-emissions.md#collecter-les-sources-depuis-lappli)) ; aucune tâche planifiée ne la déclenche. Elle écrit dans `/data/cache/` (sur le NAS, `/volume1/docker/lmelp/pap/cache/`), un dossier par source, puis reconstruit la liste dans `/data/processed/`. Sa progression et son bilan sont dans `docker logs lmelp-pap`.
+
 ### Reverse proxy
 
 L'appli s'ouvre par un nom d'hôte, via le reverse proxy natif de DSM : **Portail de connexion** → **Avancé** → **Proxy inversé** → **Créer**.

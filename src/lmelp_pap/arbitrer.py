@@ -50,6 +50,15 @@ API :
 - ``POST /api/remises/annulation`` : annule la mise à disposition d'une
   émission valide pas encore dans lmelp (``emission``) : fiche et copie chez
   lmelp retirées, retour à qualifié ;
+- ``POST /api/collectes`` : lance, en fond, la collecte d'une source
+  (``source`` : un nom de ``collecte.SOURCES``, ou ``toutes``), re-collecte
+  comprise si ``refresh`` ; à la fin, la liste est reconstruite depuis le
+  cache. Une seule collecte à la fois : une deuxième demande est refusée
+  (409) ;
+- ``GET /api/collectes`` : son avancement (``en_cours``, ``faites``,
+  ``total``, ``sources``, ``en_cours_sur``, ``progression``, la dernière
+  ligne de progression de la source, ``erreurs``) et son ``bilan`` une fois
+  finie (``emissions``, ``attestations``, l'issue de chaque source) ;
 - ``GET /audios/<fichier>`` : un fichier du dossier audio, avec les requêtes
   ``Range`` (206) pour le saut ; rien hors du dossier audio.
 
@@ -103,7 +112,7 @@ from lmelp_pap.arbitrages import (
     retirer_arbitrages,
     valeur,
 )
-from lmelp_pap.collecte import lire_cache
+from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import (
     JOURS,
@@ -175,6 +184,16 @@ SILENCIEUSES = {
     ("GET", "/health"),
     ("GET", "/api/verifications"),
     ("GET", "/api/rapatriements"),
+    ("GET", "/api/collectes"),
+}
+
+
+# L'issue de la collecte d'une source, telle que les logs la disent.
+ISSUES_COLLECTE = {
+    "collectee": "collectée",
+    "deja_complete": "déjà complète, rien à collecter",
+    "sautee": "sautée",
+    "echec": "en échec",
 }
 
 
@@ -283,11 +302,13 @@ class Tache:
         with self._verrou:
             self._etat.update(champs)
 
-    def lancer(self, total: int, travail: Any, refuser: bool = False) -> dict[str, Any]:
+    def lancer(
+        self, total: int, travail: Any, refuser: bool = False, **champs: Any
+    ) -> dict[str, Any]:
         """Lance ``travail(tache)`` dans un fil, qui rend le bilan. Une tâche
         déjà en cours est rendue telle quelle, ou refusée si ``refuser``. Une
         exception du travail va aux logs avec sa trace ; la tâche finit alors
-        sans bilan."""
+        sans bilan. ``champs`` : l'état de départ propre à cette exécution."""
         with self._verrou:
             if self._etat["en_cours"]:
                 if refuser:
@@ -298,6 +319,7 @@ class Tache:
                 "en_cours": True,
                 "total": total,
                 "debut": datetime.now().astimezone().isoformat(),
+                **champs,
             }
             self._arret.clear()
 
@@ -358,6 +380,15 @@ class Atelier:
             arrete=False,
             rapatriees=[],  # émissions rapatriées (ou déjà là) pendant le lot
         )
+        self._collecte = Tache(
+            "collecte",
+            sources=[],
+            refresh=False,
+            en_cours_sur=None,
+            progression=None,
+            erreurs=[],
+        )
+        self.cache = cache
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
         # Avec Mongo, les arbitrages vivent dans pap_arbitrages, qui fait foi
@@ -652,6 +683,100 @@ class Atelier:
         """Arrête le rapatriement en cours : le fichier en cours est abandonné,
         ceux qui sont finis restent rapatriés."""
         return self._rapatriement.arreter()
+
+    def etat_collecte(self) -> dict[str, Any]:
+        """L'avancement de la collecte en cours ou de la dernière."""
+        return self._collecte.etat()
+
+    def lancer_collecte(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Lance en fond la collecte d'une source (``source`` : son nom, ou
+        ``toutes``), re-collecte comprise si ``refresh``, puis reconstruit la
+        liste depuis le cache. Une seule collecte à la fois."""
+        source = demande.get("source")
+        refresh = bool(demande.get("refresh"))
+        if source == "toutes":
+            sources = sorted(SOURCES)
+        elif isinstance(source, str) and source in SOURCES:
+            sources = [source]
+        else:
+            raise DemandeInvalideError(
+                f"source inconnue : {source!r} (attendu : "
+                f"{', '.join(sorted(SOURCES))} ou toutes)"
+            )
+        etat = self._collecte.etat()
+        if etat["en_cours"]:
+            raison = (
+                f"une collecte est déjà en cours ({etat['en_cours_sur'] or '…'}) : "
+                "attendez sa fin"
+            )
+            log.info(f"collecte {source} refusée : {raison}")
+            raise TacheEnCoursError(raison)
+
+        def travail(tache: Tache) -> dict[str, Any]:
+            debut = time.monotonic()
+            log.info(
+                f"collecte demandée : {', '.join(sources)}"
+                f"{' (re-collecte)' if refresh else ''}"
+            )
+            issues: dict[str, str] = {}
+            erreurs: list[dict[str, str]] = []
+            for n, nom in enumerate(sources, 1):
+                tache.maj(en_cours_sur=nom, progression=None)
+                debut_source = time.monotonic()
+                log.info(f"collecte {nom} : début")
+                issue: str
+                try:
+                    issue = collecter(
+                        nom,
+                        self.cache,
+                        refresh=refresh,
+                        progres=lambda ligne: tache.maj(progression=ligne),
+                    )
+                except Exception as erreur:
+                    issue = "echec"
+                    detail = str(erreur) or type(erreur).__name__
+                    log.exception(f"collecte {nom} en échec : {detail}")
+                    erreurs.append({"source": nom, "detail": detail})
+                issues[nom] = issue
+                log.info(
+                    f"collecte {nom} : {ISSUES_COLLECTE[issue]} en "
+                    f"{_duree(time.monotonic() - debut_source)}"
+                )
+                tache.maj(faites=n, erreurs=list(erreurs))
+            tache.maj(en_cours_sur=None, progression="reconstruction de la liste")
+            avant = self.nombre_emissions()
+            self.recharger_cache()
+            bilan = {
+                "emissions": self.nombre_emissions(),
+                "emissions_avant": avant,
+                "attestations": len(self.attestations),
+                "sources": issues,
+            }
+            log.info(
+                f"collecte terminée en {_duree(time.monotonic() - debut)} : "
+                f"{bilan['emissions']} émissions (avant {avant}), "
+                f"{bilan['attestations']} attestations"
+                f"{f', {len(erreurs)} échec(s)' if erreurs else ''}"
+            )
+            tache.maj(progression=None)
+            return bilan
+
+        return self._collecte.lancer(
+            len(sources),
+            travail,
+            refuser=True,
+            sources=sources,
+            refresh=refresh,
+        )
+
+    def recharger_cache(self) -> None:
+        """Relit le cache (après une collecte) et reconstruit la liste."""
+        attestations = lire_cache(self.cache)  # long : hors du verrou
+        with self._verrou:
+            self.attestations = attestations
+            self._par_cle = {a.cle: a for a in attestations}
+            self._reconstruire()
+        self._apres_reconstruction()
 
     def qualifier(self, demande: dict[str, Any]) -> dict[str, Any]:
         """Qualifie l'enregistrement rapatrié d'une émission (``emission_id``,
@@ -1235,6 +1360,7 @@ ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/localisations": Atelier.ajouter_localise,
     "/api/remises": Atelier.mettre_a_disposition,
     "/api/remises/annulation": Atelier.annuler_mise_a_disposition,
+    "/api/collectes": Atelier.lancer_collecte,
 }
 
 # Le statut HTTP de chaque erreur qu'une route POST rend en JSON.
@@ -1344,6 +1470,8 @@ def creer_serveur(
                 self._json(atelier.etat_verification())
             elif self.path == "/api/rapatriements":
                 self._json(atelier.etat_rapatriement())
+            elif self.path == "/api/collectes":
+                self._json(atelier.etat_collecte())
             elif self.path.startswith("/api/remises/"):
                 emission_id = unquote(self.path.removeprefix("/api/remises/"))
                 try:
