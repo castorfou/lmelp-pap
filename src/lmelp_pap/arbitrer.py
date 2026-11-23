@@ -4,8 +4,10 @@ Un serveur HTTP de la bibliothèque standard sert la page et une petite API
 JSON. À chaque arbitrage, il l'enregistre dans la collection Mongo
 ``pap_arbitrages`` (ou, sans Mongo, dans ``arbitrages.csv``), reconstruit la
 liste depuis le cache, sans réseau, réécrit ses CSV et renvoie les données à
-jour. Avec Mongo, ``arbitrages.csv`` n'est ni lu ni écrit : il s'importe et
-s'exporte par ``lmelp-pap arbitrages``.
+jour. Avec Mongo, un arbitrage ne s'écrit pas dans ``arbitrages.csv`` : le
+fichier s'importe et s'exporte par ``lmelp-pap arbitrages``, la publication
+le réécrit (export de ``pap_arbitrages``), et la liste se construit avec lui
+si Mongo est illisible.
 
 API :
 
@@ -43,7 +45,9 @@ API :
   (``emission_id``, ``url`` http(s), ``note``) ;
 - ``POST /api/fichiers?emission_id=…&nom=…&provenance=…&datation=…`` : le
   corps est un fichier audio, écrit dans le dossier audio ; l'enregistrement
-  (celui de ``piste``, sinon un nouveau) passe à rapatrié ;
+  (celui de ``piste``, sinon un nouveau) passe à rapatrié ; sans
+  ``Content-Length`` valide, 400 ; au-delà de ``PAP_TELEVERSEMENT_MAX``
+  octets (2 Gio par défaut), 413 ;
 - ``GET /api/radiofrance/<emission_id>`` : la diffusion de l'émission dans
   l'Open API Radio France, lue à la demande (module ``radiofrance_api``) :
   ``statut`` (``trouvee``, ``introuvable``, ``sans_cle``, ``erreur`` avec son
@@ -440,7 +444,8 @@ class Atelier:
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
         # Avec Mongo, les arbitrages vivent dans pap_arbitrages, qui fait foi
-        # (ADR 0004) : le fichier n'est ni lu ni écrit, il s'exporte.
+        # (ADR 0004) : un arbitrage ne s'écrit pas dans le fichier ; il en
+        # est l'export (publication) et le repli (Mongo illisible).
         self.arbitrages = ArbitragesMongo(depot.base) if depot else None
         self.attestations = lire_cache(cache)
         self._par_cle = {a.cle: a for a in self.attestations}
@@ -1738,8 +1743,9 @@ ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/collectes": Atelier.lancer_collecte,
 }
 
-# Le statut HTTP de chaque erreur qu'une route POST rend en JSON.
-ERREURS_POST: dict[type[Exception], HTTPStatus] = {
+# Le statut HTTP de chaque erreur qu'une route d'action (POST, ou l'aperçu de
+# la publication) rend en JSON.
+ERREURS: dict[type[Exception], HTTPStatus] = {
     MaturiteIndisponibleError: HTTPStatus.SERVICE_UNAVAILABLE,
     TacheEnCoursError: HTTPStatus.CONFLICT,
     PublicationIndisponibleError: HTTPStatus.SERVICE_UNAVAILABLE,
@@ -1863,12 +1869,7 @@ def creer_serveur(
             elif self.path == "/api/rapatriements":
                 self._json(atelier.etat_rapatriement())
             elif self.path == "/api/publication":
-                try:
-                    self._json(atelier.apercu_publication())
-                except PublicationIndisponibleError as e:
-                    self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
-                except PublicationError as e:
-                    self._json({"erreur": str(e)}, HTTPStatus.BAD_GATEWAY)
+                self._action(atelier.apercu_publication)
             elif self.path == "/api/collectes":
                 self._json(atelier.etat_collecte())
             elif self.path.startswith("/api/remises/"):
@@ -1892,20 +1893,27 @@ def creer_serveur(
 
         def _post(self) -> None:
             """Une action de ``ACTIONS_POST`` sur le corps JSON de la requête ;
-            chaque erreur connue donne son statut (``ERREURS_POST``)."""
+            chaque erreur connue donne son statut (``ERREURS``)."""
             chemin, _, requete = self.path.partition("?")
             action = ACTIONS_POST.get(self.path)
             if action is None and chemin != "/api/fichiers":
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
                 return
+            if action is None:
+                self._action(lambda: self._fichier(dict(parse_qsl(requete))))
+            else:
+                self._action(lambda: action(atelier, self._demande()))
+
+        def _action(self, action: Callable[[], object]) -> None:
+            """Répond le résultat de ``action`` en JSON ; une erreur connue
+            donne son statut (``ERREURS``) et sa ligne de refus."""
             try:
-                if action is None:
-                    self._json(self._fichier(dict(parse_qsl(requete))))
-                else:
-                    self._json(action(atelier, self._demande()))
-            except tuple(ERREURS_POST) as e:
-                statut = next(s for t, s in ERREURS_POST.items() if isinstance(e, t))
-                log_http.info(f"POST {self.path} refusée ({statut.value}) : {e}")
+                self._json(action())
+            except tuple(ERREURS) as e:
+                statut = next(s for t, s in ERREURS.items() if isinstance(e, t))
+                log_http.info(
+                    f"{self.command} {self.path} refusée ({statut.value}) : {e}"
+                )
                 self._json({"erreur": str(e)}, statut)
 
         def _audio(self) -> None:

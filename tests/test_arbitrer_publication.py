@@ -284,6 +284,39 @@ def test_le_demarrage_dit_que_la_publication_est_desactivee(
     assert "publication : désactivée (PAP_DEPOT_GIT non défini)" in journal
 
 
+def test_l_apercu_de_l_api_refuse_si_pap_arbitrages_est_a_importer(
+    distant: Path,
+    cache: Path,
+    depot: Depot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _fichier_d_arbitrages(tmp_path / "sortie" / "arbitrages.csv")
+    serveur: Any = creer_serveur(
+        cache,
+        tmp_path / "sortie",
+        port=0,
+        depot=depot,
+        publication=_publication(distant, tmp_path),
+    )
+    threading.Thread(target=serveur.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{serveur.server_address[1]}/api/publication"
+    try:
+        statut, reponse = _json(url)
+    finally:
+        serveur.shutdown()
+        serveur.server_close()
+
+    assert statut == 502
+    assert "lmelp-pap arbitrages importer" in reponse["erreur"]
+    assert any(
+        "GET /api/publication refusée (502)" in m
+        for _, _, m in lignes(capfd.readouterr().err)
+    )
+
+
 def test_l_api_sans_publication_repond_503(
     cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
