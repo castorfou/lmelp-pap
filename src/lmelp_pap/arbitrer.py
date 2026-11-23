@@ -100,6 +100,7 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 import csv
 import json
 import logging
+import os
 import shutil
 import tempfile
 import threading
@@ -197,6 +198,10 @@ from lmelp_pap.remise import (
 DOUTES_DE_DATE = ("désaccord de date", "jour inhabituel")
 
 
+# La taille maximale d'un fichier téléversé, en octets (2 Gio) ; la variable
+# d'environnement ``PAP_TELEVERSEMENT_MAX`` la change.
+TELEVERSEMENT_MAX = 2 * 1024**3
+
 # Période du fil de planification de la vérification des URL, en secondes.
 PLANIFICATION = 3600
 
@@ -284,6 +289,10 @@ class DemandeInvalideError(ValueError):
 
 class MaturiteIndisponibleError(RuntimeError):
     """La maturité des enregistrements demande une base Mongo."""
+
+
+class TropGrosError(ValueError):
+    """Un corps de requête plus gros que permis (``PAP_TELEVERSEMENT_MAX``)."""
 
 
 class TacheEnCoursError(RuntimeError):
@@ -1734,8 +1743,8 @@ ERREURS_POST: dict[type[Exception], HTTPStatus] = {
     TacheEnCoursError: HTTPStatus.CONFLICT,
     PublicationIndisponibleError: HTTPStatus.SERVICE_UNAVAILABLE,
     PublicationError: HTTPStatus.BAD_GATEWAY,
+    TropGrosError: HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
     DemandeInvalideError: HTTPStatus.BAD_REQUEST,
-    json.JSONDecodeError: HTTPStatus.BAD_REQUEST,
 }
 
 
@@ -1753,6 +1762,18 @@ ICONES = {
 # Les icônes, elles, se gardent : servies en ``no-store``, Chrome les affiche
 # dans l'onglet sans les enregistrer, et les favoris restent sans favicon.
 CACHE_ICONES = "public, max-age=604800"
+
+
+def _taille_max(texte: str | None) -> int:
+    """La taille maximale d'un téléversement : ``PAP_TELEVERSEMENT_MAX`` (en
+    octets), ou ``TELEVERSEMENT_MAX`` si elle est absente ou invalide."""
+    if texte and texte.strip().isdecimal():
+        return int(texte)
+    if texte:
+        log.warning(
+            f"PAP_TELEVERSEMENT_MAX invalide ({texte!r}) : {TELEVERSEMENT_MAX} octets"
+        )
+    return TELEVERSEMENT_MAX
 
 
 def creer_serveur(
@@ -1787,6 +1808,7 @@ def creer_serveur(
     )
     if planification and depot is not None:
         atelier.planifier_en_continu()
+    maximum = _taille_max(os.environ.get("PAP_TELEVERSEMENT_MAX"))
 
     class Requetes(BaseHTTPRequestHandler):
         """Les routes de la page et de l'API JSON."""
@@ -1898,18 +1920,41 @@ def creer_serveur(
         def _fichier(self, parametres: dict[str, str]) -> dict[str, Any]:
             """Un fichier audio téléversé : le corps brut de la requête, ses
             champs dans la query string. Un refus lit quand même le reste du
-            corps, pour que le navigateur reçoive la réponse."""
-            taille = int(self.headers.get("Content-Length") or 0)
+            corps, pour que le navigateur reçoive la réponse ; un corps trop
+            gros (``TropGrosError``) n'est pas lu, la connexion se ferme."""
+            taille = self._longueur()
+            if taille > maximum:
+                self.close_connection = True
+                raise TropGrosError(
+                    f"fichier de {taille} octets, plus gros que permis "
+                    f"({maximum} octets, PAP_TELEVERSEMENT_MAX)"
+                )
             flux = _Lecture(self.rfile, taille)
             try:
                 return atelier.televerser(parametres, flux, taille)
             finally:
                 flux.vider()
 
+        def _longueur(self) -> int:
+            """La longueur du corps (``Content-Length``) ; absente, négative
+            ou pas un nombre, la requête est refusée et la connexion fermée
+            (le corps n'a pas de fin connue)."""
+            texte = self.headers.get("Content-Length")
+            if texte is None or not texte.strip().isdecimal():
+                self.close_connection = True
+                quoi = "absent" if texte is None else f"invalide ({texte!r})"
+                raise DemandeInvalideError(f"Content-Length {quoi}")
+            return int(texte)
+
         def _demande(self) -> dict[str, Any]:
-            """Le corps JSON de la requête, un objet."""
-            taille = int(self.headers.get("Content-Length") or 0)
-            demande = json.loads(self.rfile.read(taille) or b"{}")
+            """Le corps JSON de la requête, un objet ; sans corps annoncé
+            (ni ``Content-Length``), un objet vide."""
+            sans_corps = self.headers.get("Content-Length") is None
+            corps = b"" if sans_corps else self.rfile.read(self._longueur())
+            try:
+                demande = json.loads(corps or b"{}")
+            except ValueError as erreur:  # JSON ou UTF-8 invalide
+                raise DemandeInvalideError(f"JSON invalide : {erreur}") from erreur
             if not isinstance(demande, dict):
                 raise DemandeInvalideError("un objet JSON est attendu")
             return demande

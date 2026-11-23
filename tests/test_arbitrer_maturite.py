@@ -5,6 +5,7 @@ HTTP factice : la vérification des URL n'atteint jamais le réseau.
 """
 
 import hashlib
+import http.client
 import json
 import threading
 import time
@@ -23,6 +24,7 @@ from bson import ObjectId
 from lmelp_pap.arbitrer import creer_serveur
 from lmelp_pap.maturite import Depot
 from tests.test_commande import _cache_rempli
+from tests.test_logs import messages
 from tests.test_maturite import SON, Flux, Reponse, Session
 from tests.test_radiofrance_api import MASQUE_API
 
@@ -1552,3 +1554,81 @@ def test_un_fichier_laisse_une_trace_dans_les_logs(
         "(provenance « Jean D., cassette »)"
     ) in logs
     assert "fichier refusé 1967-01-01 : un fichier demande sa provenance" in logs
+
+
+def _post_brut(
+    url: str, chemin: str, corps: bytes, longueur: str | None
+) -> tuple[int, Any]:
+    """Un POST dont l'en-tête ``Content-Length`` est donné tel quel (ou
+    absent) ; rend le statut et le JSON de la réponse."""
+    morceaux = urllib.parse.urlsplit(url)
+    connexion = http.client.HTTPConnection(morceaux.netloc, timeout=5)
+    try:
+        connexion.putrequest("POST", chemin)
+        if longueur is not None:
+            connexion.putheader("Content-Length", longueur)
+        connexion.endheaders()
+        connexion.send(corps)
+        reponse = connexion.getresponse()
+        return reponse.status, json.loads(reponse.read())
+    finally:
+        connexion.close()
+
+
+TELEVERSEMENT = (
+    "/api/fichiers?emission_id=1967-01-01&nom=a.mp3&provenance=Jean&datation=antenne"
+)
+
+
+@pytest.mark.parametrize(
+    ("longueur", "raison"),
+    [(None, "absent"), ("-5", "invalide"), ("abc", "invalide")],
+)
+def test_un_televersement_sans_longueur_valide_est_refuse_et_logue(
+    url: str, capfd: pytest.CaptureFixture[str], longueur: str | None, raison: str
+) -> None:
+    statut, reponse = _post_brut(url, TELEVERSEMENT, b"", longueur)
+
+    assert statut == 400
+    assert "Content-Length" in reponse["erreur"]
+    time.sleep(0.1)
+    assert any(
+        "refusée (400)" in m and "Content-Length" in m and raison in m
+        for m in messages(capfd.readouterr().err, "http")
+    )
+
+
+def test_un_televersement_trop_gros_est_refuse_en_413(
+    tmp_path: Path,
+    depot: Depot,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("PAP_TELEVERSEMENT_MAX", "10")
+    for adresse in _demarrer(tmp_path, depot=depot, audios=tmp_path / "audios"):
+        statut, reponse = _post_brut(adresse, TELEVERSEMENT, b"x" * 20, "20")
+
+        assert statut == 413
+        assert "10 octets" in reponse["erreur"]
+        assert not (tmp_path / "audios").exists() or not any(
+            (tmp_path / "audios").rglob("*.mp3")
+        )
+        time.sleep(0.1)
+        assert any(
+            "refusée (413)" in m for m in messages(capfd.readouterr().err, "http")
+        )
+
+
+@pytest.mark.parametrize("corps", [b"{pas du json", b'{"emission_id": "\xff"}'])
+def test_un_corps_json_invalide_est_refuse_en_400_et_logue(
+    url: str, capfd: pytest.CaptureFixture[str], corps: bytes
+) -> None:
+    statut, reponse = _post_brut(url, "/api/urls", corps, str(len(corps)))
+
+    assert statut == 400
+    assert "JSON" in reponse["erreur"]
+    time.sleep(0.1)
+    assert any(
+        "POST /api/urls refusée (400)" in m
+        for m in messages(capfd.readouterr().err, "http")
+    )

@@ -18,12 +18,17 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from pymongo import ReturnDocument
+
 from lmelp_pap.liste import HOMMAGE, Arbitrage, CleAttestation, Sorte
 
 
 log = logging.getLogger(__name__)
 
 COLLECTION = "pap_arbitrages"
+# Les compteurs de pap : celui de ``pap_arbitrages`` donne le rang du
+# prochain arbitrage, atomiquement, entre l'appli et la commande d'import.
+COMPTEURS = "pap_compteurs"
 EXISTANTE = "existe"
 INEXISTANTE = "n'existe pas"
 A_ECOUTER = "à écouter"
@@ -221,6 +226,7 @@ class ArbitragesMongo:
     def __init__(self, base: Any):
         """``base`` : une base pymongo (ou mongomock)."""
         self._collection = base[COLLECTION]
+        self._compteurs = base[COMPTEURS]
 
     def tous(self) -> list[Arbitrage]:
         """Les arbitrages, dans l'ordre où ils sont entrés."""
@@ -271,9 +277,10 @@ class ArbitragesMongo:
         return n
 
     def _ajouter(self, lignes: list[dict[str, str]]) -> int:
-        """Ajoute les lignes absentes à la suite des autres ; rend leur nombre."""
-        dernier = self._collection.find_one(sort=[("rang", -1)])
-        rang = dernier["rang"] if dernier else 0
+        """Ajoute les lignes absentes à la suite des autres ; rend leur nombre.
+        Chaque rang vient du compteur (``$inc`` atomique) : deux processus
+        qui ajoutent en même temps n'ont jamais le même."""
+        self._amorcer_compteur()
         ajouts = 0
         for ligne in lignes:
             identifiant = "|".join(
@@ -284,15 +291,37 @@ class ArbitragesMongo:
                     ligne["date"],
                 )
             )
+            if self._collection.find_one({"_id": identifiant}, {"_id": 1}):
+                continue
             resultat = self._collection.update_one(
                 {"_id": identifiant},
-                {"$setOnInsert": {**ligne, "rang": rang + 1}},
+                {"$setOnInsert": {**ligne, "rang": self._rang_suivant()}},
                 upsert=True,
             )
             if resultat.upserted_id is not None:
-                rang += 1
                 ajouts += 1
         return ajouts
+
+    def _amorcer_compteur(self) -> None:
+        """Met le compteur au moins au plus grand rang en base (``$max`` :
+        sans effet s'il est déjà plus loin), pour une collection remplie
+        avant lui."""
+        dernier = self._collection.find_one(sort=[("rang", -1)])
+        self._compteurs.update_one(
+            {"_id": COLLECTION},
+            {"$max": {"rang": dernier["rang"] if dernier else 0}},
+            upsert=True,
+        )
+
+    def _rang_suivant(self) -> int:
+        """Le rang du prochain arbitrage, pris atomiquement au compteur."""
+        compteur = self._compteurs.find_one_and_update(
+            {"_id": COLLECTION},
+            {"$inc": {"rang": 1}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        return int(compteur["rang"])
 
 
 def _s(n: int) -> str:

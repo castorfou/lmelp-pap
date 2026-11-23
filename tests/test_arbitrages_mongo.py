@@ -142,7 +142,74 @@ def test_n_ecrit_que_dans_des_collections_pap(base: Any, csv_existant: Path) -> 
     arbitrages.ajouter(_theme("RD_9.001"))
     arbitrages.retirer({("ina", "RD_1.001")})
 
-    assert base.list_collection_names() == ["pap_arbitrages"]
+    assert all(c.startswith("pap_") for c in base.list_collection_names())
+
+
+class _BaseConcurrente:
+    """Une base où un autre processus (la commande d'import, l'appli) ajoute
+    un arbitrage juste avant la première écriture dans ``pap_arbitrages``."""
+
+    def __init__(self, base: Any, autre: Callable[[], object]):
+        self._base, self._autre = base, autre
+
+    def __getitem__(self, nom: str) -> Any:
+        collection = self._base[nom]
+        if nom != "pap_arbitrages":
+            return collection
+        base = self
+
+        class Collection:
+            def __getattr__(self, attribut: str) -> Any:
+                return getattr(collection, attribut)
+
+            def update_one(self, *args: Any, **options: Any) -> Any:
+                autre, base._autre = base._autre, lambda: None
+                autre()
+                return collection.update_one(*args, **options)
+
+        return Collection()
+
+
+def test_deux_processus_qui_ajoutent_en_meme_temps_n_ont_pas_le_meme_rang(
+    base: Any, csv_existant: Path
+) -> None:
+    ArbitragesMongo(base).importer(csv_existant)
+    autre_processus = ArbitragesMongo(base)
+    concurrente = _BaseConcurrente(
+        base, lambda: autre_processus.ajouter(_theme("RD_8.001"))
+    )
+
+    ArbitragesMongo(concurrente).ajouter(_theme("RD_9.001"))
+
+    rangs = [d["rang"] for d in base["pap_arbitrages"].find()]
+    assert len(rangs) == 5
+    assert len(set(rangs)) == 5
+    assert [a.source_id for a in ArbitragesMongo(base).tous()][:3] == [
+        "RD_4294389.001",
+        "le-mage-du-kremlin-1192090",
+        "RD_1.001",
+    ]
+
+
+def test_le_rang_continue_apres_les_arbitrages_deja_en_base(base: Any) -> None:
+    # une collection remplie avant le compteur des rangs
+    base["pap_arbitrages"].insert_one(
+        {
+            "_id": "x",
+            "source": "ina",
+            "source_id": "RD_0.001",
+            "sorte": "thème",
+            "valeur": "cinéma",
+            "justification": "",
+            "date": "2026-11-01",
+            "rang": 7,
+        }
+    )
+    arbitrages = ArbitragesMongo(base)
+
+    arbitrages.ajouter(_theme("RD_9.001"))
+
+    assert [a.source_id for a in arbitrages.tous()] == ["RD_0.001", "RD_9.001"]
 
 
 def test_l_import_et_l_export_laissent_une_ligne_de_log(
