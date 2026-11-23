@@ -2,7 +2,8 @@
 #
 # Sert l'appli web (lmelp-pap arbitrer) sur le port PAP_PORT. Les données
 # vivent dans le volume /data : cache/ (cache des sources), processed/ (CSV de
-# la liste et arbitrages), audios/, logs/. Sur le NAS :
+# la liste et arbitrages), audios/, logs/, depot/ (clone du dépôt GitHub où
+# « Publier » commite et pousse la liste ; git est installé pour lui). Sur le NAS :
 # /volume1/docker/lmelp/pap → /data. Les fichiers créés appartiennent à
 # PUID:PGID (défaut 1000:1000, 1027:1027 sur le NAS), comme dans le reste de la
 # stack lmelp.
@@ -24,7 +25,7 @@ FROM python:3.12-slim
 # libatomic1 : le Node embarqué par playwright (>= 1.65) en a besoin pour
 # « playwright install », avant même --with-deps.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl gosu libatomic1 \
+    && apt-get install -y --no-install-recommends curl git gosu libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 ARG APP_UID=1000
@@ -48,6 +49,7 @@ ENV PAP_HOTE=0.0.0.0 \
     PAP_AUDIOS=/data/audios \
     PAP_AUDIOS_LMELP=/audios-lmelp \
     PAP_DONNEES=/data/processed \
+    PAP_DEPOT_GIT=/data/depot \
     PYTHONUNBUFFERED=1
 
 # /audios-lmelp : le dossier audio du back-office lmelp, monté par le compose

@@ -5,8 +5,10 @@ des émissions de 1955 à 2026, réparties entre les états.
 """
 
 import json
+import urllib.parse
 from collections import Counter
 from collections.abc import Iterator
+from datetime import date, timedelta
 from importlib.resources import files
 from typing import Any
 
@@ -109,7 +111,7 @@ def _ouvrir(
         url = route.request.url
         if url.split("#")[0] == ADRESSE:
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
-        elif api and (chemin := "/" + url.split("/", 3)[-1]) in api:
+        elif api and (chemin := "/" + url.split("/", 3)[-1].split("?")[0]) in api:
             reponse = api[chemin](route.request)
             if reponse is EN_ATTENTE:
                 SUSPENDUES.append(route)
@@ -203,7 +205,14 @@ def test_les_colonnes_d_une_page_d_etat_se_trient(navigateur: Any) -> None:
     page.locator('.compteur[data-etat="localise"]').click()
     entetes = page.locator("th.triable")
     noms = [t.rstrip(" ▲▼") for t in entetes.all_inner_texts()]
-    assert noms == ["Date", "Titre", "Sources", "Depuis"]
+    assert noms == [
+        "Date",
+        "Titre",
+        "Détenteur",
+        "Relance",
+        "Dernier échange",
+        "Depuis",
+    ]
 
     def colonne(i: int) -> list[Any]:
         textes = page.locator(f"tbody tr td:nth-child({i + 1})").all_inner_texts()
@@ -1027,64 +1036,399 @@ def test_cliquer_une_emission_valide_deplie_sa_fiche(navigateur: Any) -> None:
     assert page.locator("tr.fiche").count() == 0
 
 
-# ---------- Niveau localisé : piste saisie à la main ----------
+# ---------- Sans enregistrement et localisé : la ligne dépliée ----------
 
 PISTE = {"source": "Jean D., forum, cassettes 1987", "note": "face B abîmée"}
 
 
-def _ajouter_piste(navigateur: Any) -> tuple[Any, str, list[Any]]:
-    """L'accueil sur la page sans enregistrement, la boîte d'ajout ouverte
-    sur l'émission sans enregistrement de 1987."""
-    donnees = _donnees()
-    cible = next(
+def _jour(decalage: int) -> str:
+    return (date.today() + timedelta(days=decalage)).isoformat()
+
+
+def _sans(donnees: dict[str, Any], n: int = 1) -> list[str]:
+    """Les ``n`` premières émissions sans enregistrement de 1987 et après."""
+    return [
         e["id"]
         for e in donnees["emissions"]
-        if e["date"].startswith("1987") and e["maturite"] is None
-    )
+        if e["maturite"] is None and e["date"] >= "1987"
+        and e["attestations"][0]["source"] != "lmelp"
+    ][:n]  # fmt: skip
+
+
+def _localiser(donnees: dict[str, Any], ids: list[str], source: str) -> Any:
+    """Les données après une piste sur ``ids``."""
+    apres = json.loads(json.dumps(donnees))
+    for e in apres["emissions"]:
+        if e["id"] in ids:
+            e["maturite"] = "localise"
+            e["maturite_depuis"] = f"{_jour(0)}T10:00:00+00:00"
+            e["localisations"] = [_localisation(source, journal=[])]
+    return apres
+
+
+def _localisation(source: str, **champs: Any) -> dict[str, Any]:
+    return {
+        "id": f"piste:{source}",
+        "source": source,
+        "note": None,
+        "notice": None,
+        "depuis": "2026-11-10T10:00:00+00:00",
+        "relance": None,
+        "journal": [],
+        **champs,
+    }
+
+
+def _sur_la_page(navigateur: Any, etat: str, donnees: Any, **api: Any) -> Any:
+    page = _ouvrir(navigateur, donnees, api={f"/api/{k}": v for k, v in api.items()})
+    page.locator(f'.compteur[data-etat="{etat}"]').click()
+    return page
+
+
+def _deplier(page: Any, emission_id: str) -> Any:
+    page.locator(f'tbody tr[data-id="{emission_id}"] td').nth(1).click()
+    return page.locator("tr.deplie")
+
+
+def test_la_page_sans_enregistrement_a_ses_colonnes_et_ses_cases(
+    navigateur: Any,
+) -> None:
+    page = _sur_la_page(navigateur, "sans", _donnees())
+    entetes = [t.rstrip(" ▲▼") for t in page.locator("th.triable").all_inner_texts()]
+    assert entetes == ["Date", "Titre", "Attestée par", "Depuis"]
+    assert "Action" not in page.locator("thead").inner_text()
+    ligne = page.locator("tbody tr").first
+    assert ligne.locator("input[type=checkbox]").count() == 1
+    assert ligne.get_by_role("button").count() == 0  # plus d'« Ajouter… »
+
+
+def test_un_clic_deplie_la_ligne_et_un_second_la_referme(navigateur: Any) -> None:
+    donnees = _donnees()
+    premiere, seconde = _sans(donnees, 2)
+    page = _sur_la_page(navigateur, "sans", donnees)
+    deplie = _deplier(page, premiere)
+    assert "Ce qu'on sait" in deplie.inner_text()
+    assert "ina" in deplie.inner_text()
+    onglets = deplie.get_by_role("tab").all_inner_texts()
+    assert onglets == ["Une piste", "URL", "Fichier"]
+    assert "→ localisé" in deplie.inner_text()
+    # la ligne dépliée vient juste sous sa ligne
+    assert page.locator(f'tr[data-id="{premiere}"] + tr.deplie').count() == 1
+
+    _deplier(page, seconde)
+    assert page.locator("tr.deplie").count() == 1
+    assert page.locator(f'tr[data-id="{seconde}"] + tr.deplie').count() == 1
+    _deplier(page, seconde)
+    assert page.locator("tr.deplie").count() == 0
+
+
+def test_chaque_onglet_dit_ou_il_mene(navigateur: Any) -> None:
+    donnees = _donnees()
+    (cible,) = _sans(donnees)
+    page = _sur_la_page(navigateur, "sans", donnees)
+    deplie = _deplier(page, cible)
+    deplie.get_by_role("tab", name="URL").click()
+    assert "→ téléchargeable" in page.locator("tr.deplie").inner_text()
+    page.locator("tr.deplie").get_by_role("tab", name="Fichier").click()
+    assert "→ rapatrié" in page.locator("tr.deplie").inner_text()
+
+
+def test_une_piste_depuis_la_ligne_localise_et_note_le_premier_echange(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    donnees["detenteurs"] = ["Paul M."]
+    (cible,) = _sans(donnees)
     envoyees: list[Any] = []
 
     def localisations(requete: Any) -> Any:
         envoyees.append(json.loads(requete.post_data))
-        if not envoyees[-1]["source"].strip():
-            return {"erreur": "une piste demande une source"}
-        apres = json.loads(json.dumps(donnees))
-        e = next(x for x in apres["emissions"] if x["id"] == cible)
-        e["maturite"] = "localise"
-        e["maturite_depuis"] = "2026-11-22T10:00:00+00:00"
-        e["localisations"] = [
-            {**PISTE, "notice": None, "depuis": "2026-11-22T10:00:00+00:00"}
-        ]
-        return apres
+        return _localiser(donnees, [cible], PISTE["source"])
 
-    page = _ouvrir(navigateur, donnees, api={"/api/localisations": localisations})
-    page.locator('.compteur[data-etat="sans"]').click()
-    ligne = page.locator(f'tbody tr[data-id="{cible}"]')
-    ligne.get_by_role("button", name="Ajouter un enregistrement localisé").click()
-    return page, cible, envoyees
-
-
-def test_ajouter_une_piste_localise_l_emission(navigateur: Any) -> None:
-    page, cible, envoyees = _ajouter_piste(navigateur)
-    page.get_by_label("Source").fill(PISTE["source"])
-    page.get_by_label("Note").fill(PISTE["note"])
-    page.get_by_role("button", name="Ajouter", exact=True).click()
+    page = _sur_la_page(navigateur, "sans", donnees, localisations=localisations)
+    deplie = _deplier(page, cible)
+    ok = deplie.get_by_role("button", name="Localiser")
+    assert ok.is_disabled()  # détenteur obligatoire
+    detenteur = deplie.get_by_label("Détenteur")
+    assert detenteur.evaluate("e => [...e.list.options].map(o => o.value)") == [
+        "Paul M."
+    ]
+    detenteur.fill(PISTE["source"])
+    deplie.get_by_label("Note", exact=True).fill(PISTE["note"])
+    assert ok.is_disabled()  # la case du premier échange est cochée : un texte
+    deplie.get_by_label("Canal").select_option("forum")
+    deplie.get_by_label("Texte du premier échange").fill("message reçu")
+    ok.click()
 
     page.locator("#toast", has_text="localisé").wait_for()
-    assert envoyees == [{"emission_id": cible, **PISTE}]
+    assert envoyees == [
+        {
+            "emissions": [cible],
+            **PISTE,
+            "premier_echange": {"canal": "forum", "texte": "message reçu"},
+        }
+    ]
     assert page.locator(f'tbody tr[data-id="{cible}"]').count() == 0
 
+
+def test_une_piste_sans_premier_echange_n_en_envoie_pas(navigateur: Any) -> None:
+    donnees = _donnees()
+    (cible,) = _sans(donnees)
+    envoyees: list[Any] = []
+
+    def localisations(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        return _localiser(donnees, [cible], "Jean D.")
+
+    page = _sur_la_page(navigateur, "sans", donnees, localisations=localisations)
+    deplie = _deplier(page, cible)
+    deplie.get_by_label("Détenteur").fill("Jean D.")
+    deplie.get_by_label("noter aussi le premier échange").uncheck()
+    deplie.get_by_role("button", name="Localiser").click()
+    page.locator("#toast", has_text="localisé").wait_for()
+    assert "premier_echange" not in envoyees[0]
+
+
+def test_une_piste_pour_la_selection_localise_les_emissions_cochees(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    ids = _sans(donnees, 3)
+    envoyees: list[Any] = []
+
+    def localisations(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        return _localiser(donnees, ids, "Jean D.")
+
+    page = _sur_la_page(navigateur, "sans", donnees, localisations=localisations)
+    avant = _compteurs_de(donnees)
+    for emission_id in ids:
+        page.locator(f'tbody tr[data-id="{emission_id}"] input[type=checkbox]').check()
+    page.get_by_role("button", name="Une piste pour la sélection (3)").click()
+    boite = page.locator("#boite")
+    boite.get_by_label("Détenteur").fill("Jean D.")
+    boite.get_by_label("Texte du premier échange").fill("liste de ses cassettes reçue")
+    boite.get_by_role("button", name="Localiser les 3 émissions").click()
+
+    page.locator("#toast", has_text="3 émissions localisées").wait_for()
+    assert sorted(envoyees[0]["emissions"]) == sorted(ids)
+    assert envoyees[0]["source"] == "Jean D."
+    assert not boite.is_visible()
     page.get_by_role("button", name="← Accueil").click()
-    page.locator('.compteur[data-etat="localise"]').click()
-    ligne = page.locator(f'tbody tr[data-id="{cible}"]')
-    assert PISTE["source"] in ligne.inner_text()
-    assert PISTE["note"] in ligne.inner_text()
+    compteurs = _compteurs(page)
+    assert compteurs["sans"] == avant["sans"] - 3
+    assert compteurs["localise"] == avant["localise"] + 3
 
 
-def test_une_piste_sans_source_ne_part_pas(navigateur: Any) -> None:
-    page, _, envoyees = _ajouter_piste(navigateur)
-    page.get_by_label("Note").fill("rien")
-    assert page.get_by_role("button", name="Ajouter", exact=True).is_disabled()
-    assert envoyees == []
+def _compteurs_de(donnees: dict[str, Any]) -> Counter[str]:
+    return _comptes(donnees)
+
+
+def _localise(donnees: dict[str, Any]) -> list[dict[str, Any]]:
+    return [e for e in donnees["emissions"] if e["maturite"] == "localise"]
+
+
+def _avec_relances(donnees: dict[str, Any]) -> tuple[str, str]:
+    """Une émission localisée dont la relance est passée, une autre dans
+    3 jours ; les autres n'en ont pas."""
+    due, bientot = _localise(donnees)[5:7]
+    for e, decalage in ((due, -2), (bientot, 3)):
+        e["relance"] = _jour(decalage)
+        e["dernier_echange"] = {"date": _jour(-20), "canal": "courriel"}
+        e["localisations"] = [
+            _localisation(
+                "Jean D.",
+                relance=_jour(decalage),
+                journal=[
+                    {
+                        "date": _jour(-20),
+                        "canal": "courriel",
+                        "interlocuteur": "Jean",
+                        "texte": "il cherche la cassette",
+                        "relance": _jour(decalage),
+                    }
+                ],
+            )
+        ]
+    return due["id"], bientot["id"]
+
+
+def test_la_page_localise_trie_par_relance_et_la_colore(navigateur: Any) -> None:
+    donnees = _donnees()
+    due, bientot = _avec_relances(donnees)
+    page = _sur_la_page(navigateur, "localise", donnees)
+    entetes = [t.rstrip(" ▲▼") for t in page.locator("th.triable").all_inner_texts()]
+    assert entetes == [
+        "Date", "Titre", "Détenteur", "Relance", "Dernier échange", "Depuis"
+    ]  # fmt: skip
+    lignes = page.locator("tbody tr")
+    assert lignes.nth(0).get_attribute("data-id") == due
+    assert lignes.nth(1).get_attribute("data-id") == bientot
+    rouge = lignes.nth(0).locator(".relance")
+    assert rouge.inner_text() == "due depuis 2 j"
+    assert rouge.evaluate("e => getComputedStyle(e).color") == "rgb(179, 38, 30)"
+    assert lignes.nth(1).locator(".relance").evaluate(
+        "e => getComputedStyle(e).color"
+    ) == "rgb(154, 103, 0)"  # fmt: skip
+    assert "—" in lignes.nth(2).inner_text()
+    assert "20 j · courriel" in lignes.nth(0).inner_text()
+
+
+def test_noter_un_echange_avec_une_relance_a_30_jours_la_grise_et_la_descend(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    due, _ = _avec_relances(donnees)
+    envoyees: list[Any] = []
+
+    def echanges(requete: Any) -> Any:
+        demande = json.loads(requete.post_data)
+        envoyees.append(demande)
+        apres = json.loads(json.dumps(donnees))
+        e = next(x for x in apres["emissions"] if x["id"] == due)
+        e["relance"] = demande["relance"]
+        e["dernier_echange"] = {"date": demande["date"], "canal": demande["canal"]}
+        piste = e["localisations"][0]
+        piste["relance"] = demande["relance"]
+        piste["journal"].insert(0, {**demande, "interlocuteur": "Jean"})
+        return apres
+
+    page = _sur_la_page(navigateur, "localise", donnees, echanges=echanges)
+    deplie = _deplier(page, due)
+    assert "il cherche la cassette" in deplie.inner_text()
+    assert deplie.get_by_role("tab").all_inner_texts() == [
+        "Une autre piste", "URL", "Fichier"
+    ]  # fmt: skip
+    assert deplie.get_by_label("Interlocuteur").input_value() == "Jean D."
+    assert deplie.get_by_label("Date").input_value() == _jour(0)
+    ok = deplie.get_by_role("button", name="Noter l'échange")
+    assert ok.is_disabled()  # le texte est obligatoire
+    deplie.get_by_label("Texte de l'échange").fill("relancé, il cherche encore")
+    deplie.get_by_role("button", name="+30 j").click()
+    ok.click()
+
+    page.locator("#toast", has_text="Échange noté").wait_for()
+    assert envoyees[0]["relance"] == _jour(30)
+    assert envoyees[0]["enregistrement"] == "piste:Jean D."
+    assert envoyees[0]["texte"] == "relancé, il cherche encore"
+    lignes = page.locator("tbody tr[data-id]")
+    assert lignes.nth(0).get_attribute("data-id") != due
+    ligne = page.locator(f'tbody tr[data-id="{due}"]')
+    assert ligne.locator(".relance").inner_text() == "dans 30 j"
+    assert "loin" in (ligne.locator(".relance").get_attribute("class") or "")
+    # le journal, du plus récent au plus ancien, reste déplié
+    textes = page.locator("tr.deplie .journal .texte").all_inner_texts()
+    assert textes == ["relancé, il cherche encore", "il cherche la cassette"]
+
+
+def test_avec_plusieurs_pistes_l_echange_demande_laquelle(navigateur: Any) -> None:
+    donnees = _donnees()
+    cible = _localise(donnees)[0]
+    cible["localisations"] = [_localisation("Jean D."), _localisation("Paul M.")]
+    page = _sur_la_page(navigateur, "localise", donnees)
+    deplie = _deplier(page, cible["id"])
+    piste = deplie.get_by_label("Piste")
+    assert piste.locator("option").all_text_contents() == ["Jean D.", "Paul M."]
+    piste.select_option("piste:Paul M.")
+    assert deplie.get_by_label("Interlocuteur").input_value() == "Paul M."
+
+
+def test_un_refus_s_affiche_dans_la_ligne_depliee(navigateur: Any) -> None:
+    donnees = _donnees()
+    (cible,) = _sans(donnees)
+
+    def urls(_requete: Any) -> Any:
+        return {"erreur": "https://exemple.org/a.mp3 : URL déjà connue"}
+
+    page = _sur_la_page(navigateur, "sans", donnees, urls=urls)
+    page.route(
+        "**/api/urls",
+        lambda route: route.fulfill(
+            status=400,
+            body=json.dumps(urls(None)),
+            content_type="application/json",
+        ),
+    )
+    deplie = _deplier(page, cible)
+    deplie.get_by_role("tab", name="URL").click()
+    deplie = page.locator("tr.deplie")
+    ok = deplie.get_by_role("button", name="Enregistrer l'URL")
+    deplie.get_by_label("URL de l'intégral").fill("pas une url")
+    assert ok.is_disabled()
+    deplie.get_by_label("URL de l'intégral").fill("https://exemple.org/a.mp3")
+    ok.click()
+    deplie.get_by_text("URL déjà connue").wait_for()
+    assert page.locator(f'tbody tr[data-id="{cible}"]').count() == 1
+
+
+def test_une_url_rend_l_emission_telechargeable(navigateur: Any) -> None:
+    donnees = _donnees()
+    (cible,) = _sans(donnees)
+    envoyees: list[Any] = []
+
+    def urls(requete: Any) -> Any:
+        envoyees.append(json.loads(requete.post_data))
+        apres = json.loads(json.dumps(donnees))
+        next(e for e in apres["emissions"] if e["id"] == cible)["maturite"] = (
+            "telechargeable"
+        )
+        return apres
+
+    page = _sur_la_page(navigateur, "sans", donnees, urls=urls)
+    _deplier(page, cible).get_by_role("tab", name="URL").click()
+    deplie = page.locator("tr.deplie")
+    deplie.get_by_label("URL de l'intégral").fill("https://exemple.org/a.mp3")
+    deplie.get_by_label("Note", exact=True).fill("forum")
+    deplie.get_by_role("button", name="Enregistrer l'URL").click()
+    page.locator("#toast", has_text="téléchargeable").wait_for()
+    assert envoyees == [
+        {"emission_id": cible, "url": "https://exemple.org/a.mp3", "note": "forum"}
+    ]
+
+
+def test_un_fichier_demande_sa_provenance_puis_se_televerse(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    cible = _localise(donnees)[0]
+    cible["localisations"] = [_localisation("Jean D.")]
+    recus: list[Any] = []
+
+    def fichiers(requete: Any) -> Any:
+        recus.append((requete.url.split("?", 1)[1], requete.post_data_buffer))
+        apres = json.loads(json.dumps(donnees))
+        next(e for e in apres["emissions"] if e["id"] == cible["id"])["maturite"] = (
+            "rapatrie"
+        )
+        return apres
+
+    page = _sur_la_page(navigateur, "localise", donnees, fichiers=fichiers)
+    _deplier(page, cible["id"]).get_by_role("tab", name="Fichier").click()
+    deplie = page.locator("tr.deplie")
+    ok = deplie.get_by_role("button", name="Téléverser")
+    deplie.get_by_label("Fichier audio").set_input_files(
+        {"name": "masque 1987.mp3", "mimeType": "audio/mpeg", "buffer": b"ID3son"}
+    )
+    provenance = deplie.get_by_label("Provenance")
+    assert provenance.input_value() == "Jean D."  # préremplie avec le détenteur
+    provenance.fill("")
+    assert ok.is_disabled()
+    provenance.fill("Jean D., cassette numérisée")
+    deplie.get_by_label("La date est établie par").select_option("antenne")
+    ok.click()
+
+    page.locator("#toast", has_text="rapatrié").wait_for()
+    ((requete, corps),) = recus
+    champs = dict(urllib.parse.parse_qsl(requete, keep_blank_values=True))
+    assert champs == {
+        "emission_id": cible["id"],
+        "nom": "masque 1987.mp3",
+        "provenance": "Jean D., cassette numérisée",
+        "datation": "antenne",
+        "note": "",
+        "piste": "piste:Jean D.",
+    }
+    assert corps == b"ID3son"
 
 
 def test_la_page_localise_lie_la_notice_ina(navigateur: Any) -> None:

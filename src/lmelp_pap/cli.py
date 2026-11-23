@@ -12,13 +12,14 @@ from importlib.metadata import version
 from pathlib import Path
 
 from lmelp_pap import logs
-from lmelp_pap.arbitrages import lire_arbitrages
+from lmelp_pap.arbitrages import ArbitragesMongo, lire_arbitrages
 from lmelp_pap.arbitrer import AUDIOS, AUDIOS_LMELP, creer_serveur
 from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import construire_liste
 from lmelp_pap.maturite import Depot, depot_depuis_env
 from lmelp_pap.page import construire_page
+from lmelp_pap.publication import Configuration, Publication
 
 
 log = logging.getLogger(__name__)
@@ -66,6 +67,22 @@ def _parser() -> argparse.ArgumentParser:
     )
     page.add_argument("--donnees", type=Path, default=donnees)
     page.add_argument("--sortie", type=Path, default=Path("docs/emissions/index.html"))
+    sous_arbitrages = commandes.add_parser(
+        "arbitrages",
+        help="importe arbitrages.csv dans Mongo (pap_arbitrages), ou l'en exporte",
+    )
+    sous_arbitrages.add_argument(
+        "sens",
+        choices=["importer", "exporter"],
+        help="importer : ajoute les arbitrages absents du fichier ; exporter : "
+        "réécrit le fichier avec ceux de Mongo",
+    )
+    sous_arbitrages.add_argument(
+        "--fichier",
+        type=Path,
+        default=arbitrages or Path(donnees or "data/processed") / "arbitrages.csv",
+        help="fichier des arbitrages (par défaut : arbitrages.csv des données)",
+    )
     arbitrer = commandes.add_parser(
         "arbitrer",
         help="ouvre la liste en mode arbitrage dans un serveur local",
@@ -114,13 +131,16 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page`` et
+    """Point d'entrée de ``lmelp-pap`` : commandes ``emissions``, ``page``, ``arbitrages`` et
     ``arbitrer``. Rend le code de sortie."""
     args = _parser().parse_args(argv)
     logs.configurer()
 
     if args.commande == "arbitrer":
         return _arbitrer(args)
+
+    if args.commande == "arbitrages":
+        return _echanger_arbitrages(args)
 
     if args.commande == "page":
         args.sortie.parent.mkdir(parents=True, exist_ok=True)
@@ -166,12 +186,51 @@ def _etat_mongo(depot: Depot | None) -> str:
     return f"connecté (base {base})"
 
 
+def _echanger_arbitrages(args: argparse.Namespace) -> int:
+    """Importe le fichier des arbitrages dans ``pap_arbitrages``, ou l'en
+    exporte ; chacun laisse sa ligne de log."""
+    depot = depot_depuis_env()
+    if depot is None:
+        log.error(f"arbitrages : MONGO_URI absent, rien à {args.sens}")
+        return 1
+    arbitrages = ArbitragesMongo(depot.base)
+    if args.sens == "importer":
+        arbitrages.importer(args.fichier)
+    else:
+        arbitrages.exporter(args.fichier)
+    return 0
+
+
+def _publication(args: argparse.Namespace) -> Publication | None:
+    """La publication sur GitHub, si ``PAP_DEPOT_GIT`` donne son clone ;
+    aucun fichier publié ne porte le chemin des audios ni du cache."""
+    configuration = Configuration.depuis_env()
+    if configuration is None:
+        return None
+    prives = [args.audios, args.audios_lmelp, args.cache]
+    return Publication(configuration, prives=[p.resolve() for p in prives])
+
+
+def _etat_publication(publication: Publication | None) -> str:
+    """La publication pour le log du démarrage, sans le jeton."""
+    if publication is None:
+        return "désactivée (PAP_DEPOT_GIT non défini)"
+    c = publication.configuration
+    jeton = "GH_TOKEN présent" if c.jeton else "GH_TOKEN absent"
+    ntfy = os.environ.get("NTFY_TOPIC")
+    return (
+        f"vers {c.distant} ({c.branche}), clone {c.clone}, {jeton}, "
+        f"ntfy {ntfy or 'non configuré (NTFY_TOPIC absent)'}"
+    )
+
+
 def _arbitrer(args: argparse.Namespace) -> int:
     """Sert l'appli (la page en mode arbitrage) jusqu'à l'arrêt du processus."""
     log.info("lecture du cache et construction de la liste…")
     # La maturité des enregistrements vit dans Mongo (MONGO_URI) ; sans
     # base, l'appli sert la liste sans elle.
     depot = depot_depuis_env()
+    publication = _publication(args)
     serveur = creer_serveur(
         args.cache,
         args.sortie,
@@ -185,6 +244,7 @@ def _arbitrer(args: argparse.Namespace) -> int:
         # puis à chaque échéance, et pour les URL nouvelles.
         planification=True,
         intervalle=timedelta(days=args.verification_jours),
+        publication=publication,
     )
     port = serveur.server_address[1]
     atelier = serveur.atelier  # type: ignore[attr-defined]
@@ -192,11 +252,18 @@ def _arbitrer(args: argparse.Namespace) -> int:
     # ni l'un ni l'autre ne lit la base : l'appli démarre même sans elle
     log.info(f"Mongo : {_etat_mongo(depot)}")
     log.info(f"liste : {atelier.nombre_emissions()} émissions")
+    log.info(f"arbitrages : {atelier.origine_arbitrages()}")
+    try:
+        if raison := atelier.arbitrages_a_importer():
+            log.warning(f"arbitrages : {raison}")
+    except Exception as erreur:  # noqa: BLE001 — Mongo injoignable : démarrer quand même
+        log.warning(f"arbitrages : {type(erreur).__name__} en comptant pap_arbitrages")
     log.info(
         f"dossiers : cache {args.cache}, données {args.sortie}, "
         f"arbitrages {atelier.fichier}, audios {args.audios}, "
         f"audios lmelp {args.audios_lmelp}"
     )
+    log.info(f"publication : {_etat_publication(publication)}")
     if publique := os.environ.get("PAP_URL_PUBLIQUE"):
         log.info(f"page publique : {publique}")
     if not args.sans_navigateur:

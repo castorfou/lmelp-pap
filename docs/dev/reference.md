@@ -18,10 +18,10 @@ flowchart LR
 
 | Module | Rôle |
 |---|---|
-| [`cli`](#lmelp_pap.cli) | La commande `lmelp-pap` et ses sous-commandes `emissions`, `page` et `arbitrer`. |
+| [`cli`](#lmelp_pap.cli) | La commande `lmelp-pap` et ses sous-commandes `emissions`, `page`, `arbitrer` et `arbitrages`. |
 | [`collecte`](#lmelp_pap.collecte) | Collecte des sources dans le cache (réseau), puis lecture du cache en attestations (sans réseau). |
 | [`liste`](#lmelp_pap.liste) | Modèle (attestation, émission, arbitrage, doute) et construction de la liste : rapprochement, fusion, arbitrages, doutes. |
-| [`arbitrages`](#lmelp_pap.arbitrages) | Lecture et écriture de `arbitrages.csv`. |
+| [`arbitrages`](#lmelp_pap.arbitrages) | Lecture et écriture de `arbitrages.csv` ; collection Mongo `pap_arbitrages`, son import et son export. |
 | [`ecriture`](#lmelp_pap.ecriture) | Écriture de la liste en CSV liés par l'identifiant. |
 | [`page`](#lmelp_pap.page) | Page HTML autonome de la liste, publiée ou en mode arbitrage. |
 | [`arbitrer`](#lmelp_pap.arbitrer) | Serveur local de l'outil d'arbitrage et son API JSON. |

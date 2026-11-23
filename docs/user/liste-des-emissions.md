@@ -52,6 +52,8 @@ uv run --active lmelp-pap emissions --source lmelp --refresh
 
 La commande recopie les émissions vérifiées de la base dans le cache. L'émission a ensuite une ligne `lmelp` dans `attestations.csv`, et son doute `absente de lmelp` disparaît. Un doute `sans fiche radiofrance` signale que l'URL enregistrée dans lmelp ne correspond à aucune fiche radiofrance.fr du cache : l'attestation est alors rattachée par la date. Corriger l'URL dans lmelp, ou rafraîchir aussi `radiofrance` si la fiche est récente.
 
+L'appli fait la même chose sans terminal : bouton **Collecte** de l'accueil (voir [Collecter les sources depuis l'appli](#collecter-les-sources-depuis-lappli)).
+
 Les sources se combinent dans une même commande (`--source radiofrance --source lmelp --refresh`). Chaque reconstruction réécrit les fichiers de `data/processed/` : vérifier le changement (`git diff --stat data/processed`), puis le committer. Une fois le commit sur `main`, la page publiée est régénérée à partir des CSV et redéployée (voir « Consulter la liste »).
 
 ### Prérequis pour la source INA
@@ -303,7 +305,7 @@ La page garde la frise et les filtres de la page publiée (année, thème, sourc
 - les justifications en un clic, « titre explicite », « écouté l'enregistrement » et « connaissance de l'émission », et un champ libre facultatif ;
 - le bouton **Annuler l'arbitrage**, pour une émission dont le thème, la date ou l'existence est arbitré, ou qui est renvoyée à l'écoute. Il retire tous les arbitrages de l'émission, « existe » compris.
 
-L'outil attache l'arbitrage à l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr, sinon une autre attestation. À chaque décision, il écrit `arbitrages.csv`, reconstruit la liste, réécrit ses CSV, et la page se met à jour aussitôt : l'émission change d'aspect, ou sort de la liste (arbitrée sans le thème livres, ou inexistante). Un message sous le bandeau « Mode arbitrage » confirme la décision.
+L'outil attache l'arbitrage à l'attestation la plus stable de l'émission : la notice INA, sinon la fiche radiofrance.fr, sinon une autre attestation. À chaque décision, il l'enregistre (dans Mongo si `MONGO_URI` est défini, sinon dans `arbitrages.csv`, voir [Arbitrages dans Mongo](#arbitrages-dans-mongo)), reconstruit la liste, réécrit ses CSV, et la page se met à jour aussitôt : l'émission change d'aspect, ou sort de la liste (arbitrée sans le thème livres, ou inexistante). Un message sous le bandeau « Mode arbitrage » confirme la décision.
 
 Le panneau **Arbitrages enregistrés** du bandeau liste tous les arbitrages du fichier, du plus récent au plus ancien, chacun avec un bouton **Annuler** : c'est ainsi qu'on annule l'arbitrage d'une émission sortie de la liste. Annuler depuis ce panneau retire du fichier les lignes de cette attestation ; **Annuler l'arbitrage** sous une émission retire celles de toutes ses attestations. L'émission retrouve alors les thèmes que lui donnent les sources. Un arbitrage s'ajoute en fin de fichier et une annulation retire seulement ses lignes : les autres lignes, écrites à la main ou non, restent telles quelles.
 
@@ -321,6 +323,32 @@ Exemple : lever les doutes « thème inconnu » de 2010. Cliquer sur 2010 dans l
 | `--sans-navigateur` | N'ouvre pas la page ; l'adresse d'écoute s'affiche dans les logs. |
 
 La page publiée n'a aucun de ces contrôles. Elle reflète les décisions d'une séance d'arbitrage une fois les CSV de `data/processed/` et `arbitrages.csv` committés sur `main`, qui la régénère et la redéploie.
+
+#### Arbitrages dans Mongo
+
+Quand `MONGO_URI` est défini (base `MONGO_DB`, par défaut `masque_et_la_plume`), les arbitrages de l'appli vivent dans la collection Mongo `pap_arbitrages`, qui fait foi : l'appli y écrit chaque décision et chaque annulation, et y relit les arbitrages à chaque reconstruction de la liste. Le fichier `arbitrages.csv` n'est alors ni lu ni écrit par l'appli ; il en est la publication (ADR 0004). Un arbitrage survit ainsi au redémarrage de l'appli. Sans `MONGO_URI`, l'appli lit et écrit `arbitrages.csv` comme décrit plus haut. Si Mongo est illisible à la reconstruction, la liste se construit avec `arbitrages.csv` et un avertissement va aux logs.
+
+La commande `lmelp-pap arbitrages` passe les arbitrages d'un support à l'autre :
+
+```bash
+# Ajoute à pap_arbitrages les arbitrages du fichier qui n'y sont pas encore
+uv run lmelp-pap arbitrages importer
+# Réécrit le fichier avec tous les arbitrages de pap_arbitrages
+uv run lmelp-pap arbitrages exporter
+```
+
+| Option | Effet |
+|---|---|
+| `--fichier FICHIER` | Fichier des arbitrages (par défaut `arbitrages.csv` dans `data/processed`, ou `PAP_ARBITRAGES`, ou `PAP_DONNEES`). |
+
+L'import est idempotent : un arbitrage est reconnu par son attestation, sa sorte, sa valeur et sa date ; importer deux fois le même fichier n'ajoute rien la seconde fois. Il ne retire rien de Mongo. L'export écrit le format de `arbitrages.csv`, dans l'ordre d'entrée des arbitrages (l'ordre du fichier importé, puis celui des décisions), si bien qu'importer puis exporter redonne le même fichier. La commande `lmelp-pap emissions` lit toujours le fichier, sans Mongo : pour construire la liste hors ligne avec les décisions de l'appli, exporter d'abord. pap n'écrit que dans des collections préfixées `pap_`.
+
+Chaque commande laisse une ligne de log :
+
+```
+2026-11-23 09:12:03 INFO    arbitrages : import de data/processed/arbitrages.csv : 187 arbitrages lus, 187 ajoutés à pap_arbitrages
+2026-11-23 09:40:51 INFO    arbitrages : export de pap_arbitrages : 189 arbitrages → data/processed/arbitrages.csv
+```
 
 #### Logs
 
@@ -341,16 +369,22 @@ L'appli écrit ses logs sur la sortie d'erreur (dans le conteneur : `docker logs
 2026-11-21 11:40:02 INFO    arbitrer : mis à disposition 2014-09-28 : /data/audios/2014/14007-28.09.2014-….m4a → /audios-lmelp/2014/14007-28.09.2014-….m4a (sha256 3f1c0e9a77b2)
 2026-11-21 11:40:02 INFO    arbitrer : mise à disposition refusée 2006-04-23 (niveau qualifie) : 2006/14007-23.04.2006-….m4a existe déjà dans le dossier de lmelp
 2026-11-21 11:40:02 INFO    arbitrer : mise à disposition : 1 mise à disposition, 1 refus
+2026-11-21 11:40:10 INFO    arbitrer : collecte demandée : radiofrance (re-collecte)
+2026-11-21 11:40:10 INFO    arbitrer : collecte radiofrance : début
+2026-11-21 11:40:14 INFO    collecte : radiofrance : page 1, 20 fiches vues, 1 téléchargées
+2026-11-21 11:40:20 INFO    arbitrer : collecte ina refusée : une collecte est déjà en cours (radiofrance) : attendez sa fin
+2026-11-21 11:42:05 INFO    arbitrer : collecte radiofrance : collectée en 1 min 55 s
+2026-11-21 11:42:09 INFO    arbitrer : collecte terminée en 1 min 59 s : 2391 émissions (avant 2390), 9120 attestations
 2026-11-21 11:42:17 ERROR   arbitrer : GET /api/donnees : erreur interne (ServerSelectionTimeoutError)
 Traceback (most recent call last):
   …
 ```
 
-**Actions.** Une vérification lancée par le bouton est « manuelle » ; la raison d'une vérification automatique est indiquée (jamais vérifiée, base vide, date de la précédente, nouvelles URL). Chaque arbitrage donne sa sorte, l'émission, la décision (thèmes, existence, date retenue, rapprochement, renvoi à l'écoute) et sa justification ; chaque annulation, l'émission ou l'attestation et le nombre d'arbitrages retirés. Un rapatriement trace chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »). Les appels à l'API Radio France donnent leur résultat, le nombre de requêtes et la durée, jamais le contenu reçu.
+**Actions.** Une vérification lancée par le bouton est « manuelle » ; la raison d'une vérification automatique est indiquée (jamais vérifiée, base vide, date de la précédente, nouvelles URL). Chaque arbitrage donne sa sorte, l'émission, la décision (thèmes, existence, date retenue, rapprochement, renvoi à l'écoute) et sa justification ; chaque annulation, l'émission ou l'attestation et le nombre d'arbitrages retirés. Avec Mongo, ces deux lignes finissent par « (pap_arbitrages) ». Un rapatriement trace chaque nouvel essai (« échec 1980-02-24 (essai 1/3) : …, nouvel essai dans 5 s »), chaque échec définitif et l'arrêt d'un lot. Une qualification refusée est tracée avec sa raison (« qualification refusée 2024-02-11 : … aucun enregistrement rapatrié à qualifier »). Chaque mise à disposition refusée donne l'émission, le niveau de son enregistrement le plus avancé et la raison ; une mise à disposition qui a lu l'API Radio France le signale (« …, API Radio France »). Les appels à l'API Radio France donnent leur résultat, le nombre de requêtes et la durée, jamais le contenu reçu. Une collecte donne les sources demandées, le début et l'issue de chaque source (collectée, déjà complète, sautée, en échec) avec sa durée, ses lignes de progression (module `collecte` : une par page de la liste radiofrance.fr, une toutes les 100 fiches INA), le refus d'une deuxième demande avec sa raison, et le bilan (durée, émissions avant et après, attestations).
 
-**Requêtes HTTP.** Chaque requête donne sa méthode, son chemin, son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »).
+**Requêtes HTTP.** Chaque requête donne sa méthode, son chemin sans la query string (celle de `POST /api/fichiers` porte la provenance du fichier), son statut et l'adresse du client (module `http`), sauf `GET /health` (sondé par Docker) et les sondages de l'avancement par la page (`GET /api/verifications`, `GET /api/rapatriements`, `GET /api/collectes`). Une demande refusée donne en plus sa raison (« POST /api/arbitrages refusée (400) : sorte invalide : … »). Un client parti avant la fin de la réponse (page rechargée pendant `GET /api/donnees`) laisse une seule ligne, sans trace : « GET /api/donnees : client parti (BrokenPipeError) ».
 
-**Erreurs.** Niveau `WARNING` : échec passager d'une vérification d'URL (réseau, 5xx, 429, 403), échec d'un essai ou d'un rapatriement, erreur de l'API Radio France, fichier audio introuvable. Niveau `ERROR`, avec le type de l'exception et la trace : exception imprévue pendant une requête (Mongo injoignable, par exemple ; la page reçoit une 500 au message générique `{"erreur": "erreur interne"}`, le détail ne reste que dans les logs), dans la planification de la vérification, ou dans une tâche de fond (« vérification en échec », « rapatriement en échec » : la tâche s'arrête sans bilan). Mongo injoignable n'empêche pas le démarrage : la ligne « Mongo : injoignable … » le signale et l'appli sert la liste.
+**Erreurs.** Niveau `WARNING` : échec passager d'une vérification d'URL (réseau, 5xx, 429, 403), échec d'un essai ou d'un rapatriement, erreur de l'API Radio France, fichier audio introuvable. Niveau `ERROR`, avec le type de l'exception et la trace : exception imprévue pendant une requête (Mongo injoignable, par exemple ; la page reçoit une 500 au message générique `{"erreur": "erreur interne"}`, le détail ne reste que dans les logs), dans la planification de la vérification, ou dans une tâche de fond (« vérification en échec », « rapatriement en échec » : la tâche s'arrête sans bilan ; « collecte ina en échec : … » : la collecte passe à la source suivante). Mongo injoignable n'empêche pas le démarrage : la ligne « Mongo : injoignable … » le signale et l'appli sert la liste.
 
 #### API
 
@@ -359,8 +393,11 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | Requête | Effet |
 |---|---|
 | `GET /` | L'accueil. `GET /liste` : la liste en mode arbitrage. |
-| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. Avec une base Mongo, chaque émission porte aussi `maturite`, `maturite_depuis`, `echec_rapatriement`, `fichier_audio` (le fichier écoutable, relatif au dossier audio, ou `null`) `ecart` (`date` et `motif` de l'écart, ou `null`) `dans_lmelp` (vrai si un épisode de lmelp porte le fichier d'un de ses enregistrements valides, ou si lmelp l'atteste) `integration_lmelp` (l'heure de création de cet épisode par le back-office, ISO 8601, ou `null`) et `localisations` (ses enregistrements localisés, du plus ancien au plus récent : `source`, `note`, `notice`, l'URL de la notice INA ou `null`, et `depuis`, la date d'entrée dans le niveau). |
-| `POST /api/localisations` | Ajoute à une émission un enregistrement localisé saisi à la main : `{"emission_id": "2008-03-02", "source": "Jean D., forum, cassettes 2008", "note": "face B abîmée"}` (`note` facultative). Renvoie les données à jour. Erreurs : 400 (émission inconnue, source vide), 503 (sans base Mongo). |
+| `GET /api/donnees` | Les données courantes : `emissions` (comme dans la page) et `arbitrages` (du plus récent au plus ancien, avec la date et le titre de l'attestation). Chaque émission porte en plus `dates_candidates` (vide sans doute de date ni date arbitrée ; sinon, pour chaque date des sources : `date`, `jour`, `sources`, `habituel`, `actuelle`), `arbitrage_date` (`date` et `justification`, ou `null`), et `rapprochements` (pour chaque attestation au rapprochement ambigu : `source`, `source_id` et `rivales`, les identifiants des émissions rivales). Chaque doute porte `source` et `source_id`, l'attestation en cause, vides si le doute porte sur l'émission entière. Avec une base Mongo, chaque émission porte aussi `maturite`, `maturite_depuis`, `echec_rapatriement`, `fichier_audio` (le fichier écoutable, relatif au dossier audio, ou `null`) `ecart` (`date` et `motif` de l'écart, ou `null`) `dans_lmelp` (vrai si un épisode de lmelp porte le fichier d'un de ses enregistrements valides, ou si lmelp l'atteste) `integration_lmelp` (l'heure de création de cet épisode par le back-office, ISO 8601, ou `null`) `localisations` (ses enregistrements localisés, du plus ancien au plus récent : `id`, l'identifiant de l'enregistrement, `source`, `note`, `notice`, l'URL de la notice INA ou `null`, `depuis`, la date d'entrée dans le niveau, `relance`, celle de son dernier échange, et `journal`, ses échanges du plus récent au plus ancien : `date`, `canal`, `interlocuteur`, `texte`, `relance`), `relance` (la plus proche de ses pistes, ou `null`) et `dernier_echange` (`date` et `canal`, ou `null`). Les données portent aussi `detenteurs`, les détenteurs des pistes déjà saisies. |
+| `POST /api/localisations` | Ajoute à une ou plusieurs émissions un enregistrement localisé saisi à la main (une piste) : `{"emissions": ["2008-03-02", "2008-03-09"], "source": "Jean D., forum, cassettes 2008", "note": "face B abîmée", "premier_echange": {"canal": "forum", "texte": "message reçu"}}` (`"emission_id"` pour une seule émission ; `note` et `premier_echange` facultatifs). Le premier échange est daté du jour, avec le détenteur pour interlocuteur. Tout est vérifié avant d'écrire : un refus ne localise aucune émission. Renvoie les données à jour. Erreurs : 400 (émission inconnue, source vide, premier échange sans texte ou de canal inconnu), 503 (sans base Mongo). |
+| `POST /api/echanges` | Note un échange au journal d'une piste : `{"emission_id": "2008-03-02", "enregistrement": "piste:…", "date": "2026-11-21", "canal": "courriel", "interlocuteur": "Jean", "texte": "relancé", "relance": "2026-12-21"}`. `enregistrement` est facultatif si l'émission n'a qu'une piste, `date` vaut aujourd'hui par défaut, `interlocuteur` et `relance` sont facultatifs. Canaux : `courriel`, `téléphone`, `forum`, `courrier`, `sur place`, `autre`. Ni la maturité ni la date d'entrée dans l'état ne changent. Erreurs : 400 (émission inconnue ou sans piste, piste à préciser, texte vide, canal inconnu, date illisible), 503 (sans base Mongo). |
+| `POST /api/urls` | Ajoute à une émission un enregistrement téléchargeable : `{"emission_id": "2008-03-02", "url": "https://…/masque.mp3", "note": "…"}`. Il part avec le prochain lot de téléchargement. Erreurs : 400 (URL qui n'est pas en http(s), dont le nom de fichier est « . » ou « .. », URL déjà connue), 503 (sans base Mongo). |
+| `POST /api/fichiers?emission_id=…&nom=…&provenance=…&datation=…&note=…&piste=…` | Téléverse un fichier audio : le corps de la requête est le fichier, ses champs sont dans l'adresse. Il est écrit dans le dossier audio de pap, sous `<année>/<nom>`, et l'enregistrement passe à rapatrié avec son empreinte et sa taille : celui de la piste `piste` (facultative), sinon un nouveau. `datation` : `etiquette`, `antenne`, `contenu` ou `inconnue`. Erreurs : 400 (provenance vide, nom qui n'est pas celui d'un fichier audio, nom déjà pris dans `<année>/` : rien n'est écrasé ; `Content-Length` absent ou invalide), 413 (fichier plus gros que `PAP_TELEVERSEMENT_MAX`, 2 Gio par défaut), 503 (sans base Mongo). |
 | `POST /api/arbitrages` | Enregistre un arbitrage : `{"emission_id": "2010-07-11", "sorte": "thème", "themes": ["théâtre"], "justification": "titre explicite"}`, ou `"sorte": "existence"` sans thèmes, avec `"valeur": "existe"` ou `"valeur": "n'existe pas"` (par défaut), `"sorte": "date"` avec `"date": "2020-08-02"`, `"sorte": "écoute"` sans thèmes pour un renvoi à l'écoute, ou `"sorte": "rapprochement"` avec l'attestation ambiguë (`"source"`, `"source_id"`) et `"vers"` : l'identifiant de l'émission rivale où la déplacer, ou `null` pour la garder ici. L'outil enregistre l'émission cible par son attestation la plus stable. |
 | `POST /api/rapatriements` | Lance en fond le rapatriement des émissions `{"emissions": ["2007-01-14", …]}`, l'une après l'autre. Erreurs : 400 (liste vide, émission sans intégral téléchargeable), 409 (un lot tourne déjà), 503 (sans base Mongo). |
 | `GET /api/rapatriements` | L'avancement : `en_cours`, `faites`, `total`, `en_cours_sur`, `octets` (reçus), `fichier_octets` et `fichier_total` (fichier en cours), `debut`, `arrete`, `rapatriees` (dates des émissions rapatriées), `erreurs`, et `bilan` (`rapatries`, `deja_la`, `echecs`) une fois fini. |
@@ -370,9 +407,13 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `POST /api/remises/annulation` | Annule la mise à disposition d'une émission valide qui n'est pas encore dans lmelp : `{"emission": "2014-09-28"}`. Retire la fiche `pap_remises` et la copie chez lmelp (si elle a encore son empreinte), ramène l'enregistrement à qualifié et renvoie les données à jour. Erreurs : 400 (émission inconnue, déjà dans lmelp, ou sans mise à disposition), 503 (sans base Mongo). |
 | `POST /api/remises` | Met à disposition de lmelp l'enregistrement qualifié de chaque émission : `{"emissions": ["2014-09-28", …]}`, l'une après l'autre. Renvoie les données à jour et `remise` : `mises` (`emission`, `fichier`) et `refus` (`emission`, `detail`). Une émission refusée (déjà dans lmelp, sans enregistrement qualifié, fichier de même nom chez lmelp) ne change rien et n'arrête pas les suivantes. Erreurs : 400 (liste vide), 503 (sans base Mongo). |
 | `GET /audios/<fichier>` | Un fichier du dossier audio (`fichier_audio` d'une émission), entier ou par plage (`Range: bytes=…`, réponse 206 ; 416 hors du fichier). Rien n'est servi hors du dossier audio (404). |
+| `POST /api/collectes` | Lance en fond la collecte d'une source, `{"source": "radiofrance"}`, ou de toutes, `{"source": "toutes"}` ; `"refresh": true` re-collecte une source au cache complet. À la fin, la liste est reconstruite depuis le cache. Rend l'avancement. Erreurs : 400 (source inconnue), 409 (une collecte tourne déjà, avec la source en cours dans le message). |
+| `GET /api/collectes` | L'avancement : `en_cours`, `faites` et `total` (sources), `sources`, `refresh`, `en_cours_sur` (la source en cours), `progression` (sa dernière ligne de progression), `debut`, `erreurs` (`source`, `detail`), et `bilan` une fois finie : `emissions`, `emissions_avant`, `attestations`, et `sources`, l'issue de chacune (`collectee`, `deja_complete`, `sautee`, `echec`). |
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
 | `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, `bilan` (`ok`, `net`, `passager`) une fois finie, `derniere` et `prochaine` (dates de la dernière vérification complète et de la suivante). |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
+| `GET /api/publication` | L'aperçu de la publication sur GitHub (voir [Publier la liste sur GitHub](#publier-la-liste-sur-github)) : `emissions` (`ajoutees`, `retirees`, `modifiees`), `arbitrages` et `qualifications` (`ajoutes`, `retires`), `niveaux` (enregistrements entrés dans un niveau depuis `depuis`, la date de la dernière publication), `fichiers` changés, `en_attente` (fichiers d'un commit local resté après un push en échec), `a_publier`, `resume`. Erreurs : 503 (sans `PAP_DEPOT_GIT`), 502 (dépôt injoignable, fichier refusé, `pap_arbitrages` vide alors que `arbitrages.csv` porte des arbitrages). |
+| `POST /api/publication` | Publie : `statut` `publiee` (avec `commit`), `rien` (aucun commit) ou `refusee` (avec `detail`), et `resume`. Erreur : 503 (sans `PAP_DEPOT_GIT`). |
 
 Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, date absente des dates candidates ou émission sans doute de date, attestation sans rapprochement ambigu ou émission qui n'est pas rivale, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
 
@@ -390,11 +431,35 @@ Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste ou si un
 
 L'accueil suit le thème clair ou sombre du système. Sans base Mongo, il n'affiche que « sans enregistrement » et « dans lmelp », avec un bandeau. « pap », en haut à gauche, ramène à l'accueil sans filtre.
 
-### Ajouter un enregistrement localisé (piste)
+### Collecter les sources depuis l'appli
 
-La page **sans enregistrement** propose, sur chaque ligne, **Ajouter un enregistrement localisé** : une piste qu'une démarche humaine peut faire aboutir. Exemples : un passionné qui dit détenir cette date, ou les archives de Radio France une fois leur réponse reçue. La boîte demande une **source** en texte libre, obligatoire (qui détient l'enregistrement, par quel canal, ce qu'il détient), et une **note** facultative. L'émission passe à **localisé**, avec la date du jour comme date d'entrée.
+Le bouton **Collecte**, en haut à droite de l'accueil, ouvre une boîte avec un bouton par source (`radiofrance`, `ina`, `wayback_podcast`, `anciennes_listes`, `lmelp`) et **Toutes**. La case **Re-collecter** reprend une source même si son cache est complet, comme `--refresh` ; sans elle, une source déjà collectée est seulement relue.
 
-La page **localisé** indique dans sa colonne « Sources » qui détient chaque enregistrement : la notice INA (lien vers le catalogue) ou la source saisie, avec sa note en dessous. Au survol, la colonne « Depuis » donne la date d'entrée dans le niveau.
+La collecte tourne en fond, dans le serveur : la boîte se ferme et la page reste utilisable. Pendant la collecte, le bouton de l'en-tête affiche la source en cours (« Collecte : radiofrance… ») et la boîte, rouverte, sa dernière ligne de progression (« radiofrance : page 3, 60 fiches vues, 12 téléchargées », « ina : fiches détaillées 300/2000 (≈ 31 min restantes) »). À la fin, la liste est reconstruite depuis le cache, avec les arbitrages, la page relit ses données et un message donne le nombre d'émissions avant et après, et les compteurs qui ont changé.
+
+Une seule collecte tourne à la fois : une demande pendant une collecte, depuis cette page ou une autre, est refusée et la boîte affiche la raison (« une collecte est déjà en cours (radiofrance) : attendez sa fin »). Une source en échec (réseau, par exemple) n'arrête pas les suivantes : le message final la nomme, et la trace est dans les logs. Sans `MONGO_URI`, la source `lmelp` est sautée et son cache précédent reste valable.
+
+La collecte écrit dans le dossier du cache de l'appli (`--cache`, ou `PAP_CACHE`) ; la source INA demande Chromium (voir « Prérequis pour la source INA »).
+
+### Sans enregistrement et localisé : faire avancer une émission
+
+Sur les pages **sans enregistrement** et **localisé**, un clic sur une ligne la déplie en pleine largeur juste en dessous ; un second clic la referme, et une seule ligne est dépliée à la fois.
+
+- **À gauche** : pour une émission sans enregistrement, **Ce qu'on sait** (les sources qui l'attestent) ; pour une émission localisée, le **journal des échanges**, du plus récent au plus ancien (date · canal · interlocuteur · relance, puis le texte), et le formulaire **Noter un échange**.
+- **À droite**, **Faire avancer** : trois onglets, chacun avec une ligne qui dit où il mène.
+  1. **Une piste** (**Une autre piste** sur une émission déjà localisée) → localisé. Le **détenteur** est obligatoire ; les détenteurs déjà saisis sont proposés à la saisie. Une note dit ce qu'on sait de son fonds. La case « noter aussi le premier échange », cochée par défaut, note en même temps un échange daté du jour (canal et texte). Sur une émission localisée, la piste s'ajoute aux autres et l'émission reste localisée.
+  2. **URL** → téléchargeable : l'**URL http(s)** du fichier intégral (obligatoire) et une note. L'émission part avec le prochain lot de téléchargement de la page « téléchargeable ».
+  3. **Fichier** → rapatrié : le **fichier audio** (obligatoire), sa **provenance** (obligatoire, préremplie avec le détenteur de la piste), ce qui établit sa date (étiquette de la cassette ou du fichier, annonce à l'antenne, déduite du contenu, inconnue) et une note. Le fichier est écrit dans le dossier audio de pap, sous `<année>/`, puis s'écoute et se qualifie dans « rapatrié ». S'il vient d'une piste (« Vient de »), il rapatrie l'enregistrement de cette piste ; sinon il en crée un nouveau. Un nom de fichier déjà pris dans `<année>/` est refusé : rien n'est écrasé.
+
+Un refus (échange sans texte, URL invalide, nom de fichier déjà pris…) s'affiche dans la ligne dépliée.
+
+**Colonnes.** « sans enregistrement » : Date, Titre, Attestée par, Depuis, et une case par ligne. « localisé » : Date, Titre, **Détenteur** (la notice INA, en lien vers le catalogue, ou le détenteur saisi, avec sa note en dessous), **Relance**, **Dernier échange** (il y a combien de jours, et par quel canal), Depuis. Au survol, la colonne « Depuis » donne la date d'entrée dans le niveau.
+
+**Relance.** La relance d'une piste est celle de son dernier échange ; celle d'une émission, la plus proche parmi ses pistes. Elle s'affiche en **rouge** si elle est due, en **ambre** si elle tombe dans les 7 jours, en **gris** au-delà, et « — » s'il n'y en a pas. La page « localisé » s'ouvre triée par relance croissante : les relances dues d'abord, les émissions sans relance à la fin.
+
+**Le journal des échanges** se rattache à une piste, pas à l'émission : si l'émission a plusieurs pistes, le formulaire demande laquelle. Une entrée porte la date (aujourd'hui par défaut), le canal (courriel, téléphone, forum, courrier, sur place, autre), l'interlocuteur (prérempli avec le détenteur), le texte (obligatoire) et la prochaine relance (facultative, avec les raccourcis +7, +15 et +30 jours). Noter un échange ne change ni la maturité ni la date d'entrée dans l'état. Le journal est conservé dans la collection Mongo `pap_echanges` ; il n'est ni exporté en CSV ni publié, car il contient des noms de particuliers.
+
+**Une piste pour plusieurs émissions.** Sur « sans enregistrement », cocher des émissions puis **Une piste pour la sélection (n)** ouvre la saisie de piste dans une boîte : toutes les émissions cochées sont localisées d'un coup, avec le même détenteur, la même note et, si la case est cochée, le même premier échange. Les échanges suivants se notent émission par émission.
 
 ### Télécharger les enregistrements (rapatrier)
 
@@ -471,6 +536,39 @@ Les refus s'affichent en haut de la page, en rouge, avec l'émission et la raiso
 
 La **description** de la fiche suit le format des descriptions du flux RSS du Masque, que lmelp reprend dans ses épisodes : « durée : 00:54:12  - Le Masque et la Plume - par : Jérôme Garcin - résumé - équipe : … - invités : Arnaud Viviant Critique littéraire (Revue Regards), … » (deux espaces après la durée, chaque invité suivi de son rôle quand l'API le donne). Chaque morceau vient de la première source qui le donne : la page radiofrance.fr de l'émission, puis l'API Radio France, puis la notice INA, sinon l'animateur déduit de la date. La durée est lue dans le fichier m4a, sinon dans les sources. L'API Radio France n'est interrogée que si `RADIOFRANCE_API_TOKEN` est défini (environnement ou `.env`), au moment de la mise à disposition (ou reprise du cache d'une heure de l'écoute) ; ses données ne vont que dans la fiche, et son absence ou son échec, tracé dans le journal (`api radiofrance 2014-09-28 (mise à disposition) : erreur HTTP 403, 1 requête (13/1000 aujourd'hui), 0 s`), n'empêche pas la mise à disposition. Le titre est « Le Masque et la Plume du 28 septembre 2014 » ; le type, `livres`.
 
+### Publier la liste sur GitHub
+
+Le bouton **Publier**, dans l'en-tête de l'accueil, publie sur GitHub ce que l'appli du NAS a décidé : la page GitHub Pages reflète alors les arbitrages faits sur le NAS. Seul le NAS publie ; le bouton répond « Publication impossible » ailleurs (sans `PAP_DEPOT_GIT`, voir [L'appli pap sur le NAS](appli-docker-nas.md#publication-sur-github)).
+
+1. Un clic montre d'abord un **résumé** de ce qui changera sur `main` : émissions ajoutées, retirées ou modifiées, arbitrages et qualifications ajoutés ou retirés, enregistrements ayant changé de niveau depuis la dernière publication (par exemple « 3 émissions changées (1 ajoutée, 2 modifiées), 2 arbitrages ajoutés, 2 qualifications ajoutées, 1 enregistrement a changé de niveau (valide 1) »). Sans changement, une notification dit « Rien à publier » et rien n'est commité. Un commit resté dans le clone après un push en échec compte comme un changement : le résumé le signale (« commit local en attente de push »), et la publication le pousse.
+2. Après confirmation, l'appli exporte les arbitrages de Mongo dans `arbitrages.csv`, réécrit `qualifications.csv`, reconstruit la liste, puis commite les fichiers de `data/processed/` (`chore(data): publication depuis le NAS`, le résumé en corps de message), fait un `pull --rebase` et pousse sur `main`.
+3. Le push déclenche `docs.yml`, qui reconstruit la page de la liste et la déploie sur GitHub Pages.
+
+Fichiers publiés, et seulement eux : `emissions.csv`, `attestations.csv`, `enregistrements.csv`, `doutes.csv`, `arbitrages.csv` et `qualifications.csv`. La publication est refusée si l'un d'eux porte une colonne inattendue, ou un chemin du NAS (`/volume1/…`, le dossier des audios ou du cache) : jamais d'audio, de chemin NAS ni de donnée de l'API Radio France sur GitHub.
+
+Une publication est **refusée**, sans rien pousser, quand :
+
+- le `pull --rebase` bute sur un conflit : quelqu'un a modifié sur `main` les mêmes lignes de `data/processed/` ; le rebase est abandonné, jamais de push forcé ;
+- GitHub rejette le push (jeton absent ou expiré, branche protégée) ;
+- un fichier contient ce qui ne se publie pas (voir plus haut) ;
+- avec Mongo, `pap_arbitrages` est vide alors que `arbitrages.csv` (celui des données, ou celui du clone) porte des arbitrages : l'import initial n'est pas fait, et publier exporterait un fichier vide qui effacerait les arbitrages publiés. Lancer d'abord `lmelp-pap arbitrages importer` (voir plus haut). Le résumé est refusé de même, et le démarrage de l'appli l'annonce par un avertissement.
+
+La boîte affiche la raison du refus, et une alerte ntfy (priorité haute) la transmet. ntfy est un service externe : l'alerte ne garde d'un chemin du NAS que son dernier nom (« pap_arbitrages est vide mais arbitrages.csv porte 214 arbitrages… »), et jamais le jeton ; la ligne de log garde le chemin complet. Après un conflit, le clone est remis à l'état de `main` : les CSV se régénèrent à chaque publication, la suivante repart de `main` et y repose les fichiers du NAS, sans intervention. Une publication réussie envoie une notification ntfy « pap - liste publiée » avec le commit et le résumé ; une publication sans changement, une notification « pap - rien à publier » en priorité basse.
+
+Logs :
+
+```
+2026-11-23 18:02:10 INFO    arbitrages : export de pap_arbitrages : 214 arbitrages → /data/processed/arbitrages.csv
+2026-11-23 18:02:11 INFO    publication : publication demandée vers main : 2 arbitrages ajoutés
+2026-11-23 18:02:14 INFO    publication : 3f1c0e9 poussé sur main (2 arbitrages ajoutés)
+2026-11-23 18:02:14 INFO    notification : notification ntfy envoyée : pap - liste publiée
+2026-11-23 18:10:40 INFO    publication : rien à publier, aucun commit
+2026-11-23 18:10:40 INFO    notification : notification ntfy envoyée : pap - rien à publier
+2026-11-23 18:20:05 ERROR   publication : publication refusée : conflit au rebase sur main : data/processed/arbitrages.csv (rien n'est poussé ; le clone est remis au distant, la prochaine publication repart de là)
+2026-11-23 18:20:05 INFO    notification : notification ntfy envoyée : pap - publication refusée
+2026-11-23 18:25:12 ERROR   publication : publication refusée : pap_arbitrages est vide mais /data/processed/arbitrages.csv porte 214 arbitrages : publier les effacerait ; lancer d'abord « lmelp-pap arbitrages importer »
+```
+
 ### Maturité des enregistrements
 
 Avec une base Mongo (`MONGO_URI` et `MONGO_DB`, dans l'environnement ou le fichier `.env`), l'appli suit la **maturité** de chaque enregistrement intégral, c'est-à-dire le niveau atteint sur le chemin qui le mène à lmelp : localisé, téléchargeable, rapatrié, qualifié, valide. Elle la conserve dans la collection `pap_enregistrements`, un document par enregistrement, avec la date d'entrée dans chaque niveau. Un enregistrement est identifié par son URL d'intégral (radiofrance), par l'URL de sa notice (INA) ou par un identifiant `piste:…` (saisie manuelle). Sans base, la page n'a ni badge, ni filtre, ni bouton de vérification.
@@ -500,8 +598,15 @@ Avec une base Mongo (`MONGO_URI` et `MONGO_DB`, dans l'environnement ou le fichi
 
   ```
   2026-11-22 17:40:02 INFO    arbitrer : localisation INA : 273 enregistrements localisés créés (273 notices des Archives Radio Pro)
-  2026-11-22 17:45:10 INFO    arbitrer : enregistrement localisé ajouté : 2008-03-02 (source « Jean D., forum »)
+  2026-11-22 17:45:10 INFO    arbitrer : enregistrement localisé ajouté : 2008-03-02, piste piste:3f2a…, premier échange forum
+  2026-11-22 17:46:31 INFO    arbitrer : piste en lot : 3 émissions localisées
+  2026-11-22 17:50:02 INFO    arbitrer : échange noté : 2008-03-02, piste piste:3f2a…, courriel, relance le 2026-12-22
+  2026-11-22 17:52:40 INFO    arbitrer : URL enregistrée : 2008-03-09 https://exemple.org/masque.mp3 → téléchargeable
+  2026-11-22 17:55:12 INFO    arbitrer : fichier téléversé : 2008-03-16 2008/masque 2008-03-16.mp3, 52428800 octets, piste piste:3f2a…
+  2026-11-22 17:56:03 INFO    arbitrer : fichier refusé 2008-03-16 : 2008/masque 2008-03-16.mp3 : nom de fichier déjà pris
   ```
+
+  Chaque refus laisse sa ligne, avec son motif : `piste refusée …`, `échange refusé …`, `URL refusée …`, `fichier refusé …`. Ces lignes ne donnent ni le détenteur, ni l'interlocuteur, ni le texte d'un échange, ni la provenance d'un fichier : ils peuvent nommer un particulier. Elles s'en tiennent à l'émission, la piste, le canal, la taille et les comptes ; le détail reste dans la base et sur la page.
 - Chaque émission porte un badge : le niveau de son enregistrement le plus avancé, ou **dans lmelp** si lmelp l'atteste, état qui l'emporte sur la maturité.
 - Le filtre **Maturité** retient un niveau, « dans lmelp », ou les émissions sans enregistrement suivi.
 

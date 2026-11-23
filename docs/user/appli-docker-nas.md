@@ -12,6 +12,7 @@ Le conteneur range toutes ses données dans `/data` :
 | `/data/processed/` | CSV de la liste (`emissions.csv`, `attestations.csv`, `enregistrements.csv`, `doutes.csv`) et `arbitrages.csv` |
 | `/data/audios/` | enregistrements rapatriés, par année |
 | `/data/logs/` | journaux |
+| `/data/depot/` | clone du dépôt GitHub où **Publier** commite et pousse la liste, créé à la première publication |
 
 Au premier lancement, la liste se construit à partir du cache : `cache/` et `processed/` s'amorcent par une copie de `data/raw/cache/` et `data/processed/` du dépôt. Sans cache, la page affiche une liste vide.
 
@@ -29,8 +30,14 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `RADIOFRANCE_API_TOKEN` | aucune | jeton de l'API Radio France, lue seulement au moment d'une mise à disposition pour compléter la description |
 | `PAP_VERIFICATION_JOURS` | `7` | jours entre deux vérifications complètes des URL d'intégral (la première part seule au démarrage sur une base neuve) |
 | `PAP_URL_PUBLIQUE` | aucune | adresse publique de l'appli (par exemple `https://pap.lmelp.ascot63.synology.me`), donnée dans les logs de démarrage |
+| `PAP_TELEVERSEMENT_MAX` | `2147483648` (2 Gio) | taille maximale, en octets, d'un fichier audio téléversé ; au-delà, refus 413 |
+| `PAP_DEPOT_GIT` | `/data/depot` | clone du dépôt où **Publier** commite ; sans cette variable (hors de l'image), la publication est désactivée |
+| `GH_TOKEN` | aucune | jeton GitHub à granularité fine du push de la publication (voir [Publication sur GitHub](#publication-sur-github)) |
+| `PAP_DEPOT_URL` / `PAP_DEPOT_BRANCHE` | `https://github.com/castorfou/lmelp-pap.git` / `main` | dépôt et branche où la publication pousse |
+| `NTFY_TOPIC` | aucune | topic ntfy des notifications de publication (titres « pap - … ») ; sans topic, aucune notification |
+| `NTFY_SERVER_URL` / `NTFY_TOKEN` | `https://ntfy.sh` / aucun | serveur ntfy, et son jeton d'accès s'il est protégé |
 | `PUID` / `PGID` | `1000` / `1000` | propriétaire des fichiers créés dans `/data` |
-| `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité |
+| `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) et des arbitrages (collection `pap_arbitrages`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité et garde ses arbitrages dans `arbitrages.csv` |
 
 Le conteneur démarre en root, attribue à son utilisateur `appuser` l'UID et le GID `PUID`/`PGID`, reprend la propriété de tout `/data` (y compris les fichiers d'un déploiement précédent), puis sert l'appli sous cet utilisateur. Les fichiers restent ainsi lisibles et supprimables depuis l'hôte.
 
@@ -43,11 +50,12 @@ L'appli écrit ses logs sur la sortie d'erreur du conteneur : `docker logs lmelp
 2026-11-21 10:53:49 INFO    cli : lmelp-pap 0.1.0 : écoute sur 0.0.0.0:8090
 2026-11-21 10:53:49 INFO    cli : Mongo : connecté (base masque_et_la_plume)
 2026-11-21 10:53:49 INFO    cli : liste : 2123 émissions
+2026-11-21 10:53:49 INFO    cli : arbitrages : collection pap_arbitrages
 2026-11-21 10:53:49 INFO    cli : dossiers : cache /data/cache, données /data/processed, arbitrages /data/processed/arbitrages.csv, audios /data/audios, audios lmelp /audios-lmelp
 2026-11-21 10:53:49 INFO    cli : page publique : https://pap.lmelp.ascot63.synology.me
 ```
 
-L'adresse d'écoute est celle du conteneur (`0.0.0.0:8090`) ; l'adresse vue depuis le réseau est celle de `PAP_URL_PUBLIQUE`, ligne absente sans cette variable. Mongo est `connecté`, `absent (MONGO_URI non défini)` ou `injoignable (base …) : <erreur>` : le démarrage tente un `ping` et compte les émissions sans lire la base : l'appli démarre dans tous les cas. Les lignes qui suivent (requêtes, actions, erreurs) sont décrites dans [la liste des émissions](liste-des-emissions.md#logs).
+L'adresse d'écoute est celle du conteneur (`0.0.0.0:8090`) ; l'adresse vue depuis le réseau est celle de `PAP_URL_PUBLIQUE`, ligne absente sans cette variable. Mongo est `connecté`, `absent (MONGO_URI non défini)` ou `injoignable (base …) : <erreur>` : le démarrage tente un `ping` et compte les émissions sans lire la base : l'appli démarre dans tous les cas. Les arbitrages viennent de la `collection pap_arbitrages` avec `MONGO_URI`, sinon du `fichier …` des arbitrages. Les lignes qui suivent (requêtes, actions, erreurs) sont décrites dans [la liste des émissions](liste-des-emissions.md#logs).
 
 ## Lancer l'image sur un poste
 
@@ -103,6 +111,49 @@ Pour la mise à disposition de lmelp, le service `pap` monte aussi le dossier au
 L'entrypoint ne reprend pas la propriété de ce dossier : il appartient au back-office, et doit seulement être inscriptible par `PUID`/`PGID`. pap y crée `<année>/<nom>` et n'écrase jamais un fichier existant.
 
 Watchtower met le conteneur à jour après chaque publication de l'image sur `main`.
+
+### Arbitrages
+
+Avec `MONGO_URI`, les arbitrages vivent dans la collection `pap_arbitrages` de la base de lmelp, couverte par sa sauvegarde (`mongodump --db=masque_et_la_plume`). Une fois, au premier déploiement, importer le fichier amorcé dans `pap/processed` :
+
+```bash
+docker exec -u appuser lmelp-pap lmelp-pap arbitrages importer
+```
+
+Tant que cet import n'est pas fait (`pap_arbitrages` vide alors que le fichier porte des arbitrages), le démarrage l'annonce par un avertissement et **Publier** refuse : l'export effacerait les arbitrages publiés.
+
+```
+2026-11-23 10:53:49 WARNING cli : arbitrages : pap_arbitrages est vide mais /data/processed/arbitrages.csv porte 214 arbitrages : publier les effacerait ; lancer d'abord « lmelp-pap arbitrages importer »
+```
+
+L'import est idempotent : le relancer n'ajoute que les arbitrages absents. `docker exec -u appuser lmelp-pap lmelp-pap arbitrages exporter` réécrit `/data/processed/arbitrages.csv` avec les arbitrages de Mongo (voir [Arbitrages dans Mongo](liste-des-emissions.md#arbitrages-dans-mongo)). `-u appuser` laisse le fichier au propriétaire `PUID`/`PGID` ; la ligne de log de la commande s'affiche dans le terminal du `docker exec`, pas dans `docker logs`.
+
+### Publication sur GitHub
+
+Le bouton **Publier** de l'accueil commite les CSV de la liste et les décisions dans `/data/depot` (un clone de `castorfou/lmelp-pap`, créé à la première publication) et les pousse sur `main` (voir [Publier la liste sur GitHub](liste-des-emissions.md#publier-la-liste-sur-github)). Il demande :
+
+1. **Un jeton GitHub** à granularité fine : GitHub → *Settings* → *Developer settings* → *Fine-grained tokens* → *Generate new token*, *Repository access* : *Only select repositories* → `castorfou/lmelp-pap`, *Permissions* → *Contents* : *Read and write*, rien d'autre. Le `GH_TOKEN` de `lmelp-export` est limité à `castorfou/lmelp-mobile` : pap a le sien.
+2. **Les variables du service `pap`** dans docker-lmelp. Le jeton se renseigne dans `.env` (ou les variables de la stack Portainer) sous un nom propre à pap, jamais dans un fichier commité ; ntfy reprend les variables du back-office et de `lmelp-export`, pour le même topic :
+
+```yaml
+    environment:
+      # Jeton fine-grained contents:write limité à castorfou/lmelp-pap.
+      - GH_TOKEN=${PAP_GH_TOKEN:-}
+      - NTFY_SERVER_URL=${NTFY_SERVER_URL:-}
+      - NTFY_TOPIC=${NTFY_TOPIC:-}
+```
+
+`PAP_DEPOT_GIT=/data/depot` est fixé dans l'image. Le jeton passe à git par l'environnement, dans un en-tête HTTP : il n'est écrit ni dans `/data/depot/.git/config` ni dans les logs. Le démarrage dit l'état de la publication :
+
+```
+2026-11-23 10:53:49 INFO    cli : publication : vers https://github.com/castorfou/lmelp-pap.git (main), clone /data/depot, GH_TOKEN présent, ntfy lmelp
+```
+
+Sans `GH_TOKEN`, l'aperçu fonctionne (le dépôt est public) mais le push est refusé, avec sa raison dans la boîte, les logs et ntfy. Après un conflit au rebase, supprimer `/volume1/docker/lmelp/pap/depot` fait repartir le clone de `main`.
+
+### Collecte
+
+La collecte des sources se lance à la main depuis l'appli (bouton **Collecte** de l'accueil, voir [Collecter les sources depuis l'appli](liste-des-emissions.md#collecter-les-sources-depuis-lappli)) ; aucune tâche planifiée ne la déclenche. Elle écrit dans `/data/cache/` (sur le NAS, `/volume1/docker/lmelp/pap/cache/`), un dossier par source, puis reconstruit la liste dans `/data/processed/`. Sa progression et son bilan sont dans `docker logs lmelp-pap`.
 
 ### Reverse proxy
 

@@ -34,7 +34,7 @@ _Avoid_ : enregistrement (le fichier audio), date d'enregistrement
 
 **Publication** :
 La mise en ligne d'un enregistrement de l'émission dans le podcast, autour de sa première diffusion (parfois quelques jours avant ou après). Une mise en ligne bien plus tardive, dans un podcast d'archives, est une republication.
-_Avoid_ : diffusion (pour le podcast), sortie
+_Avoid_ : diffusion (pour le podcast), sortie, publication de la liste (le push des CSV sur GitHub)
 
 **Rediffusion** :
 Une diffusion d'une émission déjà diffusée auparavant. Elle se rattache à l'émission d'origine et n'en crée pas une nouvelle.
@@ -105,3 +105,7 @@ _Avoid_ : report, mise de côté, doute insoluble
 **Liste des émissions** :
 L'ensemble des émissions attestées dont le thème inclut les livres ou est inconnu, toutes sources rapprochées, de 1955 à aujourd'hui. Le périmètre patrimonial (1955-2016) en est un sous-ensemble.
 _Avoid_ : master index, catalogue
+
+**Publication de la liste** :
+L'envoi sur GitHub, depuis l'appli du NAS (bouton « Publier »), des CSV de la liste des émissions et des décisions (arbitrages, qualifications) : un commit poussé sur `main`, qui reconstruit la page publique. Rien à voir avec la publication d'une émission dans le podcast.
+_Avoid_ : publication (seul, pour le push), déploiement, export

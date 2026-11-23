@@ -1,4 +1,6 @@
-"""Lecture du fichier ``arbitrages.csv``, versionné à côté de la liste.
+"""Les arbitrages : le fichier ``arbitrages.csv``, versionné à côté de la
+liste, et la collection Mongo ``pap_arbitrages`` (``ArbitragesMongo``), qui
+fait foi pour l'appli ; le fichier en est la publication (ADR 0004).
 
 Colonnes : ``source``, ``source_id`` (l'attestation arbitrée), ``sorte``
 (``thème``, ``existence``, ``date``, ``rapprochement``, ou ``écoute`` pour un
@@ -10,12 +12,23 @@ jour et heure).
 """
 
 import csv
+import logging
+from collections.abc import Iterable
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
+
+from pymongo import ReturnDocument
 
 from lmelp_pap.liste import HOMMAGE, Arbitrage, CleAttestation, Sorte
 
 
+log = logging.getLogger(__name__)
+
+COLLECTION = "pap_arbitrages"
+# Les compteurs de pap : celui de ``pap_arbitrages`` donne le rang du
+# prochain arbitrage, atomiquement, entre l'appli et la commande d'import.
+COMPTEURS = "pap_compteurs"
 EXISTANTE = "existe"
 INEXISTANTE = "n'existe pas"
 A_ECOUTER = "à écouter"
@@ -50,17 +63,21 @@ def lire_arbitrages(chemin: Path) -> list[Arbitrage]:
     if not chemin.exists():
         return []
     with chemin.open(encoding="utf-8", newline="") as f:
-        return [_arbitrage(ligne, n) for n, ligne in enumerate(csv.DictReader(f), 2)]
+        return [
+            _arbitrage(ligne, f"arbitrages.csv, ligne {n}")
+            for n, ligne in enumerate(csv.DictReader(f), 2)
+        ]
 
 
-def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
-    """L'arbitrage d'une ligne du fichier ; ``ValueError`` si elle est invalide."""
+def _arbitrage(ligne: dict[str, str], ou: str) -> Arbitrage:
+    """L'arbitrage d'une ligne du fichier (ou d'un document de
+    ``pap_arbitrages``, situé par ``ou``) ; ``ValueError`` s'il est invalide."""
     sorte, valeur = ligne["sorte"].strip(), ligne["valeur"].strip()
     themes = frozenset(t.strip() for t in valeur.split(";") if t.strip())
     retenue, cible, existe = None, None, False
     if sorte == "thème" and themes:
         if erreur := erreur_de_themes(themes):
-            raise ValueError(f"arbitrages.csv, ligne {numero} : {erreur}")
+            raise ValueError(f"{ou} : {erreur}")
         sorte_lue: Sorte = "thème"
     elif sorte == "existence" and valeur in (EXISTANTE, INEXISTANTE):
         sorte_lue, themes, existe = "existence", frozenset(), valeur == EXISTANTE
@@ -74,7 +91,7 @@ def _arbitrage(ligne: dict[str, str], numero: int) -> Arbitrage:
         sorte_lue, themes = "rapprochement", frozenset()
     else:
         raise ValueError(
-            f"arbitrages.csv, ligne {numero} : sorte « {sorte} » et valeur "
+            f"{ou} : sorte « {sorte} » et valeur "
             f"« {valeur} » invalides (attendu : thème et des thèmes séparés par "
             f"« ; », existence et « {EXISTANTE} » ou « {INEXISTANTE} », date "
             f"et une date AAAA-MM-JJ, écoute et « {A_ECOUTER} », ou "
@@ -119,16 +136,19 @@ def ajouter_arbitrage(chemin: Path, arbitrage: Arbitrage) -> None:
         ecrivain = csv.DictWriter(f, fieldnames=COLONNES, lineterminator="\n")
         if nouveau:
             ecrivain.writeheader()
-        ecrivain.writerow(
-            {
-                "source": arbitrage.source,
-                "source_id": arbitrage.source_id,
-                "sorte": arbitrage.sorte,
-                "valeur": valeur(arbitrage),
-                "justification": arbitrage.justification,
-                "date": _date(arbitrage.date),
-            }
-        )
+        ecrivain.writerow(_ligne(arbitrage))
+
+
+def _ligne(arbitrage: Arbitrage) -> dict[str, str]:
+    """La ligne du fichier d'un arbitrage, colonne par colonne."""
+    return {
+        "source": arbitrage.source,
+        "source_id": arbitrage.source_id,
+        "sorte": arbitrage.sorte,
+        "valeur": valeur(arbitrage),
+        "justification": arbitrage.justification,
+        "date": _date(arbitrage.date),
+    }
 
 
 def retirer_arbitrages(chemin: Path, cles: set[CleAttestation]) -> int:
@@ -191,3 +211,119 @@ def _date(moment: datetime) -> str:
     if moment.time() == datetime.min.time():
         return moment.date().isoformat()
     return moment.isoformat(timespec="seconds")
+
+
+class ArbitragesMongo:
+    """La collection ``pap_arbitrages`` d'une base Mongo : un document par
+    arbitrage, les colonnes de ``arbitrages.csv`` telles qu'écrites dans le
+    fichier, plus ``rang`` (l'ordre d'entrée, celui du fichier exporté).
+
+    L'identifiant d'un document (``_id``) est fait de l'attestation, de la
+    sorte, de la valeur et de la date de la décision : réimporter un fichier
+    ne crée aucun doublon.
+    """
+
+    def __init__(self, base: Any):
+        """``base`` : une base pymongo (ou mongomock)."""
+        self._collection = base[COLLECTION]
+        self._compteurs = base[COMPTEURS]
+
+    def tous(self) -> list[Arbitrage]:
+        """Les arbitrages, dans l'ordre où ils sont entrés."""
+        return [
+            _arbitrage(d, f"{COLLECTION}, document {d['_id']}")
+            for d in self._collection.find().sort("rang", 1)
+        ]
+
+    def nombre(self) -> int:
+        """Le nombre d'arbitrages de la collection."""
+        return int(self._collection.count_documents({}))
+
+    def ajouter(self, arbitrage: Arbitrage) -> bool:
+        """Ajoute l'arbitrage après les autres ; ``False`` s'il y était déjà."""
+        return self._ajouter([_ligne(arbitrage)]) == 1
+
+    def retirer(self, cles: Iterable[tuple[str, str]]) -> int:
+        """Retire les arbitrages des attestations ``cles`` ; rend leur nombre."""
+        filtre = [{"source": s, "source_id": i} for s, i in cles]
+        if not filtre:
+            return 0
+        return int(self._collection.delete_many({"$or": filtre}).deleted_count)
+
+    def importer(self, chemin: Path) -> tuple[int, int]:
+        """Ajoute les arbitrages du fichier absents de la collection, dans
+        l'ordre du fichier ; rend le nombre de lignes lues et d'ajouts.
+        Tout le fichier est validé avant le premier ajout."""
+        arbitrages = lire_arbitrages(chemin)
+        ajouts = self._ajouter([_ligne(a) for a in arbitrages])
+        lus = len(arbitrages)
+        log.info(
+            f"import de {chemin} : {lus} arbitrage{_s(lus)} lu{_s(lus)}, "
+            f"{ajouts} ajouté{_s(ajouts)} à {COLLECTION}"
+        )
+        return lus, ajouts
+
+    def exporter(self, chemin: Path) -> int:
+        """Écrit ``chemin`` (au format de ``arbitrages.csv``) avec tous les
+        arbitrages de la collection, dans leur ordre ; rend leur nombre."""
+        arbitrages = self.tous()
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        with chemin.open("w", encoding="utf-8", newline="") as f:
+            ecrivain = csv.DictWriter(f, fieldnames=COLONNES, lineterminator="\n")
+            ecrivain.writeheader()
+            ecrivain.writerows(_ligne(a) for a in arbitrages)
+        n = len(arbitrages)
+        log.info(f"export de {COLLECTION} : {n} arbitrage{_s(n)} → {chemin}")
+        return n
+
+    def _ajouter(self, lignes: list[dict[str, str]]) -> int:
+        """Ajoute les lignes absentes à la suite des autres ; rend leur nombre.
+        Chaque rang vient du compteur (``$inc`` atomique) : deux processus
+        qui ajoutent en même temps n'ont jamais le même."""
+        self._amorcer_compteur()
+        ajouts = 0
+        for ligne in lignes:
+            identifiant = "|".join(
+                (
+                    f"{ligne['source']}:{ligne['source_id']}",
+                    ligne["sorte"],
+                    ligne["valeur"],
+                    ligne["date"],
+                )
+            )
+            if self._collection.find_one({"_id": identifiant}, {"_id": 1}):
+                continue
+            resultat = self._collection.update_one(
+                {"_id": identifiant},
+                {"$setOnInsert": {**ligne, "rang": self._rang_suivant()}},
+                upsert=True,
+            )
+            if resultat.upserted_id is not None:
+                ajouts += 1
+        return ajouts
+
+    def _amorcer_compteur(self) -> None:
+        """Met le compteur au moins au plus grand rang en base (``$max`` :
+        sans effet s'il est déjà plus loin), pour une collection remplie
+        avant lui."""
+        dernier = self._collection.find_one(sort=[("rang", -1)])
+        self._compteurs.update_one(
+            {"_id": COLLECTION},
+            {"$max": {"rang": dernier["rang"] if dernier else 0}},
+            upsert=True,
+        )
+
+    def _rang_suivant(self) -> int:
+        """Le rang du prochain arbitrage, pris atomiquement au compteur."""
+        compteur = self._compteurs.find_one_and_update(
+            {"_id": COLLECTION},
+            {"$inc": {"rang": 1}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        return int(compteur["rang"])
+
+
+def _s(n: int) -> str:
+    """La marque du pluriel."""
+    return "s" if n > 1 else ""

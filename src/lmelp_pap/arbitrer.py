@@ -1,8 +1,13 @@
 """Outil local ``lmelp-pap arbitrer`` : la page de la liste en mode arbitrage.
 
 Un serveur HTTP de la bibliothèque standard sert la page et une petite API
-JSON. À chaque arbitrage, il réécrit ``arbitrages.csv``, reconstruit la liste
-depuis le cache, sans réseau, réécrit ses CSV et renvoie les données à jour.
+JSON. À chaque arbitrage, il l'enregistre dans la collection Mongo
+``pap_arbitrages`` (ou, sans Mongo, dans ``arbitrages.csv``), reconstruit la
+liste depuis le cache, sans réseau, réécrit ses CSV et renvoie les données à
+jour. Avec Mongo, un arbitrage ne s'écrit pas dans ``arbitrages.csv`` : le
+fichier s'importe et s'exporte par ``lmelp-pap arbitrages``, la publication
+le réécrit (export de ``pap_arbitrages``), et la liste se construit avec lui
+si Mongo est illisible.
 
 API :
 
@@ -29,9 +34,20 @@ API :
 - ``POST /api/qualifications`` : qualifie l'enregistrement rapatrié d'une
   émission (``emission_id``, ``verdict`` : ``favorable`` ou ``ecarte``,
   ``motif``, obligatoire pour un écart) ;
-- ``POST /api/localisations`` : ajoute à une émission un enregistrement
-  localisé saisi à la main (``emission_id``, ``source`` en texte libre,
-  obligatoire, ``note``) ;
+- ``POST /api/localisations`` : ajoute à une émission (``emission_id``) ou à
+  plusieurs (``emissions``) un enregistrement localisé saisi à la main
+  (``source`` en texte libre, obligatoire, ``note``, ``premier_echange``
+  facultatif : ``canal``, ``texte``) ;
+- ``POST /api/echanges`` : note un échange au journal d'une piste
+  (``emission_id``, ``enregistrement``, ``date``, ``canal``,
+  ``interlocuteur``, ``texte`` obligatoire, ``relance``) ;
+- ``POST /api/urls`` : ajoute à une émission un enregistrement téléchargeable
+  (``emission_id``, ``url`` http(s), ``note``) ;
+- ``POST /api/fichiers?emission_id=…&nom=…&provenance=…&datation=…`` : le
+  corps est un fichier audio, écrit dans le dossier audio ; l'enregistrement
+  (celui de ``piste``, sinon un nouveau) passe à rapatrié ; sans
+  ``Content-Length`` valide, 400 ; au-delà de ``PAP_TELEVERSEMENT_MAX``
+  octets (2 Gio par défaut), 413 ;
 - ``GET /api/radiofrance/<emission_id>`` : la diffusion de l'émission dans
   l'Open API Radio France, lue à la demande (module ``radiofrance_api``) :
   ``statut`` (``trouvee``, ``introuvable``, ``sans_cle``, ``erreur`` avec son
@@ -47,6 +63,21 @@ API :
 - ``POST /api/remises/annulation`` : annule la mise à disposition d'une
   émission valide pas encore dans lmelp (``emission``) : fiche et copie chez
   lmelp retirées, retour à qualifié ;
+- ``GET /api/publication`` : l'aperçu de la publication sur GitHub
+  (``Publication.apercu`` : émissions changées, arbitrages, qualifications,
+  enregistrements ayant changé de niveau, ``resume``, ``a_publier``) ;
+  ``POST /api/publication`` : publie (module ``publication``) et rend
+  ``statut`` (``publiee`` avec ``commit``, ``rien``, ``refusee`` avec
+  ``detail``) et ``resume`` ; sans ``PAP_DEPOT_GIT``, 503 ;
+- ``POST /api/collectes`` : lance, en fond, la collecte d'une source
+  (``source`` : un nom de ``collecte.SOURCES``, ou ``toutes``), re-collecte
+  comprise si ``refresh`` ; à la fin, la liste est reconstruite depuis le
+  cache. Une seule collecte à la fois : une deuxième demande est refusée
+  (409) ;
+- ``GET /api/collectes`` : son avancement (``en_cours``, ``faites``,
+  ``total``, ``sources``, ``en_cours_sur``, ``progression``, la dernière
+  ligne de progression de la source, ``erreurs``) et son ``bilan`` une fois
+  finie (``emissions``, ``attestations``, l'issue de chaque source) ;
 - ``GET /audios/<fichier>`` : un fichier du dossier audio, avec les requêtes
   ``Range`` (206) pour le saut ; rien hors du dossier audio.
 
@@ -70,8 +101,12 @@ l'arbitrage de rapprochement, ses ``rapprochements`` : chaque attestation
 ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 """
 
+import csv
 import json
 import logging
+import os
+import shutil
+import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -82,12 +117,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from lmelp_pap import audio
 from lmelp_pap.arbitrages import (
+    COLLECTION as ARBITRAGES_MONGO,
+)
+from lmelp_pap.arbitrages import (
     EXISTANTE,
     INEXISTANTE,
+    ArbitragesMongo,
     ajouter_arbitrage,
     decision,
     erreur_de_themes,
@@ -96,7 +135,7 @@ from lmelp_pap.arbitrages import (
     retirer_arbitrages,
     valeur,
 )
-from lmelp_pap.collecte import lire_cache
+from lmelp_pap.collecte import SOURCES, collecter, lire_cache
 from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import (
     JOURS,
@@ -112,13 +151,20 @@ from lmelp_pap.liste import (
 from lmelp_pap.maturite import (
     ESSAIS,
     Depot,
+    Echange,
+    EchangeError,
     Enregistrement,
+    FichierError,
+    Lisible,
     PisteError,
     QualificationError,
     RapatriementError,
     RapatriementInterrompuError,
     Resultat,
+    UrlError,
     Verification,
+    dernier_echange,
+    echange,
     ecrire_qualifications,
     integraux,
     localisations_ina,
@@ -126,11 +172,17 @@ from lmelp_pap.maturite import (
     piste,
     qualifier,
     rapatrier,
+    relance_emission,
+    relance_piste,
     retenu,
+    televerser,
+    url_saisie,
     verification_due,
     verifier,
 )
 from lmelp_pap.page import construire_page, donnees_page, icone
+from lmelp_pap.publication import DOSSIER as DOSSIER_PUBLIE
+from lmelp_pap.publication import PUBLIABLES, Publication, PublicationError
 from lmelp_pap.radiofrance_api import (
     QUOTA,
     ApiRadioFranceError,
@@ -150,6 +202,10 @@ from lmelp_pap.remise import (
 DOUTES_DE_DATE = ("désaccord de date", "jour inhabituel")
 
 
+# La taille maximale d'un fichier téléversé, en octets (2 Gio) ; la variable
+# d'environnement ``PAP_TELEVERSEMENT_MAX`` la change.
+TELEVERSEMENT_MAX = 2 * 1024**3
+
 # Période du fil de planification de la vérification des URL, en secondes.
 PLANIFICATION = 3600
 
@@ -162,12 +218,24 @@ log = logging.getLogger(__name__)
 # Les requêtes HTTP du serveur, dans leur propre logger.
 log_http = logging.getLogger("lmelp_pap.http")
 
+# Le client a fermé la connexion avant la fin de la réponse.
+CLIENT_PARTI = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 # Les requêtes que le journal des requêtes tait : la santé (sondée toutes les
 # 30 s par Docker) et les sondages de l'avancement par la page.
 SILENCIEUSES = {
     ("GET", "/health"),
     ("GET", "/api/verifications"),
     ("GET", "/api/rapatriements"),
+    ("GET", "/api/collectes"),
+}
+
+
+# L'issue de la collecte d'une source, telle que les logs la disent.
+ISSUES_COLLECTE = {
+    "collectee": "collectée",
+    "deja_complete": "déjà complète, rien à collecter",
+    "sautee": "sautée",
+    "echec": "en échec",
 }
 
 
@@ -229,8 +297,16 @@ class MaturiteIndisponibleError(RuntimeError):
     """La maturité des enregistrements demande une base Mongo."""
 
 
+class TropGrosError(ValueError):
+    """Un corps de requête plus gros que permis (``PAP_TELEVERSEMENT_MAX``)."""
+
+
 class TacheEnCoursError(RuntimeError):
     """Une tâche de fond du même genre tourne déjà."""
+
+
+class PublicationIndisponibleError(RuntimeError):
+    """La publication demande un clone du dépôt (``PAP_DEPOT_GIT``)."""
 
 
 class Tache:
@@ -276,11 +352,13 @@ class Tache:
         with self._verrou:
             self._etat.update(champs)
 
-    def lancer(self, total: int, travail: Any, refuser: bool = False) -> dict[str, Any]:
+    def lancer(
+        self, total: int, travail: Any, refuser: bool = False, **champs: Any
+    ) -> dict[str, Any]:
         """Lance ``travail(tache)`` dans un fil, qui rend le bilan. Une tâche
         déjà en cours est rendue telle quelle, ou refusée si ``refuser``. Une
         exception du travail va aux logs avec sa trace ; la tâche finit alors
-        sans bilan."""
+        sans bilan. ``champs`` : l'état de départ propre à cette exécution."""
         with self._verrou:
             if self._etat["en_cours"]:
                 if refuser:
@@ -291,6 +369,7 @@ class Tache:
                 "en_cours": True,
                 "total": total,
                 "debut": datetime.now().astimezone().isoformat(),
+                **champs,
             }
             self._arret.clear()
 
@@ -322,18 +401,22 @@ class Atelier:
         audios: Path | None = None,
         intervalle: timedelta = timedelta(days=7),
         audios_lmelp: Path | None = None,
+        publication: Publication | None = None,
     ):
-        """Lit le cache et construit une première fois la liste. ``depot`` :
+        """Lit le cache et construit une première fois la liste. ``publication`` :
+        la publication de la liste sur GitHub (module ``publication``). ``depot`` :
         la maturité des enregistrements (Mongo), ``session`` : le client HTTP
         de la vérification, du rapatriement et de l'API Radio France
         (``requests`` par défaut), ``audios`` : le dossier des enregistrements
         rapatriés, ``audios_lmelp`` : le dossier audio du back-office lmelp,
         où vont les enregistrements mis à disposition."""
         self.depot = depot
+        self.publication = publication
         self._session = session
         self.audios = audios or AUDIOS
         self.audios_lmelp = audios_lmelp or AUDIOS_LMELP
         self._verrou_remise = threading.Lock()  # une mise à disposition à la fois
+        self._verrou_fichiers = threading.Lock()  # un téléversement à la fois
         # l'API Radio France, avec son cache en mémoire partagé par l'écoute
         # et la mise à disposition
         self._radiofrance = LecteurDiffusions(session)
@@ -351,8 +434,21 @@ class Atelier:
             arrete=False,
             rapatriees=[],  # émissions rapatriées (ou déjà là) pendant le lot
         )
+        self._collecte = Tache(
+            "collecte",
+            sources=[],
+            refresh=False,
+            en_cours_sur=None,
+            progression=None,
+            erreurs=[],
+        )
+        self.cache = cache
         self.sortie = sortie
         self.fichier = fichier or sortie / "arbitrages.csv"
+        # Avec Mongo, les arbitrages vivent dans pap_arbitrages, qui fait foi
+        # (ADR 0004) : un arbitrage ne s'écrit pas dans le fichier ; il en
+        # est l'export (publication) et le repli (Mongo illisible).
+        self.arbitrages = ArbitragesMongo(depot.base) if depot else None
         self.attestations = lire_cache(cache)
         self._par_cle = {a.cle: a for a in self.attestations}
         self._emissions: dict[str, Emission] = {}
@@ -479,27 +575,185 @@ class Atelier:
         return creations
 
     def ajouter_localise(self, demande: dict[str, Any]) -> dict[str, Any]:
-        """Ajoute à une émission un enregistrement localisé saisi à la main
-        (``emission_id``, ``source`` en texte libre, ``note``)."""
+        """Ajoute à une ou plusieurs émissions (``emission_id``, ou la liste
+        ``emissions``) un enregistrement localisé saisi à la main : ``source``
+        (le détenteur, en texte libre), ``note``, et ``premier_echange``
+        facultatif (``canal``, ``texte``), noté aujourd'hui avec le détenteur
+        pour interlocuteur. Tout est vérifié avant d'écrire : un refus ne
+        localise aucune émission."""
         depot = self._depot()
-        emission_id = demande.get("emission_id")
+        ids = demande.get("emissions")
+        if ids is None:
+            ids = [demande.get("emission_id")]
+        cible = ", ".join(str(i) for i in ids) if isinstance(ids, list) else "?"
         source = str(demande.get("source") or "")
+        premier = demande.get("premier_echange")
+        maintenant = datetime.now(UTC)
+        try:
+            if not isinstance(ids, list) or not ids:
+                raise DemandeInvalideError(
+                    "« emissions » : une liste non vide attendue"
+                )
+            if premier is not None and not isinstance(premier, dict):
+                raise DemandeInvalideError("« premier_echange » : un objet attendu")
+            with self._verrou:
+                faits = []
+                for emission_id in ids:
+                    emission = self._emission(emission_id)
+                    localise = piste(
+                        emission.id, source, str(demande.get("note") or ""), maintenant
+                    )
+                    premier_echange = (
+                        echange(
+                            localise,
+                            _aujourd_hui(),
+                            str(premier.get("canal") or ""),
+                            localise.source,
+                            str(premier.get("texte") or ""),
+                            None,
+                            maintenant,
+                        )
+                        if premier is not None
+                        else None
+                    )
+                    faits.append((localise, premier_echange))
+                for localise, premier_echange in faits:
+                    depot.enregistrer(localise)
+                    if premier_echange:
+                        depot.ajouter_echange(premier_echange)
+        except (DemandeInvalideError, PisteError, EchangeError) as erreur:
+            log.info(f"piste refusée {cible} : {erreur}")
+            raise DemandeInvalideError(str(erreur)) from erreur
+        # ni le détenteur ni le texte de l'échange : ils peuvent nommer un
+        # particulier, et les logs sortent du NAS
+        for localise, premier_echange in faits:
+            log.info(
+                f"enregistrement localisé ajouté : {localise.emission_id}, "
+                f"piste {localise.url}"
+                f"{', premier échange ' + premier_echange.canal if premier_echange else ''}"
+            )
+        if len(faits) > 1:
+            log.info(f"piste en lot : {len(faits)} émissions localisées")
+        return self.donnees()
+
+    def noter_echange(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Note un échange au journal d'un enregistrement localisé
+        (``emission_id``, ``enregistrement`` : l'identifiant de la piste,
+        facultatif si l'émission n'en a qu'une ; ``date`` AAAA-MM-JJ,
+        aujourd'hui par défaut ; ``canal``, ``interlocuteur``, ``texte``
+        obligatoire, ``relance`` facultative). Ni la maturité ni la date
+        d'entrée ne changent."""
+        depot = self._depot()
+        emission_id = str(demande.get("emission_id") or "?")
         try:
             with self._verrou:
-                emission = self._emission(emission_id)
-                localise = piste(
-                    emission.id,
-                    source,
-                    str(demande.get("note") or ""),
-                    datetime.now(UTC),
+                emission = self._emission(demande.get("emission_id"))
+            pistes = [
+                e
+                for e in depot.tous()
+                if e.emission_id == emission.id and e.niveau == "localise"
+            ]
+            voulue = demande.get("enregistrement")
+            if voulue:
+                pistes = [e for e in pistes if e.url == voulue]
+                if not pistes:
+                    raise DemandeInvalideError(
+                        f"{voulue} : pas un enregistrement localisé de {emission.id}"
+                    )
+            elif not pistes:
+                raise DemandeInvalideError(
+                    f"{emission.id} : aucun enregistrement localisé"
                 )
-                depot.enregistrer(localise)
-        except (DemandeInvalideError, PisteError) as erreur:
-            log.info(f"piste refusée {emission_id or '?'} : {erreur}")
+            elif len(pistes) > 1:
+                raise DemandeInvalideError(
+                    f"{emission.id} a {len(pistes)} pistes : « enregistrement » "
+                    "dit laquelle"
+                )
+            choisie = pistes[0]
+            fait = echange(
+                choisie,
+                _jour(demande.get("date"), "date") or _aujourd_hui(),
+                str(demande.get("canal") or ""),
+                str(demande.get("interlocuteur") or ""),
+                str(demande.get("texte") or ""),
+                _jour(demande.get("relance"), "relance"),
+                datetime.now(UTC),
+            )
+            depot.ajouter_echange(fait)
+        except (DemandeInvalideError, EchangeError) as erreur:
+            log.info(f"échange refusé {emission_id} : {erreur}")
             raise DemandeInvalideError(str(erreur)) from erreur
         log.info(
-            f"enregistrement localisé ajouté : {localise.emission_id} "
-            f"(source « {localise.source} »)"
+            f"échange noté : {fait.emission_id}, piste {fait.enregistrement}, "
+            f"{fait.canal}"
+            + (f", relance le {fait.relance.isoformat()}" if fait.relance else "")
+        )
+        return self.donnees()
+
+    def ajouter_url(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Ajoute à une émission un enregistrement téléchargeable saisi à la
+        main (``emission_id``, ``url`` http(s) obligatoire, ``note``) : il
+        part avec le prochain lot de téléchargement."""
+        depot = self._depot()
+        emission_id = str(demande.get("emission_id") or "?")
+        try:
+            with self._verrou:
+                emission = self._emission(demande.get("emission_id"))
+            fait = url_saisie(
+                emission.id,
+                str(demande.get("url") or ""),
+                str(demande.get("note") or ""),
+                datetime.now(UTC),
+            )
+            # l'URL est l'identifiant du document : l'écrire seulement si elle
+            # est absente est atomique, même entre deux requêtes ou processus
+            if not depot.ajouter_absents([fait]):
+                raise DemandeInvalideError(f"{fait.url} : URL déjà connue")
+        except (DemandeInvalideError, UrlError) as erreur:
+            log.info(f"URL refusée {emission_id} : {erreur}")
+            raise DemandeInvalideError(str(erreur)) from erreur
+        log.info(f"URL enregistrée : {fait.emission_id} {fait.url} → téléchargeable")
+        return self.donnees()
+
+    def televerser(
+        self, parametres: dict[str, str], flux: Lisible, taille: int
+    ) -> dict[str, Any]:
+        """Écrit un fichier audio téléversé dans le dossier audio
+        (``<année>/<nom>``) et rend son enregistrement rapatrié : celui de la
+        piste ``piste`` s'il vient d'une piste, sinon un nouveau.
+        ``parametres`` : ``emission_id``, ``nom``, ``provenance``
+        (obligatoire), ``datation`` (``DATATIONS``), ``note``, ``piste``."""
+        depot = self._depot()
+        emission_id = parametres.get("emission_id") or "?"
+        try:
+            with self._verrou:
+                emission = self._emission(parametres.get("emission_id"))
+            origine = None
+            if voulue := parametres.get("piste"):
+                origine = next((e for e in depot.tous() if e.url == voulue), None)
+                if origine is None:
+                    raise DemandeInvalideError(f"{voulue} : piste inconnue")
+            with self._verrou_fichiers:
+                fait = televerser(
+                    emission.id,
+                    parametres.get("nom", ""),
+                    flux,
+                    taille,
+                    self.audios,
+                    parametres.get("provenance", ""),
+                    parametres.get("datation", ""),
+                    parametres.get("note", ""),
+                    datetime.now(UTC),
+                    origine,
+                )
+            depot.enregistrer(fait)
+        except (DemandeInvalideError, FichierError) as erreur:
+            log.info(f"fichier refusé {emission_id} : {erreur}")
+            raise DemandeInvalideError(str(erreur)) from erreur
+        log.info(
+            f"fichier téléversé : {fait.emission_id} {fait.fichier}, "
+            f"{fait.taille} octets"
+            f"{', piste ' + fait.url if origine else ''}"
         )
         return self.donnees()
 
@@ -642,6 +896,100 @@ class Atelier:
         """Arrête le rapatriement en cours : le fichier en cours est abandonné,
         ceux qui sont finis restent rapatriés."""
         return self._rapatriement.arreter()
+
+    def etat_collecte(self) -> dict[str, Any]:
+        """L'avancement de la collecte en cours ou de la dernière."""
+        return self._collecte.etat()
+
+    def lancer_collecte(self, demande: dict[str, Any]) -> dict[str, Any]:
+        """Lance en fond la collecte d'une source (``source`` : son nom, ou
+        ``toutes``), re-collecte comprise si ``refresh``, puis reconstruit la
+        liste depuis le cache. Une seule collecte à la fois."""
+        source = demande.get("source")
+        refresh = bool(demande.get("refresh"))
+        if source == "toutes":
+            sources = sorted(SOURCES)
+        elif isinstance(source, str) and source in SOURCES:
+            sources = [source]
+        else:
+            raise DemandeInvalideError(
+                f"source inconnue : {source!r} (attendu : "
+                f"{', '.join(sorted(SOURCES))} ou toutes)"
+            )
+        etat = self._collecte.etat()
+        if etat["en_cours"]:
+            raison = (
+                f"une collecte est déjà en cours ({etat['en_cours_sur'] or '…'}) : "
+                "attendez sa fin"
+            )
+            log.info(f"collecte {source} refusée : {raison}")
+            raise TacheEnCoursError(raison)
+
+        def travail(tache: Tache) -> dict[str, Any]:
+            debut = time.monotonic()
+            log.info(
+                f"collecte demandée : {', '.join(sources)}"
+                f"{' (re-collecte)' if refresh else ''}"
+            )
+            issues: dict[str, str] = {}
+            erreurs: list[dict[str, str]] = []
+            for n, nom in enumerate(sources, 1):
+                tache.maj(en_cours_sur=nom, progression=None)
+                debut_source = time.monotonic()
+                log.info(f"collecte {nom} : début")
+                issue: str
+                try:
+                    issue = collecter(
+                        nom,
+                        self.cache,
+                        refresh=refresh,
+                        progres=lambda ligne: tache.maj(progression=ligne),
+                    )
+                except Exception as erreur:
+                    issue = "echec"
+                    detail = str(erreur) or type(erreur).__name__
+                    log.exception(f"collecte {nom} en échec : {detail}")
+                    erreurs.append({"source": nom, "detail": detail})
+                issues[nom] = issue
+                log.info(
+                    f"collecte {nom} : {ISSUES_COLLECTE[issue]} en "
+                    f"{_duree(time.monotonic() - debut_source)}"
+                )
+                tache.maj(faites=n, erreurs=list(erreurs))
+            tache.maj(en_cours_sur=None, progression="reconstruction de la liste")
+            avant = self.nombre_emissions()
+            self.recharger_cache()
+            bilan = {
+                "emissions": self.nombre_emissions(),
+                "emissions_avant": avant,
+                "attestations": len(self.attestations),
+                "sources": issues,
+            }
+            log.info(
+                f"collecte terminée en {_duree(time.monotonic() - debut)} : "
+                f"{bilan['emissions']} émissions (avant {avant}), "
+                f"{bilan['attestations']} attestations"
+                f"{f', {len(erreurs)} échec(s)' if erreurs else ''}"
+            )
+            tache.maj(progression=None)
+            return bilan
+
+        return self._collecte.lancer(
+            len(sources),
+            travail,
+            refuser=True,
+            sources=sources,
+            refresh=refresh,
+        )
+
+    def recharger_cache(self) -> None:
+        """Relit le cache (après une collecte) et reconstruit la liste."""
+        attestations = lire_cache(self.cache)  # long : hors du verrou
+        with self._verrou:
+            self.attestations = attestations
+            self._par_cle = {a.cle: a for a in attestations}
+            self._reconstruire()
+        self._apres_reconstruction()
 
     def qualifier(self, demande: dict[str, Any]) -> dict[str, Any]:
         """Qualifie l'enregistrement rapatrié d'une émission (``emission_id``,
@@ -884,6 +1232,85 @@ class Atelier:
         )
         return self.donnees()
 
+    def apercu_publication(self) -> dict[str, Any]:
+        """Ce que « Publier » changerait sur GitHub (``Publication.apercu``),
+        décisions exportées et liste reconstruite. Lève ``PublicationError``
+        si la publication effacerait des arbitrages non importés."""
+        publication = self._publication()
+        if raison := self.arbitrages_a_importer():
+            raise PublicationError(raison)
+        with tempfile.TemporaryDirectory() as dossier:
+            fichiers = self._a_publier(Path(dossier))
+            return publication.apercu(fichiers, enregistrements=self._enregistrements())
+
+    def publier(self, _demande: dict[str, Any]) -> dict[str, Any]:
+        """Publie la liste sur GitHub : arbitrages et qualifications exportés
+        de Mongo, liste reconstruite, commit, ``pull --rebase`` et push
+        (``Publication.publier``). Rend son résultat, avec ``resume``. Refuse
+        (log, alerte ntfy) si ``pap_arbitrages`` est vide alors que le fichier
+        des arbitrages en porte : l'export les effacerait."""
+        publication = self._publication()
+        if raison := self.arbitrages_a_importer():
+            return {**publication.refuser(raison), "resume": ""}
+        with tempfile.TemporaryDirectory() as dossier:
+            fichiers = self._a_publier(Path(dossier))
+            try:
+                resume = publication.apercu(
+                    fichiers, enregistrements=self._enregistrements()
+                )["resume"]
+            except PublicationError:
+                resume = ""  # la publication refuse à son tour, et alerte
+            return {**publication.publier(fichiers, resume=resume), "resume": resume}
+
+    def arbitrages_a_importer(self) -> str | None:
+        """Avec Mongo, ``pap_arbitrages`` vide alors que le fichier des
+        arbitrages (ou celui du clone de la publication) en porte : l'import
+        initial n'est pas fait, et publier exporterait un fichier vide. Rend
+        alors la raison, en clair ; sinon ``None``."""
+        if self.arbitrages is None or self.arbitrages.nombre():
+            return None
+        fichiers = [self.fichier]
+        if self.publication is not None:
+            fichiers.append(
+                self.publication.configuration.clone / DOSSIER_PUBLIE / "arbitrages.csv"
+            )
+        for fichier in fichiers:
+            if n := _lignes_csv(fichier):
+                return (
+                    f"{ARBITRAGES_MONGO} est vide mais {fichier} porte {n} "
+                    f"arbitrage{_s(n)} : publier les effacerait ; lancer "
+                    f"d'abord « lmelp-pap arbitrages importer »"
+                )
+        return None
+
+    def _enregistrements(self) -> list[Enregistrement]:
+        """Les enregistrements du dépôt, ou aucun sans Mongo."""
+        return self.depot.tous() if self.depot is not None else []
+
+    def _a_publier(self, dossier: Path) -> dict[str, Path]:
+        """Exporte les décisions (Mongo vers ``arbitrages.csv`` et
+        ``qualifications.csv``), reconstruit la liste et en copie les fichiers
+        publiables dans ``dossier`` : la publication part de cet instantané,
+        sans bloquer l'arbitrage pendant le push."""
+        with self._verrou:
+            if self.arbitrages is not None:
+                self.arbitrages.exporter(self.fichier)
+            if self.depot is not None:
+                ecrire_qualifications(self.depot.qualifications(), self.sortie)
+            self._reconstruire()
+            sources = {nom: self.sortie / nom for nom in PUBLIABLES}
+            sources["arbitrages.csv"] = self.fichier
+            fichiers = {}
+            for nom, source in sources.items():
+                if source.exists():
+                    fichiers[nom] = Path(shutil.copyfile(source, dossier / nom))
+            return fichiers
+
+    def _publication(self) -> Publication:
+        if self.publication is None:
+            raise PublicationIndisponibleError("PAP_DEPOT_GIT absent")
+        return self.publication
+
     def _depot(self) -> Depot:
         if self.depot is None:
             raise MaturiteIndisponibleError("MONGO_URI absent")
@@ -934,8 +1361,14 @@ class Atelier:
                 justification=str(demande.get("justification") or "").strip(),
                 date=datetime.now().replace(microsecond=0),
             )
-            ajouter_arbitrage(self.fichier, arbitrage)
-            log.info(f"arbitrage {sorte} {emission.id} : {decision(arbitrage)}")
+            if self.arbitrages is not None:
+                self.arbitrages.ajouter(arbitrage)
+            else:
+                ajouter_arbitrage(self.fichier, arbitrage)
+            log.info(
+                f"arbitrage {sorte} {emission.id} : {decision(arbitrage)}"
+                + self._ou_arbitrages()
+            )
             self._reconstruire()
             donnees = self._donnees()
         self._apres_reconstruction()
@@ -953,13 +1386,16 @@ class Atelier:
                 raise DemandeInvalideError(
                     "emission_id, ou source et source_id, attendus"
                 )
-            retires = retirer_arbitrages(self.fichier, cles)
+            if self.arbitrages is not None:
+                retires = self.arbitrages.retirer(cles)
+            else:
+                retires = retirer_arbitrages(self.fichier, cles)
             if not retires:
                 raise DemandeInvalideError("aucun arbitrage à annuler")
             cible = demande.get("emission_id") or ":".join(next(iter(cles)))
             log.info(
                 f"annulation {cible} : {retires} arbitrage{_s(retires)} "
-                f"retiré{_s(retires)}"
+                f"retiré{_s(retires)}" + self._ou_arbitrages()
             )
             self._reconstruire()
             donnees = self._donnees()
@@ -1025,11 +1461,35 @@ class Atelier:
             raise DemandeInvalideError(f"émission inconnue : {emission_id!r}")
         return self._emissions[emission_id]
 
+    def _ou_arbitrages(self) -> str:
+        """Où vivent les arbitrages, pour les logs : rien pour le fichier."""
+        return f" ({ARBITRAGES_MONGO})" if self.arbitrages is not None else ""
+
+    def _lire_arbitrages(self) -> list[Arbitrage]:
+        """Les arbitrages de ``pap_arbitrages``, ou du fichier sans Mongo ;
+        Mongo injoignable, ceux du fichier, avec un avertissement : l'appli
+        sert la liste quand même."""
+        if self.arbitrages is None:
+            return lire_arbitrages(self.fichier)
+        try:
+            return self.arbitrages.tous()
+        except Exception as erreur:  # noqa: BLE001 — la liste se sert sans base
+            log.warning(
+                f"{ARBITRAGES_MONGO} illisible ({type(erreur).__name__}) : "
+                f"liste construite avec {self.fichier}"
+            )
+            return lire_arbitrages(self.fichier)
+
+    def origine_arbitrages(self) -> str:
+        """D'où viennent les arbitrages, pour le log du démarrage."""
+        if self.arbitrages is None:
+            return f"fichier {self.fichier}"
+        return f"collection {ARBITRAGES_MONGO}"
+
     def _reconstruire(self) -> None:
-        """Reconstruit la liste avec les arbitrages du fichier et réécrit ses CSV."""
-        liste, doutes = construire_liste(
-            self.attestations, lire_arbitrages(self.fichier)
-        )
+        """Reconstruit la liste avec les arbitrages (Mongo, ou le fichier) et
+        réécrit ses CSV."""
+        liste, doutes = construire_liste(self.attestations, self._lire_arbitrages())
         ecrire_liste(liste, doutes, self.sortie)
         self._emissions = {e.id: e for e in liste}
         self._doutes = {}
@@ -1048,12 +1508,25 @@ class Atelier:
         donnees: dict[str, Any] = {
             "emissions": emissions,
             "arbitrages": [
-                self._arbitrage(a) for a in reversed(lire_arbitrages(self.fichier))
+                self._arbitrage(a) for a in reversed(self._lire_arbitrages())
             ],
         }
         if self.depot is not None:
             maturites = Maturites(self.depot)
+            journal: dict[str, list[Echange]] = {}
+            for x in self.depot.echanges():
+                journal.setdefault(x.enregistrement, []).append(x)
             for e in emissions:
+                localises = [x for x in maturites.de(e["id"]) if x.niveau == "localise"]
+                echanges = [x for loc in localises for x in journal.get(loc.url, [])]
+                relance = relance_emission(echanges)
+                e["relance"] = relance.isoformat() if relance else None
+                recent = dernier_echange(echanges)
+                e["dernier_echange"] = (
+                    {"date": recent.date.isoformat(), "canal": recent.canal}
+                    if recent
+                    else None
+                )
                 plus_avance = meilleur(maturites.de(e["id"]))
                 e["dans_lmelp"] = maturites.dans_lmelp(self._emissions[e["id"]])
                 integration = maturites.integration_lmelp(e["id"])
@@ -1061,7 +1534,7 @@ class Atelier:
                     integration.isoformat() if integration else None
                 )
                 e["maturite"] = plus_avance.niveau if plus_avance else None
-                e["localisations"] = _localisations(maturites.de(e["id"]))
+                e["localisations"] = _localisations(localises, journal)
                 echecs = [x.echec for x in maturites.de(e["id"]) if x.echec]
                 dernier = max(echecs, key=lambda v: v.date, default=None)
                 e["echec_rapatriement"] = (
@@ -1081,6 +1554,15 @@ class Atelier:
                     if plus_avance and plus_avance.niveau in plus_avance.entrees
                     else None
                 )
+            # les détenteurs déjà saisis, proposés à la saisie d'une piste
+            donnees["detenteurs"] = sorted(
+                {
+                    x.source
+                    for liste in maturites.par_emission.values()
+                    for x in liste
+                    if x.url.startswith("piste:")
+                }
+            )
             donnees["maturite_active"] = True
         return donnees
 
@@ -1149,23 +1631,67 @@ class Atelier:
         }
 
 
-def _localisations(enregistrements: list[Enregistrement]) -> list[dict[str, Any]]:
+def _localisations(
+    localises: list[Enregistrement], journal: dict[str, list[Echange]]
+) -> list[dict[str, Any]]:
     """Les enregistrements localisés d'une émission, du plus ancien au plus
-    récent : leur source, leur note, l'URL de leur notice INA et leur date
-    d'entrée dans le niveau (toujours notée en y entrant)."""
-    localises = sorted(
-        (x for x in enregistrements if x.niveau == "localise"),
-        key=lambda x: x.entrees["localise"],
-    )
+    récent : leur identifiant, leur source, leur note, l'URL de leur notice
+    INA, leur date d'entrée dans le niveau (toujours notée en y entrant), leur
+    relance et leur journal des échanges, du plus récent au plus ancien."""
     return [
         {
+            "id": x.url,
             "source": x.source,
             "note": x.note,
             "notice": x.url if x.url.startswith("http") else None,
             "depuis": x.entrees["localise"].isoformat(),
+            "relance": _iso_jour(relance_piste(journal.get(x.url, []))),
+            "journal": [
+                {
+                    "date": j.date.isoformat(),
+                    "canal": j.canal,
+                    "interlocuteur": j.interlocuteur,
+                    "texte": j.texte,
+                    "relance": _iso_jour(j.relance),
+                }
+                for j in sorted(
+                    journal.get(x.url, []),
+                    key=lambda j: (j.date, j.note_le),
+                    reverse=True,
+                )
+            ],
         }
-        for x in localises
+        for x in sorted(localises, key=lambda x: x.entrees["localise"])
     ]
+
+
+def _iso_jour(jour: date | None) -> str | None:
+    return jour.isoformat() if jour else None
+
+
+def _lignes_csv(chemin: Path) -> int:
+    """Le nombre de lignes d'un CSV, hors en-tête ; 0 s'il est absent."""
+    if not chemin.is_file():
+        return 0
+    with chemin.open(encoding="utf-8", newline="") as f:
+        return sum(1 for ligne in csv.DictReader(f) if any(ligne.values()))
+
+
+def _aujourd_hui() -> date:
+    """Le jour local du serveur."""
+    return datetime.now().astimezone().date()
+
+
+def _jour(texte: object, champ: str) -> date | None:
+    """Un jour AAAA-MM-JJ d'une demande, ou ``None`` s'il est absent."""
+    if texte in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(texte))
+    except ValueError:
+        raise DemandeInvalideError(
+            f"{champ} invalide : {texte!r} (attendu : AAAA-MM-JJ)"
+        ) from None
 
 
 def _episode(document: dict[str, Any]) -> str:
@@ -1181,7 +1707,27 @@ def _iso(quand: datetime) -> str:
     return (quand if quand.tzinfo else quand.replace(tzinfo=UTC)).isoformat()
 
 
-# Les routes POST : l'action de l'atelier, appelée avec le corps JSON.
+class _Lecture:
+    """Le corps d'une requête, lu au plus ``taille`` octets."""
+
+    def __init__(self, flux: Any, taille: int):
+        self._flux = flux
+        self.reste = taille
+
+    def read(self, n: int = -1) -> bytes:
+        n = self.reste if n < 0 else min(n, self.reste)
+        morceau: bytes = self._flux.read(n) if n else b""
+        self.reste -= len(morceau)
+        return morceau
+
+    def vider(self) -> None:
+        """Lit et jette ce qui reste du corps."""
+        while self.reste and self.read(1 << 20):
+            pass
+
+
+# Les routes POST : l'action de l'atelier, appelée avec le corps JSON
+# (``/api/fichiers`` à part : le corps est le fichier).
 ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/arbitrages": Atelier.arbitrer,
     "/api/annulations": Atelier.annuler,
@@ -1190,16 +1736,23 @@ ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/rapatriements/arret": lambda atelier, _: atelier.arreter_rapatriement(),
     "/api/qualifications": Atelier.qualifier,
     "/api/localisations": Atelier.ajouter_localise,
+    "/api/echanges": Atelier.noter_echange,
+    "/api/urls": Atelier.ajouter_url,
     "/api/remises": Atelier.mettre_a_disposition,
     "/api/remises/annulation": Atelier.annuler_mise_a_disposition,
+    "/api/publication": Atelier.publier,
+    "/api/collectes": Atelier.lancer_collecte,
 }
 
-# Le statut HTTP de chaque erreur qu'une route POST rend en JSON.
-ERREURS_POST: dict[type[Exception], HTTPStatus] = {
+# Le statut HTTP de chaque erreur qu'une route d'action (POST, ou l'aperçu de
+# la publication) rend en JSON.
+ERREURS: dict[type[Exception], HTTPStatus] = {
     MaturiteIndisponibleError: HTTPStatus.SERVICE_UNAVAILABLE,
     TacheEnCoursError: HTTPStatus.CONFLICT,
+    PublicationIndisponibleError: HTTPStatus.SERVICE_UNAVAILABLE,
+    PublicationError: HTTPStatus.BAD_GATEWAY,
+    TropGrosError: HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
     DemandeInvalideError: HTTPStatus.BAD_REQUEST,
-    json.JSONDecodeError: HTTPStatus.BAD_REQUEST,
 }
 
 
@@ -1219,6 +1772,18 @@ ICONES = {
 CACHE_ICONES = "public, max-age=604800"
 
 
+def _taille_max(texte: str | None) -> int:
+    """La taille maximale d'un téléversement : ``PAP_TELEVERSEMENT_MAX`` (en
+    octets), ou ``TELEVERSEMENT_MAX`` si elle est absente ou invalide."""
+    if texte and texte.strip().isdecimal():
+        return int(texte)
+    if texte:
+        log.warning(
+            f"PAP_TELEVERSEMENT_MAX invalide ({texte!r}) : {TELEVERSEMENT_MAX} octets"
+        )
+    return TELEVERSEMENT_MAX
+
+
 def creer_serveur(
     cache: Path,
     sortie: Path,
@@ -1232,6 +1797,7 @@ def creer_serveur(
     planification: bool = False,
     intervalle: timedelta = timedelta(days=7),
     audios_lmelp: Path | None = None,
+    publication: Publication | None = None,
 ) -> ThreadingHTTPServer:
     """Le serveur de l'outil, prêt à servir (``serve_forever``). Sans
     ``depot``, la maturité des enregistrements est absente. Avec
@@ -1246,9 +1812,11 @@ def creer_serveur(
         audios=audios,
         intervalle=intervalle,
         audios_lmelp=audios_lmelp,
+        publication=publication,
     )
     if planification and depot is not None:
         atelier.planifier_en_continu()
+    maximum = _taille_max(os.environ.get("PAP_TELEVERSEMENT_MAX"))
 
     class Requetes(BaseHTTPRequestHandler):
         """Les routes de la page et de l'API JSON."""
@@ -1270,7 +1838,7 @@ def creer_serveur(
                 route()
             except Exception as erreur:
                 log.exception(
-                    f"{self.command} {self.path} : erreur interne "
+                    f"{self.command} {self._chemin()} : erreur interne "
                     f"({type(erreur).__name__})"
                 )
                 if not self.repondu:
@@ -1278,6 +1846,12 @@ def creer_serveur(
                         {"erreur": "erreur interne"},
                         HTTPStatus.INTERNAL_SERVER_ERROR,
                     )
+
+        def _chemin(self) -> str:
+            """Le chemin de la requête sans sa query string, pour les logs :
+            celle de ``POST /api/fichiers`` porte la provenance d'un fichier,
+            qui peut nommer un particulier."""
+            return urlsplit(self.path).path
 
         def send_response(self, code: int, message: str | None = None) -> None:
             self.repondu = True
@@ -1301,6 +1875,10 @@ def creer_serveur(
                 self._json(atelier.etat_verification())
             elif self.path == "/api/rapatriements":
                 self._json(atelier.etat_rapatriement())
+            elif self.path == "/api/publication":
+                self._action(atelier.apercu_publication)
+            elif self.path == "/api/collectes":
+                self._json(atelier.etat_collecte())
             elif self.path.startswith("/api/remises/"):
                 emission_id = unquote(self.path.removeprefix("/api/remises/"))
                 try:
@@ -1322,16 +1900,27 @@ def creer_serveur(
 
         def _post(self) -> None:
             """Une action de ``ACTIONS_POST`` sur le corps JSON de la requête ;
-            chaque erreur connue donne son statut (``ERREURS_POST``)."""
+            chaque erreur connue donne son statut (``ERREURS``)."""
+            chemin, _, requete = self.path.partition("?")
             action = ACTIONS_POST.get(self.path)
-            if action is None:
+            if action is None and chemin != "/api/fichiers":
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
                 return
+            if action is None:
+                self._action(lambda: self._fichier(dict(parse_qsl(requete))))
+            else:
+                self._action(lambda: action(atelier, self._demande()))
+
+        def _action(self, action: Callable[[], object]) -> None:
+            """Répond le résultat de ``action`` en JSON ; une erreur connue
+            donne son statut (``ERREURS``) et sa ligne de refus."""
             try:
-                self._json(action(atelier, self._demande()))
-            except tuple(ERREURS_POST) as e:
-                statut = next(s for t, s in ERREURS_POST.items() if isinstance(e, t))
-                log_http.info(f"POST {self.path} refusée ({statut.value}) : {e}")
+                self._json(action())
+            except tuple(ERREURS) as e:
+                statut = next(s for t, s in ERREURS.items() if isinstance(e, t))
+                log_http.info(
+                    f"{self.command} {self._chemin()} refusée ({statut.value}) : {e}"
+                )
                 self._json({"erreur": str(e)}, statut)
 
         def _audio(self) -> None:
@@ -1339,15 +1928,49 @@ def creer_serveur(
             206), pour l'écoute et le saut dans le fichier."""
             chemin = audio.fichier_audio(atelier.audios, self.path)
             if chemin is None:
-                log.warning(f"audio introuvable : {self.path}")
+                log.warning(f"audio introuvable : {self._chemin()}")
                 self._json({"erreur": "introuvable"}, HTTPStatus.NOT_FOUND)
                 return
             audio.servir(self, chemin)
 
+        def _fichier(self, parametres: dict[str, str]) -> dict[str, Any]:
+            """Un fichier audio téléversé : le corps brut de la requête, ses
+            champs dans la query string. Un refus lit quand même le reste du
+            corps, pour que le navigateur reçoive la réponse ; un corps trop
+            gros (``TropGrosError``) n'est pas lu, la connexion se ferme."""
+            taille = self._longueur()
+            if taille > maximum:
+                self.close_connection = True
+                raise TropGrosError(
+                    f"fichier de {taille} octets, plus gros que permis "
+                    f"({maximum} octets, PAP_TELEVERSEMENT_MAX)"
+                )
+            flux = _Lecture(self.rfile, taille)
+            try:
+                return atelier.televerser(parametres, flux, taille)
+            finally:
+                flux.vider()
+
+        def _longueur(self) -> int:
+            """La longueur du corps (``Content-Length``) ; absente, négative
+            ou pas un nombre, la requête est refusée et la connexion fermée
+            (le corps n'a pas de fin connue)."""
+            texte = self.headers.get("Content-Length")
+            if texte is None or not texte.strip().isdecimal():
+                self.close_connection = True
+                quoi = "absent" if texte is None else f"invalide ({texte!r})"
+                raise DemandeInvalideError(f"Content-Length {quoi}")
+            return int(texte)
+
         def _demande(self) -> dict[str, Any]:
-            """Le corps JSON de la requête, un objet."""
-            taille = int(self.headers.get("Content-Length") or 0)
-            demande = json.loads(self.rfile.read(taille) or b"{}")
+            """Le corps JSON de la requête, un objet ; sans corps annoncé
+            (ni ``Content-Length``), un objet vide."""
+            sans_corps = self.headers.get("Content-Length") is None
+            corps = b"" if sans_corps else self.rfile.read(self._longueur())
+            try:
+                demande = json.loads(corps or b"{}")
+            except ValueError as erreur:  # JSON ou UTF-8 invalide
+                raise DemandeInvalideError(f"JSON invalide : {erreur}") from erreur
             if not isinstance(demande, dict):
                 raise DemandeInvalideError("un objet JSON est attendu")
             return demande
@@ -1365,13 +1988,21 @@ def creer_serveur(
             cache: str = "no-store",
         ) -> None:
             """Envoie la réponse, par défaut jamais mise en cache par le
-            navigateur."""
-            self.send_response(statut)
-            self.send_header("Content-Type", type_)
-            self.send_header("Content-Length", str(len(corps)))
-            self.send_header("Cache-Control", cache)
-            self.end_headers()
-            self.wfile.write(corps)
+            navigateur. Un client parti avant la fin (page rechargée pendant
+            la requête) n'est pas une panne : une ligne courte, sans trace."""
+            try:
+                self.send_response(statut)
+                self.send_header("Content-Type", type_)
+                self.send_header("Content-Length", str(len(corps)))
+                self.send_header("Cache-Control", cache)
+                self.end_headers()
+                self.wfile.write(corps)
+            except CLIENT_PARTI as erreur:
+                self.close_connection = True
+                log_http.info(
+                    f"{self.command} {self._chemin()} : client parti "
+                    f"({type(erreur).__name__})"
+                )
 
         def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
             """Une ligne par requête (méthode, chemin, statut, client), hors
@@ -1380,7 +2011,7 @@ def creer_serveur(
                 return
             statut = code.value if isinstance(code, HTTPStatus) else code
             log_http.info(
-                f"{self.command} {self.path} {statut} ({self.address_string()})"
+                f"{self.command} {self._chemin()} {statut} ({self.address_string()})"
             )
 
         def log_error(self, format: str, *args: Any) -> None:

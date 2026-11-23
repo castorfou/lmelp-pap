@@ -8,14 +8,14 @@ jamais au réseau.
 
 import csv
 import json
+import logging
 import os
 import re
-import sys
 import time
 from collections.abc import Callable, Iterable
 from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 import requests
@@ -37,6 +37,11 @@ _DELAI = 1.0
 _DELAI_WAYBACK = 4.0  # la Wayback Machine refuse les connexions au-delà
 _CDX = "https://web.archive.org/cdx/search/cdx"
 _RADIOFRANCE = "https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume"
+
+log = logging.getLogger(__name__)
+
+# Reçoit chaque ligne de progression d'une collecte (l'appli l'affiche).
+Progres = Callable[[str], None]
 
 
 # --- Lecture du cache --------------------------------------------------------
@@ -103,14 +108,23 @@ def _get(
     return reponse
 
 
-def collecter_radiofrance(dossier: Path) -> None:
+def _signaler(message: str, progres: Progres | None) -> None:
+    """Une ligne de progression : dans les logs, et à ``progres``."""
+    log.info(message)
+    if progres:
+        progres(message)
+
+
+def collecter_radiofrance(dossier: Path, progres: Progres | None = None) -> None:
     """Télécharge les fiches d'émission listées page à page sur radiofrance.fr.
 
-    Une fiche déjà en cache n'est pas téléchargée de nouveau.
+    Une fiche déjà en cache n'est pas téléchargée de nouveau. Une ligne de
+    progression par page de la liste.
     """
     fiches = dossier / "fiches"
     fiches.mkdir(parents=True, exist_ok=True)
     vues: set[str] = set()
+    nouvelles = 0
     page = 1
     while True:
         liste = _get(_RADIOFRANCE, {"p": str(page)})
@@ -125,12 +139,18 @@ def collecter_radiofrance(dossier: Path) -> None:
             if not fichier.exists():
                 # Le site n'annonce pas d'encodage : décoder l'UTF-8 soi-même.
                 fichier.write_text(_get(url).content.decode("utf-8"), "utf-8")
+                nouvelles += 1
                 time.sleep(_DELAI)
+        _signaler(
+            f"radiofrance : page {page}, {len(vues)} fiches vues, "
+            f"{nouvelles} téléchargées",
+            progres,
+        )
         page += 1
         time.sleep(_DELAI)
 
 
-def collecter_wayback_podcast(dossier: Path) -> None:
+def collecter_wayback_podcast(dossier: Path, progres: Progres | None = None) -> None:
     """Enregistre la liste CDX des fichiers audio du podcast archivés."""
     reponse = _get(
         _CDX,
@@ -145,7 +165,7 @@ def collecter_wayback_podcast(dossier: Path) -> None:
     (dossier / "cdx_podcast.txt").write_text(reponse.text, encoding="utf-8")
 
 
-def collecter_ina(dossier: Path) -> None:
+def collecter_ina(dossier: Path, progres: Progres | None = None) -> None:
     """Parcourt le catalogue INA (Playwright) et enregistre ses notices.
 
     Deux recherches : toutes les notices de la collection, puis celles de la
@@ -162,10 +182,12 @@ def collecter_ina(dossier: Path) -> None:
         sans_rang(toutes["url_ina"]).isin(litterature).map({True: "oui", False: "non"})
     )
     toutes.drop(columns=["source"]).to_csv(dossier / "notices.csv", index=False)
-    _collecter_fiches_ina(dossier, sans_rang(toutes["url_ina"]))
+    _collecter_fiches_ina(dossier, sans_rang(toutes["url_ina"]), progres)
 
 
-def _collecter_fiches_ina(dossier: Path, urls: Iterable[str]) -> None:
+def _collecter_fiches_ina(
+    dossier: Path, urls: Iterable[str], progres: Progres | None = None
+) -> None:
     """Télécharge la fiche détaillée de chaque notice : descripteurs, chapeau,
     résumés, statut de diffusion. Une fiche déjà en cache n'est pas
     téléchargée de nouveau : une collecte interrompue reprend où elle s'était
@@ -185,19 +207,23 @@ def _collecter_fiches_ina(dossier: Path, urls: Iterable[str]) -> None:
             fichier.write_text(reponse.content.decode("utf-8"), "utf-8")
         time.sleep(_DELAI)
         if rang % _PAS_DE_PROGRESSION == 0 or rang == len(a_telecharger):
-            _afficher_progression(rang, len(a_telecharger), time.monotonic() - debut)
+            _afficher_progression(
+                rang, len(a_telecharger), time.monotonic() - debut, progres
+            )
 
 
 _PAS_DE_PROGRESSION = 100  # fiches entre deux lignes de progression
 
 
-def _afficher_progression(fait: int, total: int, ecoule: float) -> None:
-    """Une ligne sur stderr : lisible en direct comme dans un journal."""
+def _afficher_progression(
+    fait: int, total: int, ecoule: float, progres: Progres | None = None
+) -> None:
+    """Une ligne de log, lisible en direct dans ``docker logs``, et la même
+    pour ``progres``."""
     restant = round(ecoule / fait * (total - fait) / 60)
-    print(
+    _signaler(
         f"ina : fiches détaillées {fait}/{total} (≈ {restant} min restantes)",
-        file=sys.stderr,
-        flush=True,
+        progres,
     )
 
 
@@ -208,7 +234,7 @@ _ANCIENNES_LISTES = (
 )
 
 
-def collecter_anciennes_listes(dossier: Path) -> None:
+def collecter_anciennes_listes(dossier: Path, progres: Progres | None = None) -> None:
     """Télécharge la dernière capture Wayback de chaque page des anciennes listes."""
     for prefixe, encodage in _ANCIENNES_LISTES:
         reponse = _get(
@@ -236,7 +262,7 @@ def collecter_anciennes_listes(dossier: Path) -> None:
             time.sleep(_DELAI_WAYBACK)
 
 
-def collecter_lmelp(dossier: Path) -> None:
+def collecter_lmelp(dossier: Path, progres: Progres | None = None) -> None:
     """Les émissions vérifiées de la base Mongo de lmelp, en lecture seule.
 
     La base n'est accessible que depuis le devcontainer : ``MONGO_URI`` et
@@ -270,10 +296,9 @@ def collecter_lmelp(dossier: Path) -> None:
         if e and not e.get("masked") and e.get("episode_page_url")
     ]
     if len(emissions) < len(retenus):
-        print(
+        log.info(
             f"lmelp : {len(retenus) - len(emissions)} émissions sans épisode, "
-            "masquées ou sans page radiofrance.fr, ignorées",
-            file=sys.stderr,
+            "masquées ou sans page radiofrance.fr, ignorées"
         )
     (dossier / "emissions.json").write_text(
         json.dumps(
@@ -288,7 +313,8 @@ def collecter_lmelp(dossier: Path) -> None:
 # --- Registre des sources ----------------------------------------------------
 
 SOURCES: dict[
-    str, tuple[Callable[[Path], None], Callable[[Path], list[Attestation]]]
+    str,
+    tuple[Callable[[Path, Progres | None], None], Callable[[Path], list[Attestation]]],
 ] = {
     "radiofrance": (collecter_radiofrance, lire_radiofrance),
     "wayback_podcast": (collecter_wayback_podcast, lire_wayback_podcast),
@@ -298,23 +324,31 @@ SOURCES: dict[
 }
 
 
-def collecter(source: str, cache: Path, refresh: bool = False) -> None:
-    """Remplit le cache d'une source, sauf si sa collecte est déjà terminée."""
+# Ce qu'a fait ``collecter`` : collecté, rien (cache déjà complet), ou sauté.
+Issue = Literal["collectee", "deja_complete", "sautee"]
+
+
+def collecter(
+    source: str, cache: Path, refresh: bool = False, progres: Progres | None = None
+) -> Issue:
+    """Remplit le cache d'une source, sauf si sa collecte est déjà terminée ;
+    ``progres`` reçoit les lignes de progression de la source."""
     dossier = cache / source
     if (dossier / TERMINEE).exists() and not refresh:
-        return
+        return "deja_complete"
     dossier.mkdir(parents=True, exist_ok=True)
     etait_terminee = (dossier / TERMINEE).exists()
     (dossier / TERMINEE).unlink(missing_ok=True)
     try:
-        SOURCES[source][0](dossier)
+        SOURCES[source][0](dossier, progres)
     except SourceIndisponibleError as raison:
         # rien n'a été écrit : le cache précédent, s'il y en a un, reste valable
-        print(f"{source} : collecte sautée ({raison})", file=sys.stderr)
+        log.warning(f"{source} : collecte sautée ({raison})")
         if etait_terminee:
             (dossier / TERMINEE).touch()
-        return
+        return "sautee"
     (dossier / TERMINEE).touch()
+    return "collectee"
 
 
 def lire_cache(cache: Path) -> list[Attestation]:
