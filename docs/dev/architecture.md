@@ -90,6 +90,29 @@ git push   # sur main, ou via une PR : la CI régénère et publie la page
 
 Le détail des commandes, des fichiers produits et des règles de construction est dans la documentation utilisateur, [Liste des émissions](../user/liste-des-emissions.md).
 
+## Publication sur GitHub
+
+Le bouton **Publier** de l'appli du NAS (décision #60, ADR 0004) passe par trois modules :
+
+- `Atelier.apercu_publication` et `Atelier.publier` (`src/lmelp_pap/arbitrer.py`, routes `GET` et `POST /api/publication`) exportent, sous le verrou de l'atelier, les arbitrages de `pap_arbitrages` (`ArbitragesMongo.exporter`) et `qualifications.csv`, reconstruisent la liste, puis copient les fichiers publiables dans un dossier temporaire : la publication part de cet instantané et n'empêche pas d'arbitrer pendant le push.
+- `Publication` (`src/lmelp_pap/publication.py`) tient le clone (`Configuration.clone`, `PAP_DEPOT_GIT`). `apercu` lit le distant (`fetch`) et compare l'instantané aux fichiers de `origin/main` : émissions par identifiant, décisions par ligne, enregistrements entrés dans un niveau depuis le dernier commit de `origin/main` sur `data/processed/`. `publier` copie l'instantané dans `data/processed/`, `git add -f` des seuls fichiers de `PUBLIABLES` (`qualifications.csv` est ignoré par `.gitignore` pour les postes de développement), commite s'il y a un changement, fait `pull --rebase` et `push origin HEAD:main`, sans `--force`.
+- `notifier` (`src/lmelp_pap/notification.py`) poste le résultat à ntfy (API JSON, comme `lmelp-export` : `NTFY_TOPIC`, `NTFY_SERVER_URL`, `NTFY_TOKEN`), titre préfixé « pap - » ; une erreur réseau n'est qu'un avertissement dans les logs.
+
+Garanties, et où elles se jouent :
+
+| Garantie | Mécanisme |
+|---|---|
+| Pas de commit vide | aucun changement indexé et clone pas en avance sur `origin/main` : `statut` `rien` ; un commit que le rebase rend vide n'est pas poussé non plus |
+| Conflit = refus | `pull --rebase` en échec : fichiers en conflit relevés, `rebase --abort`, `PublicationError` ; le commit local reste, donc la publication suivante bute sur le même conflit jusqu'à ce que `main` soit réglé ou le clone supprimé |
+| Jamais de push forcé | aucune commande ne porte `--force` ; un push rejeté (crochet, protection, jeton) est un refus |
+| Ni audio, ni chemin NAS, ni API Radio France | liste blanche `PUBLIABLES` (nom de fichier et en-tête exacts : une colonne de plus est refusée), et aucun fichier ne doit contenir `/volume1/` ni le chemin absolu des dossiers audios et du cache (`prives`, fixés par `cli._publication`) |
+| Jeton hors du disque | `GH_TOKEN` passe à git par `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0` (`http.https://github.com/.extraheader`) : ni `.git/config`, ni ligne de commande ; il est masqué dans les messages d'erreur, et `repr(Configuration)` ne le montre pas |
+| Le devcontainer ne publie pas | sans `PAP_DEPOT_GIT` (fixé seulement dans l'image), `Configuration.depuis_env` rend `None` et l'API répond 503, même si `GH_TOKEN` est défini pour `gh` |
+
+Le clone est à l'état de la dernière publication. Avant chaque aperçu ou publication, un rebase interrompu est abandonné, `checkout -f main` et `reset --hard` rétablissent les fichiers (les commits locaux restent), puis `fetch`. L'auteur des commits est `lmelp-pap (NAS)` (variables `GIT_AUTHOR_*`/`GIT_COMMITTER_*`), le conteneur n'ayant pas de configuration git. Une publication à la fois (`threading.Lock`).
+
+Les tests (`tests/test_publication.py`, `tests/test_arbitrer_publication.py`) publient vers un dépôt nu temporaire, avec un clone « poste » qui pousse sur `main` pour provoquer rebase et conflit, et un crochet `pre-receive` qui rejette le push ; la notification y est un faux `notifier`. Aucun test ne touche le réseau.
+
 ## Contrat `pap_remises`
 
 La collection `pap_remises`, dans la base `masque_et_la_plume`, est écrite par pap à chaque mise à disposition et lue par back-office-lmelp. Le back-office n'y écrit rien. Une fiche par enregistrement mis à disposition ; pap la retire quand une mise à disposition est annulée (émission valide, pas encore dans lmelp), et l'enregistrement revient alors à qualifié. Chaque fiche est prête à devenir un document `episodes` de lmelp.

@@ -12,6 +12,7 @@ Le conteneur range toutes ses données dans `/data` :
 | `/data/processed/` | CSV de la liste (`emissions.csv`, `attestations.csv`, `enregistrements.csv`, `doutes.csv`) et `arbitrages.csv` |
 | `/data/audios/` | enregistrements rapatriés, par année |
 | `/data/logs/` | journaux |
+| `/data/depot/` | clone du dépôt GitHub où **Publier** commite et pousse la liste, créé à la première publication |
 
 Au premier lancement, la liste se construit à partir du cache : `cache/` et `processed/` s'amorcent par une copie de `data/raw/cache/` et `data/processed/` du dépôt. Sans cache, la page affiche une liste vide.
 
@@ -29,6 +30,11 @@ Au premier lancement, la liste se construit à partir du cache : `cache/` et `pr
 | `RADIOFRANCE_API_TOKEN` | aucune | jeton de l'API Radio France, lue seulement au moment d'une mise à disposition pour compléter la description |
 | `PAP_VERIFICATION_JOURS` | `7` | jours entre deux vérifications complètes des URL d'intégral (la première part seule au démarrage sur une base neuve) |
 | `PAP_URL_PUBLIQUE` | aucune | adresse publique de l'appli (par exemple `https://pap.lmelp.ascot63.synology.me`), donnée dans les logs de démarrage |
+| `PAP_DEPOT_GIT` | `/data/depot` | clone du dépôt où **Publier** commite ; sans cette variable (hors de l'image), la publication est désactivée |
+| `GH_TOKEN` | aucune | jeton GitHub à granularité fine du push de la publication (voir [Publication sur GitHub](#publication-sur-github)) |
+| `PAP_DEPOT_URL` / `PAP_DEPOT_BRANCHE` | `https://github.com/castorfou/lmelp-pap.git` / `main` | dépôt et branche où la publication pousse |
+| `NTFY_TOPIC` | aucune | topic ntfy des notifications de publication (titres « pap - … ») ; sans topic, aucune notification |
+| `NTFY_SERVER_URL` / `NTFY_TOKEN` | `https://ntfy.sh` / aucun | serveur ntfy, et son jeton d'accès s'il est protégé |
 | `PUID` / `PGID` | `1000` / `1000` | propriétaire des fichiers créés dans `/data` |
 | `MONGO_URI` / `MONGO_DB` | aucune / `masque_et_la_plume` | base Mongo de la maturité des enregistrements (collection `pap_enregistrements`) et des arbitrages (collection `pap_arbitrages`) ; sans `MONGO_URI`, l'appli sert la liste sans maturité et garde ses arbitrages dans `arbitrages.csv` |
 
@@ -114,6 +120,29 @@ docker exec -u appuser lmelp-pap lmelp-pap arbitrages importer
 ```
 
 L'import est idempotent : le relancer n'ajoute que les arbitrages absents. `docker exec -u appuser lmelp-pap lmelp-pap arbitrages exporter` réécrit `/data/processed/arbitrages.csv` avec les arbitrages de Mongo (voir [Arbitrages dans Mongo](liste-des-emissions.md#arbitrages-dans-mongo)). `-u appuser` laisse le fichier au propriétaire `PUID`/`PGID` ; la ligne de log de la commande s'affiche dans le terminal du `docker exec`, pas dans `docker logs`.
+
+### Publication sur GitHub
+
+Le bouton **Publier** de l'accueil commite les CSV de la liste et les décisions dans `/data/depot` (un clone de `castorfou/lmelp-pap`, créé à la première publication) et les pousse sur `main` (voir [Publier la liste sur GitHub](liste-des-emissions.md#publier-la-liste-sur-github)). Il demande :
+
+1. **Un jeton GitHub** à granularité fine : GitHub → *Settings* → *Developer settings* → *Fine-grained tokens* → *Generate new token*, *Repository access* : *Only select repositories* → `castorfou/lmelp-pap`, *Permissions* → *Contents* : *Read and write*, rien d'autre. Le `GH_TOKEN` de `lmelp-export` est limité à `castorfou/lmelp-mobile` : pap a le sien.
+2. **Les variables du service `pap`** dans docker-lmelp. Le jeton se renseigne dans `.env` (ou les variables de la stack Portainer) sous un nom propre à pap, jamais dans un fichier commité ; ntfy reprend les variables du back-office et de `lmelp-export`, pour le même topic :
+
+```yaml
+    environment:
+      # Jeton fine-grained contents:write limité à castorfou/lmelp-pap.
+      - GH_TOKEN=${PAP_GH_TOKEN:-}
+      - NTFY_SERVER_URL=${NTFY_SERVER_URL:-}
+      - NTFY_TOPIC=${NTFY_TOPIC:-}
+```
+
+`PAP_DEPOT_GIT=/data/depot` est fixé dans l'image. Le jeton passe à git par l'environnement, dans un en-tête HTTP : il n'est écrit ni dans `/data/depot/.git/config` ni dans les logs. Le démarrage dit l'état de la publication :
+
+```
+2026-11-23 10:53:49 INFO    cli : publication : vers https://github.com/castorfou/lmelp-pap.git (main), clone /data/depot, GH_TOKEN présent, ntfy lmelp
+```
+
+Sans `GH_TOKEN`, l'aperçu fonctionne (le dépôt est public) mais le push est refusé, avec sa raison dans la boîte, les logs et ntfy. Après un conflit au rebase, supprimer `/volume1/docker/lmelp/pap/depot` fait repartir le clone de `main`.
 
 ### Reverse proxy
 

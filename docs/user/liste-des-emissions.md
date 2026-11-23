@@ -399,6 +399,8 @@ Le serveur expose une petite API JSON, utilisée par la page :
 | `POST /api/verifications` | Lance en fond la vérification des URL d'intégral et rend son avancement. Sans base Mongo : erreur 503. |
 | `GET /api/verifications` | L'avancement de la vérification : `en_cours`, `faites`, `total`, `bilan` (`ok`, `net`, `passager`) une fois finie, `derniere` et `prochaine` (dates de la dernière vérification complète et de la suivante). |
 | `POST /api/annulations` | Annule les arbitrages d'une émission, `{"emission_id": "…"}`, ou d'une attestation, `{"source": "ina", "source_id": "…"}`. |
+| `GET /api/publication` | L'aperçu de la publication sur GitHub (voir [Publier la liste sur GitHub](#publier-la-liste-sur-github)) : `emissions` (`ajoutees`, `retirees`, `modifiees`), `arbitrages` et `qualifications` (`ajoutes`, `retires`), `niveaux` (enregistrements entrés dans un niveau depuis `depuis`, la date de la dernière publication), `fichiers` changés, `a_publier`, `resume`. Erreurs : 503 (sans `PAP_DEPOT_GIT`), 502 (dépôt injoignable, fichier refusé). |
+| `POST /api/publication` | Publie : `statut` `publiee` (avec `commit`), `rien` (aucun commit) ou `refusee` (avec `detail`), et `resume`. Erreur : 503 (sans `PAP_DEPOT_GIT`). |
 
 Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnees`. Une demande invalide (émission inconnue, thème hors de la liste, `hommage` combiné à un autre thème, date absente des dates candidates ou émission sans doute de date, attestation sans rapprochement ambigu ou émission qui n'est pas rivale, rien à annuler) reçoit une erreur 400 `{"erreur": "…"}` et ne change rien.
 
@@ -496,6 +498,36 @@ Un fichier de même nom et de même empreinte que l'enregistrement est celui d'u
 Les refus s'affichent en haut de la page, en rouge, avec l'émission et la raison, jusqu'à **✕** ; la notification donne le bilan et les compteurs changés (« 1 mis à disposition · 1 refus — qualifié 2→1 · valide 0→1 »).
 
 La **description** de la fiche suit le format des descriptions du flux RSS du Masque, que lmelp reprend dans ses épisodes : « durée : 00:54:12  - Le Masque et la Plume - par : Jérôme Garcin - résumé - équipe : … - invités : Arnaud Viviant Critique littéraire (Revue Regards), … » (deux espaces après la durée, chaque invité suivi de son rôle quand l'API le donne). Chaque morceau vient de la première source qui le donne : la page radiofrance.fr de l'émission, puis l'API Radio France, puis la notice INA, sinon l'animateur déduit de la date. La durée est lue dans le fichier m4a, sinon dans les sources. L'API Radio France n'est interrogée que si `RADIOFRANCE_API_TOKEN` est défini (environnement ou `.env`), au moment de la mise à disposition (ou reprise du cache d'une heure de l'écoute) ; ses données ne vont que dans la fiche, et son absence ou son échec, tracé dans le journal (`api radiofrance 2014-09-28 (mise à disposition) : erreur HTTP 403, 1 requête (13/1000 aujourd'hui), 0 s`), n'empêche pas la mise à disposition. Le titre est « Le Masque et la Plume du 28 septembre 2014 » ; le type, `livres`.
+
+### Publier la liste sur GitHub
+
+Le bouton **Publier**, dans l'en-tête de l'accueil, publie sur GitHub ce que l'appli du NAS a décidé : la page GitHub Pages reflète alors les arbitrages faits sur le NAS. Seul le NAS publie ; le bouton répond « Publication impossible » ailleurs (sans `PAP_DEPOT_GIT`, voir [L'appli pap sur le NAS](appli-docker-nas.md#publication-sur-github)).
+
+1. Un clic montre d'abord un **résumé** de ce qui changera sur `main` : émissions ajoutées, retirées ou modifiées, arbitrages et qualifications ajoutés ou retirés, enregistrements ayant changé de niveau depuis la dernière publication (par exemple « 3 émissions changées (1 ajoutée, 2 modifiées), 2 arbitrages ajoutés, 1 enregistrement a changé de niveau (valide 1) »). Sans changement, une notification dit « Rien à publier » et rien n'est commité.
+2. Après confirmation, l'appli exporte les arbitrages de Mongo dans `arbitrages.csv`, réécrit `qualifications.csv`, reconstruit la liste, puis commite les fichiers de `data/processed/` (`chore(data): publication depuis le NAS`, le résumé en corps de message), fait un `pull --rebase` et pousse sur `main`.
+3. Le push déclenche `docs.yml`, qui reconstruit la page de la liste et la déploie sur GitHub Pages.
+
+Fichiers publiés, et seulement eux : `emissions.csv`, `attestations.csv`, `enregistrements.csv`, `doutes.csv`, `arbitrages.csv` et `qualifications.csv`. La publication est refusée si l'un d'eux porte une colonne inattendue, ou un chemin du NAS (`/volume1/…`, le dossier des audios ou du cache) : jamais d'audio, de chemin NAS ni de donnée de l'API Radio France sur GitHub.
+
+Une publication est **refusée**, sans rien pousser, quand :
+
+- le `pull --rebase` bute sur un conflit : quelqu'un a modifié sur `main` les mêmes lignes de `data/processed/` ; le rebase est abandonné, jamais de push forcé ;
+- GitHub rejette le push (jeton absent ou expiré, branche protégée) ;
+- un fichier contient ce qui ne se publie pas (voir plus haut).
+
+La boîte affiche la raison du refus, et une alerte ntfy (priorité haute) la transmet. Après un conflit, chaque publication est refusée de même tant que le conflit n'est pas réglé : corriger `main` à la main, ou supprimer le clone (`/data/depot` dans le conteneur) pour repartir de `main`, la publication suivante y reposant les fichiers du NAS. Une publication réussie envoie une notification ntfy « pap - liste publiée » avec le commit et le résumé.
+
+Logs :
+
+```
+2026-11-23 18:02:10 INFO    arbitrages : export de pap_arbitrages : 214 arbitrages → /data/processed/arbitrages.csv
+2026-11-23 18:02:11 INFO    publication : publication demandée vers main : 2 arbitrages ajoutés
+2026-11-23 18:02:14 INFO    publication : 3f1c0e9 poussé sur main (2 arbitrages ajoutés)
+2026-11-23 18:02:14 INFO    notification : notification ntfy envoyée : pap - liste publiée
+2026-11-23 18:10:40 INFO    publication : rien à publier, aucun commit
+2026-11-23 18:20:05 ERROR   publication : publication refusée : conflit au rebase sur main : data/processed/arbitrages.csv (rien n'est poussé ; …)
+2026-11-23 18:20:05 INFO    notification : notification ntfy envoyée : pap - publication refusée
+```
 
 ### Maturité des enregistrements
 

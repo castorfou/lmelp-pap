@@ -733,5 +733,42 @@ addEventListener("hashchange", () => { lireAdresse(); rendre(); });
 fetch("/api/donnees").then(r => r.json()).then(d => { preparer(d); lireAdresse(); rendre(); suivre(); })
   .catch(err => { $("accueil").innerHTML = `<div class="alerte">Serveur injoignable : ${esc(err.message)}</div>`; });
 </script>
+<script>
+// ---------- Publier la liste sur GitHub ----------
+// « Publier » (dans l'en-tête) : GET /api/publication donne le résumé de ce
+// qui changera, la boîte le fait confirmer, puis POST /api/publication
+// commite et pousse sur main. Un refus (conflit au rebase, push rejeté)
+// reste affiché avec sa raison.
+(() => {
+  const bouton = document.createElement("button");
+  bouton.id = "publier"; bouton.className = "vers-liste"; bouton.textContent = "Publier";
+  bouton.title = "Publier la liste et les décisions sur GitHub";
+  bouton.style.cssText = "margin-left:0;background:none;cursor:pointer;font:inherit;font-size:13px";
+  document.querySelector("header.app").append(bouton);
+  const json = async r => { const d = await r.json(); if (!r.ok) throw new Error(d.erreur || r.status); return d; };
+  function informer(titre, texte) {
+    const d = $("boite");
+    d.innerHTML = `<h3 id="boite-titre">${esc(titre)}</h3><p>${esc(texte)}</p><div class="choix"><button class="primaire" value="ok">Fermer</button></div>`;
+    d.oncancel = null;
+    d.querySelector("button").addEventListener("click", () => d.close());
+    if (!d.open) d.showModal();
+  }
+  bouton.addEventListener("click", async () => {
+    bouton.disabled = true;
+    try {
+      const apercu = await json(await fetch("/api/publication"));
+      if (!apercu.a_publier) { toast("Rien à publier : GitHub a déjà ces données."); return; }
+      if (!await demander("Publier sur GitHub ?", `${apercu.resume}. Le push sur main reconstruit la page publique.`, "Publier sur GitHub")) return;
+      patienter("Publication…", "Commit, pull --rebase et push sur main.");
+      const r = await json(await fetch("/api/publication", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
+      if (r.statut === "publiee") { $("boite").close(); toast(`Publié : ${r.commit.slice(0, 7)} poussé sur main.`); }
+      else if (r.statut === "rien") { $("boite").close(); toast("Rien à publier : aucun commit."); }
+      else informer("Publication refusée", r.detail || "raison inconnue");
+    } catch (err) {
+      informer("Publication impossible", err.message);
+    } finally { bouton.disabled = false; }
+  });
+})();
+</script>
 </body>
 </html>

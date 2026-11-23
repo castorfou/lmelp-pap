@@ -50,6 +50,12 @@ API :
 - ``POST /api/remises/annulation`` : annule la mise à disposition d'une
   émission valide pas encore dans lmelp (``emission``) : fiche et copie chez
   lmelp retirées, retour à qualifié ;
+- ``GET /api/publication`` : l'aperçu de la publication sur GitHub
+  (``Publication.apercu`` : émissions changées, arbitrages, qualifications,
+  enregistrements ayant changé de niveau, ``resume``, ``a_publier``) ;
+  ``POST /api/publication`` : publie (module ``publication``) et rend
+  ``statut`` (``publiee`` avec ``commit``, ``rien``, ``refusee`` avec
+  ``detail``) et ``resume`` ; sans ``PAP_DEPOT_GIT``, 503 ;
 - ``GET /audios/<fichier>`` : un fichier du dossier audio, avec les requêtes
   ``Range`` (206) pour le saut ; rien hors du dossier audio.
 
@@ -75,6 +81,8 @@ ambiguë (``source``, ``source_id``) avec ses ``rivales``.
 
 import json
 import logging
+import shutil
+import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -138,6 +146,7 @@ from lmelp_pap.maturite import (
     verifier,
 )
 from lmelp_pap.page import construire_page, donnees_page, icone
+from lmelp_pap.publication import PUBLIABLES, Publication, PublicationError
 from lmelp_pap.radiofrance_api import (
     QUOTA,
     ApiRadioFranceError,
@@ -240,6 +249,10 @@ class TacheEnCoursError(RuntimeError):
     """Une tâche de fond du même genre tourne déjà."""
 
 
+class PublicationIndisponibleError(RuntimeError):
+    """La publication demande un clone du dépôt (``PAP_DEPOT_GIT``)."""
+
+
 class Tache:
     """Une tâche de fond (vérification, rapatriement) et son avancement :
     ``en_cours``, ``faites``, ``total``, ``bilan`` une fois finie, et les
@@ -329,14 +342,17 @@ class Atelier:
         audios: Path | None = None,
         intervalle: timedelta = timedelta(days=7),
         audios_lmelp: Path | None = None,
+        publication: Publication | None = None,
     ):
-        """Lit le cache et construit une première fois la liste. ``depot`` :
+        """Lit le cache et construit une première fois la liste. ``publication`` :
+        la publication de la liste sur GitHub (module ``publication``). ``depot`` :
         la maturité des enregistrements (Mongo), ``session`` : le client HTTP
         de la vérification, du rapatriement et de l'API Radio France
         (``requests`` par défaut), ``audios`` : le dossier des enregistrements
         rapatriés, ``audios_lmelp`` : le dossier audio du back-office lmelp,
         où vont les enregistrements mis à disposition."""
         self.depot = depot
+        self.publication = publication
         self._session = session
         self.audios = audios or AUDIOS
         self.audios_lmelp = audios_lmelp or AUDIOS_LMELP
@@ -894,6 +910,53 @@ class Atelier:
         )
         return self.donnees()
 
+    def apercu_publication(self) -> dict[str, Any]:
+        """Ce que « Publier » changerait sur GitHub (``Publication.apercu``),
+        décisions exportées et liste reconstruite."""
+        publication = self._publication()
+        with tempfile.TemporaryDirectory() as dossier:
+            fichiers = self._a_publier(Path(dossier))
+            tous = self.depot.tous() if self.depot is not None else []
+            return publication.apercu(fichiers, enregistrements=tous)
+
+    def publier(self, _demande: dict[str, Any]) -> dict[str, Any]:
+        """Publie la liste sur GitHub : arbitrages et qualifications exportés
+        de Mongo, liste reconstruite, commit, ``pull --rebase`` et push
+        (``Publication.publier``). Rend son résultat, avec ``resume``."""
+        publication = self._publication()
+        with tempfile.TemporaryDirectory() as dossier:
+            fichiers = self._a_publier(Path(dossier))
+            tous = self.depot.tous() if self.depot is not None else []
+            try:
+                resume = publication.apercu(fichiers, enregistrements=tous)["resume"]
+            except PublicationError:
+                resume = ""  # la publication refuse à son tour, et alerte
+            return {**publication.publier(fichiers, resume=resume), "resume": resume}
+
+    def _a_publier(self, dossier: Path) -> dict[str, Path]:
+        """Exporte les décisions (Mongo vers ``arbitrages.csv`` et
+        ``qualifications.csv``), reconstruit la liste et en copie les fichiers
+        publiables dans ``dossier`` : la publication part de cet instantané,
+        sans bloquer l'arbitrage pendant le push."""
+        with self._verrou:
+            if self.arbitrages is not None:
+                self.arbitrages.exporter(self.fichier)
+            if self.depot is not None:
+                ecrire_qualifications(self.depot.qualifications(), self.sortie)
+            self._reconstruire()
+            sources = {nom: self.sortie / nom for nom in PUBLIABLES}
+            sources["arbitrages.csv"] = self.fichier
+            fichiers = {}
+            for nom, source in sources.items():
+                if source.exists():
+                    fichiers[nom] = Path(shutil.copyfile(source, dossier / nom))
+            return fichiers
+
+    def _publication(self) -> Publication:
+        if self.publication is None:
+            raise PublicationIndisponibleError("PAP_DEPOT_GIT absent")
+        return self.publication
+
     def _depot(self) -> Depot:
         if self.depot is None:
             raise MaturiteIndisponibleError("MONGO_URI absent")
@@ -1235,12 +1298,15 @@ ACTIONS_POST: dict[str, Callable[[Atelier, dict[str, Any]], Any]] = {
     "/api/localisations": Atelier.ajouter_localise,
     "/api/remises": Atelier.mettre_a_disposition,
     "/api/remises/annulation": Atelier.annuler_mise_a_disposition,
+    "/api/publication": Atelier.publier,
 }
 
 # Le statut HTTP de chaque erreur qu'une route POST rend en JSON.
 ERREURS_POST: dict[type[Exception], HTTPStatus] = {
     MaturiteIndisponibleError: HTTPStatus.SERVICE_UNAVAILABLE,
     TacheEnCoursError: HTTPStatus.CONFLICT,
+    PublicationIndisponibleError: HTTPStatus.SERVICE_UNAVAILABLE,
+    PublicationError: HTTPStatus.BAD_GATEWAY,
     DemandeInvalideError: HTTPStatus.BAD_REQUEST,
     json.JSONDecodeError: HTTPStatus.BAD_REQUEST,
 }
@@ -1275,6 +1341,7 @@ def creer_serveur(
     planification: bool = False,
     intervalle: timedelta = timedelta(days=7),
     audios_lmelp: Path | None = None,
+    publication: Publication | None = None,
 ) -> ThreadingHTTPServer:
     """Le serveur de l'outil, prêt à servir (``serve_forever``). Sans
     ``depot``, la maturité des enregistrements est absente. Avec
@@ -1289,6 +1356,7 @@ def creer_serveur(
         audios=audios,
         intervalle=intervalle,
         audios_lmelp=audios_lmelp,
+        publication=publication,
     )
     if planification and depot is not None:
         atelier.planifier_en_continu()
@@ -1344,6 +1412,13 @@ def creer_serveur(
                 self._json(atelier.etat_verification())
             elif self.path == "/api/rapatriements":
                 self._json(atelier.etat_rapatriement())
+            elif self.path == "/api/publication":
+                try:
+                    self._json(atelier.apercu_publication())
+                except PublicationIndisponibleError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                except PublicationError as e:
+                    self._json({"erreur": str(e)}, HTTPStatus.BAD_GATEWAY)
             elif self.path.startswith("/api/remises/"):
                 emission_id = unquote(self.path.removeprefix("/api/remises/"))
                 try:

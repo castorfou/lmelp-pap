@@ -19,6 +19,7 @@ from lmelp_pap.ecriture import ecrire_liste
 from lmelp_pap.liste import construire_liste
 from lmelp_pap.maturite import Depot, depot_depuis_env
 from lmelp_pap.page import construire_page
+from lmelp_pap.publication import Configuration, Publication
 
 
 log = logging.getLogger(__name__)
@@ -200,12 +201,36 @@ def _echanger_arbitrages(args: argparse.Namespace) -> int:
     return 0
 
 
+def _publication(args: argparse.Namespace) -> Publication | None:
+    """La publication sur GitHub, si ``PAP_DEPOT_GIT`` donne son clone ;
+    aucun fichier publié ne porte le chemin des audios ni du cache."""
+    configuration = Configuration.depuis_env()
+    if configuration is None:
+        return None
+    prives = [args.audios, args.audios_lmelp, args.cache]
+    return Publication(configuration, prives=[p.resolve() for p in prives])
+
+
+def _etat_publication(publication: Publication | None) -> str:
+    """La publication pour le log du démarrage, sans le jeton."""
+    if publication is None:
+        return "désactivée (PAP_DEPOT_GIT non défini)"
+    c = publication.configuration
+    jeton = "GH_TOKEN présent" if c.jeton else "GH_TOKEN absent"
+    ntfy = os.environ.get("NTFY_TOPIC")
+    return (
+        f"vers {c.distant} ({c.branche}), clone {c.clone}, {jeton}, "
+        f"ntfy {ntfy or 'non configuré (NTFY_TOPIC absent)'}"
+    )
+
+
 def _arbitrer(args: argparse.Namespace) -> int:
     """Sert l'appli (la page en mode arbitrage) jusqu'à l'arrêt du processus."""
     log.info("lecture du cache et construction de la liste…")
     # La maturité des enregistrements vit dans Mongo (MONGO_URI) ; sans
     # base, l'appli sert la liste sans elle.
     depot = depot_depuis_env()
+    publication = _publication(args)
     serveur = creer_serveur(
         args.cache,
         args.sortie,
@@ -219,6 +244,7 @@ def _arbitrer(args: argparse.Namespace) -> int:
         # puis à chaque échéance, et pour les URL nouvelles.
         planification=True,
         intervalle=timedelta(days=args.verification_jours),
+        publication=publication,
     )
     port = serveur.server_address[1]
     atelier = serveur.atelier  # type: ignore[attr-defined]
@@ -232,6 +258,7 @@ def _arbitrer(args: argparse.Namespace) -> int:
         f"arbitrages {atelier.fichier}, audios {args.audios}, "
         f"audios lmelp {args.audios_lmelp}"
     )
+    log.info(f"publication : {_etat_publication(publication)}")
     if publique := os.environ.get("PAP_URL_PUBLIQUE"):
         log.info(f"page publique : {publique}")
     if not args.sans_navigateur:

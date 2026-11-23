@@ -213,6 +213,10 @@ def qualifier(
     return qualifie, qualification
 
 
+# Les colonnes de ``qualifications.csv``.
+COLONNES_QUALIFICATIONS = ["emission_id", "enregistrement", "verdict", "motif", "date"]
+
+
 def ecrire_qualifications(
     qualifications: Iterable[Qualification], dossier: Path
 ) -> None:
@@ -220,7 +224,7 @@ def ecrire_qualifications(
     à la plus récente."""
     with (dossier / "qualifications.csv").open("w", encoding="utf-8", newline="") as f:
         ecrivain = csv.writer(f, lineterminator="\n")
-        ecrivain.writerow(["emission_id", "enregistrement", "verdict", "motif", "date"])
+        ecrivain.writerow(COLONNES_QUALIFICATIONS)
         for q in sorted(qualifications, key=lambda q: q.date):
             ecrivain.writerow(
                 [
