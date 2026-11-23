@@ -31,6 +31,11 @@ Le niveau localisé a deux autres entrées que le recul d'une URL :
 - une piste saisie à la main (``piste``) : une source en texte libre (un
   passionné, les archives de Radio France après leur réponse) et une note.
 
+Un enregistrement localisé garde le journal des échanges qui mènent à lui
+(``echange``, collection ``pap_echanges``, jamais exportée). Une URL saisie à
+la main (``url_saisie``) fait entrer un enregistrement à téléchargeable, un
+fichier téléversé (``televerser``) à rapatrié.
+
 Rapatrier un enregistrement téléchargeable télécharge son fichier dans le
 dossier audio de pap (``<année>/<nom d'origine>``), en passant par un
 ``.part`` renommé à la fin : il devient rapatrié, avec le chemin du fichier,
@@ -44,6 +49,7 @@ s'exporte dans ``qualifications.csv``.
 
 import contextlib
 import csv
+import datetime as dt
 import hashlib
 import logging
 import os
@@ -55,7 +61,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
+from urllib.parse import urlsplit
 
 import requests
 from bson import ObjectId
@@ -72,6 +79,8 @@ log = logging.getLogger(__name__)
 NIVEAUX = ("localise", "telechargeable", "rapatrie", "qualifie", "valide")
 COLLECTION = "pap_enregistrements"
 QUALIFICATIONS = "pap_qualifications"
+# le journal des échanges des enregistrements localisés : jamais exporté
+ECHANGES = "pap_echanges"
 REMISES = "pap_remises"  # fiches des mises à disposition, lues par lmelp
 EPISODES_LMELP = "episodes"  # les épisodes de lmelp, dans la même base
 DOUBLON = 3  # jours d'écart entre une émission et un épisode lmelp de doublon
@@ -130,6 +139,8 @@ class Enregistrement:
     echec: Verification | None = None  # dernier échec de rapatriement
     ecart: Qualification | None = None  # rapatrié, mais écarté à l'écoute
     note: str | None = None  # ce qu'on sait d'une piste saisie à la main
+    provenance: str | None = None  # qui a fourni un fichier téléversé
+    datation: str | None = None  # ce qui établit sa date (``DATATIONS``)
 
 
 class PisteError(ValueError):
@@ -153,6 +164,220 @@ def piste(
         entrees={"localise": maintenant},
         note=note.strip() or None,
     )
+
+
+SOURCE_URL = "url"  # la source d'une URL saisie à la main
+
+
+class UrlError(ValueError):
+    """Une URL saisie impossible : pas en http(s)."""
+
+
+def url_saisie(
+    emission_id: str, url: str, note: str, maintenant: datetime
+) -> Enregistrement:
+    """Un enregistrement téléchargeable saisi à la main : ``url`` http(s)
+    (obligatoire) du fichier intégral, ``note`` facultative. Il part avec le
+    prochain lot de téléchargement, comme une URL radiofrance."""
+    url = url.strip()
+    morceaux = urlsplit(url)
+    if (
+        morceaux.scheme not in ("http", "https")
+        or not morceaux.netloc
+        or any(c.isspace() for c in url)
+    ):
+        raise UrlError(f"URL invalide : {url!r} (attendu : une URL http(s))")
+    return Enregistrement(
+        url=url,
+        emission_id=emission_id,
+        source=SOURCE_URL,
+        niveau="telechargeable",
+        entrees={"telechargeable": maintenant},
+        note=note.strip() or None,
+    )
+
+
+# Ce qui établit la date d'un fichier téléversé.
+DATATIONS = {
+    "etiquette": "étiquette de la cassette ou du fichier",
+    "antenne": "annonce à l'antenne",
+    "contenu": "déduite du contenu",
+    "inconnue": "inconnue",
+}
+EXTENSIONS_AUDIO = (
+    ".mp3", ".m4a", ".mp4", ".aac", ".wav", ".flac", ".ogg", ".oga", ".opus",
+    ".wma", ".aif", ".aiff",
+)  # fmt: skip
+
+
+class Lisible(Protocol):
+    """Un flux d'octets (un fichier ouvert, le corps d'une requête)."""
+
+    def read(self, n: int = -1, /) -> bytes: ...
+
+
+class FichierError(ValueError):
+    """Un fichier téléversé refusé : provenance, nom, nom déjà pris."""
+
+
+def televerser(
+    emission_id: str,
+    nom: str,
+    flux: Lisible,
+    taille: int,
+    dossier: Path,
+    provenance: str,
+    datation: str,
+    note: str,
+    maintenant: datetime,
+    piste: Enregistrement | None = None,
+) -> Enregistrement:
+    """Écrit les ``taille`` octets de ``flux`` dans ``dossier/<année>/<nom>``
+    (via un ``.part``) et rend l'enregistrement rapatrié : celui de ``piste``
+    (un enregistrement localisé de l'émission), sinon un nouveau, de source
+    ``provenance``. ``provenance`` est obligatoire, ``datation`` une clé de
+    ``DATATIONS`` ; un nom de fichier déjà pris est refusé, rien n'est
+    écrasé, et rien ne reste en cas d'échec."""
+    provenance = provenance.strip()
+    if not provenance:
+        raise FichierError("un fichier demande sa provenance")
+    if datation not in DATATIONS:
+        raise FichierError(
+            f"datation invalide : {datation!r} (attendu : {', '.join(DATATIONS)})"
+        )
+    if not nom or nom != Path(nom).name or nom.startswith("."):
+        raise FichierError(f"nom de fichier invalide : {nom!r}")
+    if not nom.lower().endswith(EXTENSIONS_AUDIO):
+        raise FichierError(f"{nom} : pas un fichier audio")
+    if taille <= 0:
+        raise FichierError(f"{nom} : fichier vide")
+    if piste is not None and (
+        piste.emission_id != emission_id or piste.niveau != "localise"
+    ):
+        raise FichierError(
+            f"{piste.url} : pas un enregistrement localisé de {emission_id}"
+        )
+    relatif = f"{emission_id[:4]}/{nom}"
+    final = dossier / relatif
+    if final.exists():
+        raise FichierError(f"{relatif} : nom de fichier déjà pris")
+    final.parent.mkdir(parents=True, exist_ok=True)
+    partiel = final.with_name(final.name + ".part")
+    h, recus = hashlib.sha256(), 0
+    try:
+        with partiel.open("xb") as f:
+            while recus < taille:
+                morceau = flux.read(min(MORCEAU, taille - recus))
+                if not morceau:
+                    raise FichierError(
+                        f"{nom} : fichier incomplet ({recus} octets sur {taille})"
+                    )
+                f.write(morceau)
+                h.update(morceau)
+                recus += len(morceau)
+        if final.exists():
+            raise FichierError(f"{relatif} : nom de fichier déjà pris")
+        os.replace(partiel, final)
+    except BaseException:
+        partiel.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            final.parent.rmdir()  # le dossier de l'année, s'il est resté vide
+        raise
+    base = piste or Enregistrement(
+        url=f"fichier:{uuid.uuid4().hex}",
+        emission_id=emission_id,
+        source=provenance,
+        niveau="rapatrie",
+        entrees={"rapatrie": maintenant},
+    )
+    fait = _rapatrie(base, relatif, h.hexdigest(), recus, maintenant)
+    return replace(
+        fait,
+        provenance=provenance,
+        datation=datation,
+        note=note.strip() or base.note,
+    )
+
+
+CANAUX = ("courriel", "téléphone", "forum", "courrier", "sur place", "autre")
+
+
+@dataclass(frozen=True)
+class Echange:
+    """Une entrée du journal des échanges d'un enregistrement localisé (une
+    piste) : ce qui s'est passé avec son détenteur, et la prochaine relance.
+    ``note_le`` : l'heure de la saisie, qui départage deux échanges du même
+    jour."""
+
+    enregistrement: str  # l'URL (l'identifiant) de l'enregistrement
+    emission_id: str
+    date: dt.date
+    canal: str
+    interlocuteur: str
+    texte: str
+    relance: dt.date | None
+    note_le: datetime
+
+
+class EchangeError(ValueError):
+    """Un échange impossible : sans texte, canal inconnu, niveau."""
+
+
+def echange(
+    enregistrement: Enregistrement,
+    jour: date,
+    canal: str,
+    interlocuteur: str,
+    texte: str,
+    relance: date | None,
+    maintenant: datetime,
+) -> Echange:
+    """Un échange noté sur un enregistrement localisé : ``texte`` obligatoire,
+    ``canal`` parmi ``CANAUX``, ``relance`` facultative. Il ne change ni le
+    niveau de l'enregistrement ni sa date d'entrée."""
+    if enregistrement.niveau != "localise":
+        raise EchangeError(
+            f"{enregistrement.url} : niveau {enregistrement.niveau}, "
+            "un échange se note sur un enregistrement localisé"
+        )
+    if canal not in CANAUX:
+        raise EchangeError(
+            f"canal invalide : {canal!r} (attendu : {', '.join(CANAUX)})"
+        )
+    texte = texte.strip()
+    if not texte:
+        raise EchangeError("un échange demande un texte")
+    return Echange(
+        enregistrement.url,
+        enregistrement.emission_id,
+        jour,
+        canal,
+        interlocuteur.strip(),
+        texte,
+        relance,
+        maintenant,
+    )
+
+
+def dernier_echange(echanges: Iterable[Echange]) -> Echange | None:
+    """Le plus récent des échanges, par date puis par heure de saisie."""
+    return max(echanges, key=lambda x: (x.date, x.note_le), default=None)
+
+
+def relance_piste(echanges: Iterable[Echange]) -> date | None:
+    """La relance d'une piste : celle de son dernier échange."""
+    dernier = dernier_echange(echanges)
+    return dernier.relance if dernier else None
+
+
+def relance_emission(echanges: Iterable[Echange]) -> date | None:
+    """La relance d'une émission : la plus proche parmi celles de ses pistes
+    (``echanges`` : le journal de toutes ses pistes)."""
+    par_piste: dict[str, list[Echange]] = {}
+    for x in echanges:
+        par_piste.setdefault(x.enregistrement, []).append(x)
+    relances = [r for liste in par_piste.values() if (r := relance_piste(liste))]
+    return min(relances, default=None)
 
 
 def localisations_ina(
@@ -348,10 +573,11 @@ def rapatrier(
             "seul un enregistrement téléchargeable se rapatrie"
         )
     quand = maintenant or datetime.now(UTC)
-    relatif = (
-        enregistrement.fichier
-        or f"{enregistrement.emission_id[:4]}/{enregistrement.url.rsplit('/', 1)[-1]}"
+    # le nom d'origine, sans paramètres (``?jeton=…``) ni fragment
+    nom = urlsplit(enregistrement.url).path.rsplit("/", 1)[-1] or (
+        f"{enregistrement.emission_id}.mp3"
     )
+    relatif = enregistrement.fichier or f"{enregistrement.emission_id[:4]}/{nom}"
     final = dossier / relatif
     if (
         enregistrement.sha256
@@ -479,6 +705,40 @@ class Depot:
     def ajouter_qualification(self, qualification: Qualification) -> None:
         """Conserve une qualification (collection ``pap_qualifications``)."""
         self.base[QUALIFICATIONS].insert_one(_qualification_en_document(qualification))
+
+    def ajouter_echange(self, x: Echange) -> None:
+        """Conserve un échange (collection ``pap_echanges``)."""
+        self.base[ECHANGES].insert_one(
+            {
+                "enregistrement": x.enregistrement,
+                "emission_id": x.emission_id,
+                "date": x.date.isoformat(),
+                "canal": x.canal,
+                "interlocuteur": x.interlocuteur,
+                "texte": x.texte,
+                "relance": x.relance.isoformat() if x.relance else None,
+                "note_le": x.note_le,
+            }
+        )
+
+    def echanges(self) -> list[Echange]:
+        """Tout le journal des échanges, du plus ancien au plus récent."""
+        return sorted(
+            (
+                Echange(
+                    d["enregistrement"],
+                    d["emission_id"],
+                    date.fromisoformat(d["date"]),
+                    d["canal"],
+                    d["interlocuteur"],
+                    d["texte"],
+                    date.fromisoformat(d["relance"]) if d.get("relance") else None,
+                    _aware(d["note_le"]),
+                )
+                for d in self.base[ECHANGES].find({}, {"_id": False})
+            ),
+            key=lambda x: (x.date, x.note_le),
+        )
 
     def ajouter_remise(self, fiche: dict[str, Any]) -> None:
         """Écrit la fiche d'une mise à disposition (collection ``pap_remises``,
@@ -649,6 +909,8 @@ def _en_document(e: Enregistrement) -> dict[str, Any]:
         ),
         "ecart": _qualification_en_document(e.ecart) if e.ecart else None,
         "note": e.note,
+        "provenance": e.provenance,
+        "datation": e.datation,
     }
 
 
@@ -700,4 +962,6 @@ def _depuis_document(d: dict[str, Any]) -> Enregistrement:
         ),
         ecart=_qualification_depuis_document(d["ecart"]) if d.get("ecart") else None,
         note=d.get("note"),
+        provenance=d.get("provenance"),
+        datation=d.get("datation"),
     )

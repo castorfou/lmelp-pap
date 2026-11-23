@@ -29,10 +29,14 @@ def test_la_collecte_s_arrete_quand_le_site_renvoie_vers_la_premiere_page(
     monkeypatch.setattr(collecte, "_get", faux_get)
     monkeypatch.setattr("time.sleep", lambda _: None)
 
-    collecte.collecter_radiofrance(tmp_path)
+    lignes: list[str] = []
+
+    collecte.collecter_radiofrance(tmp_path, lignes.append)
 
     assert pages_demandees == ["1", "2"]
     assert len(list((tmp_path / "fiches").glob("*.html"))) > 0
+    # une ligne de progression par page lue
+    assert lignes == ["radiofrance : page 1, 20 fiches vues, 20 téléchargées"]
 
 
 def test_une_fiche_est_enregistree_en_utf8_meme_sans_charset_annonce(
@@ -106,10 +110,15 @@ def test_la_collecte_des_fiches_ina_affiche_sa_progression(
     )
     monkeypatch.setattr("time.sleep", lambda _: None)
 
-    collecte._collecter_fiches_ina(tmp_path, [base.format(n) for n in (1, 2, 3)])
+    lignes: list[str] = []
+
+    collecte._collecter_fiches_ina(
+        tmp_path, [base.format(n) for n in (1, 2, 3)], lignes.append
+    )
 
     erreurs = capsys.readouterr().err
-    assert "ina : fiches détaillées 2/2" in erreurs
+    assert "INFO    collecte : ina : fiches détaillées 2/2" in erreurs
+    assert lignes == ["ina : fiches détaillées 2/2 (≈ 0 min restantes)"]
 
 
 def test_la_lecture_du_cache_ina_tient_compte_des_fiches_detaillees(
