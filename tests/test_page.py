@@ -132,3 +132,26 @@ def test_la_page_embarque_son_favicon_pour_s_ouvrir_sans_serveur() -> None:
     lien = re.search(r'<link rel="icon"[^>]*href="data:image/png;base64,([^"]+)"', page)
     assert lien is not None
     assert base64.b64decode(lien.group(1)).startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def _script_du_head(page: str) -> str:
+    head = page.split("</head>")[0]
+    scripts = re.findall(r"<script>(.*?)</script>", head, re.DOTALL)
+    assert len(scripts) == 1
+    script: str = scripts[0].strip()
+    return script
+
+
+def test_la_page_a_l_interrupteur_de_theme_et_son_script_du_head() -> None:
+    for page in (construire_page(FIXTURES), construire_page(FIXTURES, True)):
+        assert 'id="interrupteur-theme"' in page
+        assert "pap.theme" in _script_du_head(page)
+        assert ':root:not([data-theme="light"])' in page
+        assert ':root[data-theme="dark"]' in page
+
+
+def test_l_accueil_et_la_liste_appliquent_le_theme_par_le_meme_script() -> None:
+    from importlib.resources import files
+
+    accueil = files("lmelp_pap").joinpath("accueil.html").read_text(encoding="utf-8")
+    assert _script_du_head(accueil) == _script_du_head(construire_page(FIXTURES))

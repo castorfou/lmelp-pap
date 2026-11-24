@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+// Thème forcé (« pap.theme », commun à l'accueil et à la liste) posé avant le rendu.
+(function () { try { var t = localStorage.getItem("pap.theme");
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* sans stockage : auto */ } })();
+</script>
 <title>__TITRE__</title>
 <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,__FAVICON__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -54,6 +59,10 @@ a { color: var(--accent); }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, .ligne:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 header { display: grid; gap: 6px; }
+header .tete { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* Interrupteur de thème : auto ◐, clair ☀, sombre ☾ */
+header .tete .theme { font: inherit; font-size: 15px; line-height: 1; min-width: 32px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; }
+header .tete .theme:hover { color: var(--fg); border-color: var(--muted); }
 .surtitre { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 h1 { font-family: var(--f-display); font-weight: 650; font-size: clamp(28px, 4.4vw, 42px); line-height: 1.1; margin: 0; text-wrap: balance; }
 .chapeau { color: var(--muted); max-width: 68ch; margin: 0; }
@@ -163,7 +172,7 @@ footer { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
 <body>
 <div class="page">
   <header>
-    <div class="surtitre">France Inter · depuis 1955</div>
+    <div class="tete"><div class="surtitre">France Inter · depuis 1955</div><button type="button" class="theme" id="interrupteur-theme"></button></div>
     <h1>Liste des émissions du Masque et la Plume</h1>
     <p class="chapeau">Les émissions où la littérature est abordée, attestées par au moins une source en ligne. Une émission est identifiée par la date de sa première diffusion ; le thème est inconnu quand seule une notice sans détail ou un enregistrement l'atteste.</p>
     <div class="chiffres" id="chiffres"></div>
@@ -533,6 +542,34 @@ window.addEventListener("scroll", afficherHaut, { passive: true });
 $("haut").addEventListener("click", () => { window.scrollTo({ top: 0 }); $("q").focus({ preventScroll: true }); });
 
 chiffres(); rendre(); afficherHaut();
+</script>
+<script>
+// Interrupteur de thème : auto (suit le système) → clair → sombre → auto.
+// Le choix vit dans localStorage sous « pap.theme » ; en auto, la clé est supprimée.
+(() => {
+  const CLE = "pap.theme";
+  const SUITE = { auto: "light", light: "dark", dark: "auto" };
+  const ICONE = { auto: "◐", light: "☀", dark: "☾" };
+  const NOM = { auto: "automatique (suit le système)", light: "clair", dark: "sombre" };
+  const racine = document.documentElement, bouton = document.getElementById("interrupteur-theme");
+  const actuel = () => racine.dataset.theme || "auto";
+  const appliquer = t => {
+    if (t === "light" || t === "dark") racine.dataset.theme = t; else delete racine.dataset.theme;
+    const a = actuel();
+    bouton.textContent = ICONE[a];
+    bouton.title = `Thème ${NOM[a]}. Cliquer pour passer en ${NOM[SUITE[a]].split(" ")[0]}.`;
+    bouton.setAttribute("aria-label", bouton.title);
+  };
+  bouton.addEventListener("click", () => {
+    const t = SUITE[actuel()];
+    appliquer(t);
+    try { if (t === "auto") localStorage.removeItem(CLE); else localStorage.setItem(CLE, t); }
+    catch { /* sans stockage : le choix vaut pour la page ouverte */ }
+  });
+  // Un choix fait dans un autre onglet (l'accueil ou la liste) s'applique aussitôt.
+  addEventListener("storage", e => { if (e.key === CLE || e.key === null) appliquer(e.newValue); });
+  appliquer(actuel());
+})();
 </script>
 __ARBITRAGE__
 </body>

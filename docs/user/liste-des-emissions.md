@@ -74,7 +74,8 @@ Une page HTML présente la liste des émissions :
 - un badge « doute » sur la ligne d'une émission qui a des doutes, « à écouter » si elle est renvoyée à l'écoute ;
 - dans les sources de chaque émission, le badge vert `lmelp ✓` de la source vérifiée, les autres sources en gris ;
 - le détail de chaque émission : description, attestations avec liens vers les sources, enregistrements avec leur durée quand elle est connue (`extrait · 3:56 · 14007-18.10.1975-…m4a`) et doutes ;
-- une marque « ✎ arbitré » à côté d'un thème fixé par un arbitrage, avec la justification au survol.
+- une marque « ✎ arbitré » à côté d'un thème fixé par un arbitrage, avec la justification au survol ;
+- l'interrupteur de thème, en haut à droite (voir [Thème clair ou sombre](#theme-clair-ou-sombre)).
 
 ```bash
 uv run --active lmelp-pap page
@@ -419,7 +420,7 @@ Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnee
 
 ### Accueil et pages d'état
 
-L'appli s'ouvre sur l'**accueil** (`/`) ; la liste et ses arbitrages sont sur `/liste` (bouton « Liste et arbitrages », retour par « ← Accueil »).
+L'appli s'ouvre sur l'**accueil** (`/`) ; la liste et ses arbitrages sont sur `/liste`. Les deux pages ont le même bandeau : « pap », les onglets **Accueil** et **Liste et arbitrages** (la page courante en relief) et l'interrupteur de thème, toujours en bout de bandeau. **Collecte** et **Publier** sont des actions de l'accueil : elles n'apparaissent que là, groupées à droite des onglets, après un trait vertical. La page publiée de la liste n'a pas ce bandeau.
 
 Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste ou si un épisode de lmelp porte le fichier (`audio_rel_filename`) d'un de ses enregistrements valides, sinon la maturité de son enregistrement le plus avancé (localisé, téléchargeable, rapatrié, qualifié, valide), sinon « sans enregistrement ».
 
@@ -429,7 +430,19 @@ Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste ou si un
 - **Survoler un compteur** fait ressortir son état dans le graphique et la frise ; **cliquer** ouvre la **page de l'état** : son histogramme (un clic sur une année filtre la liste) et le tableau de ses émissions, trié par ancienneté dans l'état, de la plus ancienne à la plus récente, sauf « rapatrié », trié de l'émission la plus récente à la plus ancienne, et les états sans action, triés par date décroissante ; un clic sur un en-tête trie la colonne, un second inverse le sens. Les pages d'état n'ont pas de colonne de thèmes, presque toutes les émissions de la liste étant « livres » : une émission qui a d'autres thèmes les montre après son titre (« · cinéma, livres »). Le tri choisi sur une page est retenu dans le navigateur et retrouvé à la visite suivante, page par page. L'adresse garde l'état et l'année (`/#etat=telechargeable&annee=2008`).
 - La page **dans lmelp** a une colonne **Intégrée** : le jour et l'heure où le back-office a fait un épisode de l'enregistrement remis par pap (création du document `episodes`). Une émission entrée dans lmelp par son flux RSS ou une page radiofrance.fr affiche « — ».
 
-L'accueil suit le thème clair ou sombre du système. Sans base Mongo, il n'affiche que « sans enregistrement » et « dans lmelp », avec un bandeau. « pap », en haut à gauche, ramène à l'accueil sans filtre.
+Sans base Mongo, il n'affiche que « sans enregistrement » et « dans lmelp », avec un bandeau. Sur l'accueil, « pap » et l'onglet « Accueil » ramènent à l'accueil sans filtre.
+
+### Thème clair ou sombre
+
+L'accueil et la liste suivent le thème clair ou sombre du système, y compris quand il change pendant que la page est ouverte. L'interrupteur, au bout du bandeau de l'appli (en haut à droite de l'en-tête sur la page publiée), force un thème. Chaque clic passe à la position suivante :
+
+| Icône | Thème |
+|---|---|
+| ◐ | automatique : suit le système (par défaut) |
+| ☀ | clair |
+| ☾ | sombre |
+
+Le choix est retenu dans le navigateur (`localStorage`, clé `pap.theme`). Il vaut pour l'accueil comme pour la liste, y compris un onglet déjà ouvert, et se retrouve à la visite suivante. Revenir à ◐ efface le choix. Sans stockage (navigation privée stricte, par exemple), l'interrupteur agit sur la page ouverte seulement. La page publiée et le fichier ouvert sans serveur ont le même interrupteur, mais leur choix est retenu à part, puisqu'ils n'ont pas la même adresse que l'appli.
 
 ### Collecter les sources depuis l'appli
 
