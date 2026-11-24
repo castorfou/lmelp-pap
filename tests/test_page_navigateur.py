@@ -724,10 +724,10 @@ def test_dans_l_appli_la_liste_ramene_a_l_accueil(
         construire_page(dossier, arbitrage=True),
         api={"emissions": donnees_page(dossier), "arbitrages": []},
     )
-    lien = page.get_by_role("link", name="← Accueil")
+    lien = page.locator("header.app nav").get_by_role("link", name="Accueil")
     assert lien.get_attribute("href") == "/"
     publiee = _ouvrir(navigateur, construire_page(dossier))
-    assert publiee.get_by_role("link", name="← Accueil").count() == 0
+    assert publiee.get_by_role("link", name="Accueil").count() == 0
 
 
 def test_la_liste_affiche_la_derniere_et_la_prochaine_verification(

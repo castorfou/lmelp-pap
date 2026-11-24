@@ -635,3 +635,22 @@ def test_l_accueil_declare_des_icones_que_le_serveur_sert(url: str) -> None:
     for lien in liens:
         with urllib.request.urlopen(f"{url}{lien}") as r:
             assert r.headers["Content-Type"].startswith("image/")
+
+
+def test_l_accueil_servi_a_l_interrupteur_de_theme(url: str) -> None:
+    with urllib.request.urlopen(f"{url}/") as r:
+        accueil = r.read().decode()
+
+    head = accueil.split("</head>")[0]
+    assert re.search(r"<script>[^<]*pap\.theme", head)
+    assert 'id="interrupteur-theme"' in accueil
+    assert ':root:not([data-theme="light"])' in accueil
+    assert ':root[data-theme="dark"]' in accueil
+
+
+def test_la_liste_servie_a_l_interrupteur_de_theme(url: str) -> None:
+    with urllib.request.urlopen(f"{url}/liste") as r:
+        liste = r.read().decode()
+
+    assert re.search(r"<script>[^<]*pap\.theme", liste.split("</head>")[0])
+    assert 'id="interrupteur-theme"' in liste

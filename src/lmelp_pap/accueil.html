@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+// Thème forcé (« pap.theme », commun à l'accueil et à la liste) posé avant le rendu.
+(function () { try { var t = localStorage.getItem("pap.theme");
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* sans stockage : auto */ } })();
+</script>
 <title>Accueil - pap</title>
 <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -23,12 +28,14 @@
     :root:not([data-theme="light"]) {
       --fond: #14171c; --carte: #1d2128; --texte: #e6e8eb; --doux: #9aa1ab; --trait: #2e333b;
       --entete: #0d1014; --entete-doux: #8a93a0; --ligne: #262b33; --vise: #e6e8eb;
+      --qualifie: #5b93d6; --lmelp: #58a855;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
     --fond: #14171c; --carte: #1d2128; --texte: #e6e8eb; --doux: #9aa1ab; --trait: #2e333b;
     --entete: #0d1014; --entete-doux: #8a93a0; --ligne: #262b33; --vise: #e6e8eb;
+    --qualifie: #5b93d6; --lmelp: #58a855;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -37,11 +44,19 @@
   header.app { display: flex; gap: 16px; align-items: baseline; padding: 12px 20px; background: var(--entete); color: var(--entete-texte); }
   header.app .logo { font-size: 16px; font-weight: 700; color: var(--entete-texte); text-decoration: none; }
   header.app span { color: var(--entete-doux); font-size: 12px; }
-  header.app a.vers-liste { margin-left: auto; color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid #fff4; border-radius: 6px; padding: 3px 10px; }
-  header.app a.vers-liste:hover { background: #fff2; }
+  /* Onglets de navigation, communs à l'accueil et à la liste (bandeau recopié dans arbitrage.html) */
+  header.app nav { margin-left: auto; display: flex; gap: 4px; }
+  header.app nav a { color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 10px; }
+  header.app nav a:hover { background: #fff2; }
+  header.app nav a[aria-current="page"] { border-color: #fff4; background: #fff1; font-weight: 600; }
   /* Collecte des sources : le bouton de l'en-tête suit la collecte en cours */
   header.app button.collecter { font: inherit; font-size: 13px; color: var(--entete-texte); background: none; border: 1px solid #fff4; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
   header.app button.collecter:hover { background: #fff2; }
+  /* Les actions propres à l'accueil (Collecte, Publier), à part des onglets */
+  header.app .actions { display: flex; gap: 8px; border-left: 1px solid #fff3; padding-left: 16px; }
+  /* Interrupteur de thème : auto ◐, clair ☀, sombre ☾ */
+  header.app button.theme { font: inherit; font-size: 14px; line-height: 1; min-width: 30px; color: var(--entete-texte); background: none; border: 1px solid #fff4; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+  header.app button.theme:hover { background: #fff2; }
   dialog.boite .sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
   dialog.boite .recollecte { display: flex; gap: 6px; align-items: center; margin-top: 12px; font-size: 13px; }
   main { max-width: 1180px; margin: 0 auto; padding: 16px 16px 0; }
@@ -156,7 +171,7 @@
 </style>
 </head>
 <body>
-<header class="app"><a class="logo" href="/" id="logo">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><a class="vers-liste" href="/liste">Liste et arbitrages</a><button class="collecter" id="collecter" title="Collecter les sources dans le cache">Collecte</button></header>
+<header class="app"><a class="logo" href="/" id="logo">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><nav aria-label="Pages de pap"><a href="/" aria-current="page">Accueil</a><a href="/liste">Liste et arbitrages</a></nav><div class="actions" role="group" aria-label="Actions de l'accueil"><button class="collecter" id="collecter" title="Collecter les sources dans le cache">Collecte</button></div><button class="theme" id="interrupteur-theme" type="button"></button></header>
 <main id="accueil"></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog class="boite" id="boite" aria-labelledby="boite-titre"></dialog>
@@ -930,7 +945,8 @@ function rendre() {
   ajusterEcran();
 }
 // « pap » ramène à l'accueil, sans filtre ni page d'état.
-$("logo").addEventListener("click", ev => { ev.preventDefault(); vue.etat = null; vue.annee = null; vue.choix.clear(); rendre(); scrollTo(0, 0); });
+// « pap » et l'onglet « Accueil » ramènent à l'accueil sans filtre, sans recharger.
+document.querySelectorAll('header.app a[href="/"]').forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); vue.etat = null; vue.annee = null; vue.choix.clear(); rendre(); scrollTo(0, 0); }));
 addEventListener("resize", () => { if (!vue.etat) rendre(); });
 addEventListener("hashchange", () => { lireAdresse(); rendre(); });
 
@@ -948,7 +964,7 @@ fetch("/api/donnees").then(r => r.json()).then(d => { preparer(d); lireAdresse()
   // même allure que le bouton Collecte de l'en-tête
   bouton.id = "publier"; bouton.className = "collecter"; bouton.textContent = "Publier";
   bouton.title = "Publier la liste et les décisions sur GitHub";
-  document.querySelector("header.app").append(bouton);
+  document.querySelector("header.app .actions").append(bouton);  // action de l'accueil, après Collecte
   const json = async r => { const d = await r.json(); if (!r.ok) throw new Error(d.erreur || r.status); return d; };
   function informer(titre, texte) {
     const d = $("boite");
@@ -1036,6 +1052,34 @@ async function suivreCollecte(t) {
 }
 $("collecter").addEventListener("click", ouvrirCollecte);
 suivreCollecte();
+</script>
+<script>
+// Interrupteur de thème : auto (suit le système) → clair → sombre → auto.
+// Le choix vit dans localStorage sous « pap.theme » ; en auto, la clé est supprimée.
+(() => {
+  const CLE = "pap.theme";
+  const SUITE = { auto: "light", light: "dark", dark: "auto" };
+  const ICONE = { auto: "◐", light: "☀", dark: "☾" };
+  const NOM = { auto: "automatique (suit le système)", light: "clair", dark: "sombre" };
+  const racine = document.documentElement, bouton = document.getElementById("interrupteur-theme");
+  const actuel = () => racine.dataset.theme || "auto";
+  const appliquer = t => {
+    if (t === "light" || t === "dark") racine.dataset.theme = t; else delete racine.dataset.theme;
+    const a = actuel();
+    bouton.textContent = ICONE[a];
+    bouton.title = `Thème ${NOM[a]}. Cliquer pour passer en ${NOM[SUITE[a]].split(" ")[0]}.`;
+    bouton.setAttribute("aria-label", bouton.title);
+  };
+  bouton.addEventListener("click", () => {
+    const t = SUITE[actuel()];
+    appliquer(t);
+    try { if (t === "auto") localStorage.removeItem(CLE); else localStorage.setItem(CLE, t); }
+    catch { /* sans stockage : le choix vaut pour la page ouverte */ }
+  });
+  // Un choix fait dans un autre onglet (l'accueil ou la liste) s'applique aussitôt.
+  addEventListener("storage", e => { if (e.key === CLE || e.key === null) appliquer(e.newValue); });
+  appliquer(actuel());
+})();
 </script>
 </body>
 </html>
