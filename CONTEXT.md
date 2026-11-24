@@ -61,7 +61,7 @@ Le niveau atteint par un enregistrement intégral sur le chemin qui le mène à 
 _Avoid_ : statut, état d'avancement, étape, voie d'obtention, trouvé, hors NAS
 
 **Qualification** :
-Le jugement porté à l'écoute sur un enregistrement : correspond-il à cette émission, est-ce une émission littéraire, est-il complet, le retient-on ? Elle porte sur l'enregistrement, pas sur l'émission : un enregistrement non littéraire n'est peut-être pas celui de cette émission, et ne change pas le thème de l'émission. C'est elle qui départage plusieurs intégraux d'une même émission.
+Le jugement porté à l'écoute sur un enregistrement : un verdict, favorable ou écarté, et un écart porte toujours son motif. À l'écoute, on vérifie qu'il correspond à cette émission, que c'est une émission littéraire, qu'il est complet et qu'on le retient ; le motif dit ce qui a manqué. Elle porte sur l'enregistrement, pas sur l'émission : un enregistrement non littéraire n'est peut-être pas celui de cette émission, et ne change pas le thème de l'émission. C'est elle qui départage plusieurs intégraux d'une même émission.
 _Avoid_ : validation, arbitrage (réservé à l'émission), contrôle
 
 **Animateur** :
