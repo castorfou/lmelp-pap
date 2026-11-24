@@ -879,7 +879,6 @@ emission_id,source,source_id,date,themes,titre,url,extrait
 2011-02-13,anciennes_listes,em-100009,2011-02-13,livres,Livres,,non
 2011-02-13,ina,RD_4716142.001,2011-02-13,livres,Livres : émission du 13 février 2011,https://catalogue.ina.fr/doc/TV-RADIO/RD_4716142.001/livres-emission-du-13-fevrier-2011,non
 2011-02-13,radiofrance,livres-1996181,2011-02-13,livres,Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/livres-1996181,non
-2011-02-20,anciennes_listes,em-100011,2011-02-20,livres,21e Prix des Auditeurs du Masque et la Plume,,non
 2011-03-13,anciennes_listes,em-100998,2011-03-13,livres,Livres,,non
 2011-03-13,ina,RD_4777253.001,2011-03-13,livres,Livres,https://catalogue.ina.fr/doc/TV-RADIO/RD_4777253.001/livres,non
 2011-03-13,radiofrance,livres-5283196,2011-03-13,livres,Livres,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/livres-5283196,non
@@ -1037,7 +1036,6 @@ emission_id,source,source_id,date,themes,titre,url,extrait
 2014-10-26,ina,RD_6049139.001,2014-10-26,livres,Le masque et la plume : émission du 26 octobre 2014,https://catalogue.ina.fr/doc/TV-RADIO/RD_6049139.001/le-masque-et-la-plume-emission-du-26-octobre-2014,non
 2014-10-26,radiofrance,les-livres-a-lire-6046129,2014-10-26,livres,Les livres à lire,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-6046129,non
 2014-10-26,radiofrance,pour-que-tu-ne-te-perdes-pas-dans-le-quartier-7766157,2014-10-26,livres,"""Pour que tu ne te perdes pas dans le quartier"" : le roman du tout nouveau Prix Nobel encensé par le Masque",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/pour-que-tu-ne-te-perdes-pas-dans-le-quartier-7766157,oui
-2014-11-09,ina,RD_6055269.001,2014-11-09,livres,Le masque et la plume : émission du 9 novembre 2014,https://catalogue.ina.fr/doc/TV-RADIO/RD_6055269.001/le-masque-et-la-plume-emission-du-9-novembre-2014,non
 2014-11-23,ina,RD_6069311.001,2014-11-23,livres,Le masque et la plume : émission du 23 novembre 2014,https://catalogue.ina.fr/doc/TV-RADIO/RD_6069311.001/le-masque-et-la-plume-emission-du-23-novembre-2014,non
 2014-11-23,radiofrance,les-livres-a-mettre-sur-nos-etageres-1893508,2014-11-23,livres,Les livres à mettre sur nos étagères,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-mettre-sur-nos-etageres-1893508,non
 2014-11-23,radiofrance,lydie-salvayre-pas-pleurer-7895432,2014-11-23,livres,"""Pas pleurer"" de Lydie Salvayre, 2014",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/lydie-salvayre-pas-pleurer-7895432,oui
@@ -1086,11 +1084,14 @@ emission_id,source,source_id,date,themes,titre,url,extrait
 2015-12-27,ina,RD_6363054.001,2015-12-27,livres,Le masque et la plume : émission du 27 décembre 2015,https://catalogue.ina.fr/doc/TV-RADIO/RD_6363054.001/le-masque-et-la-plume-emission-du-27-decembre-2015,non
 2015-12-27,radiofrance,les-livres-a-lire-ou-pas-4888367,2015-12-27,livres,Les livres à lire ou pas,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-4888367,non
 2016-01-17,ina,RD_6381781.001,2016-01-17,livres,Le masque et la plume : émission du 17 janvier 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6381781.001/le-masque-et-la-plume-emission-du-17-janvier-2016,non
+2016-01-17,lmelp,les-livres-a-lire-ou-pas-4946471,2016-01-17,livres,Le Masque et la Plume du 17 janvier 2016,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-4946471,non
 2016-01-17,radiofrance,les-livres-a-lire-ou-pas-4946471,2016-01-17,livres,Les livres à lire ou pas,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-4946471,non
 2016-02-14,ina,RD_6403454.001,2016-02-14,livres,Le masque et la plume : émission du 14 février 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6403454.001/le-masque-et-la-plume-emission-du-14-fevrier-2016,non
+2016-02-14,lmelp,les-livres-dont-on-parle-3882001,2016-02-14,livres,Le Masque et la Plume du 14 février 2016,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-dont-on-parle-3882001,non
 2016-02-14,radiofrance,les-livres-dont-on-parle-3882001,2016-02-14,livres,Les livres dont on parle,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-dont-on-parle-3882001,non
 2016-03-13,ina,RD_6422325.001,2016-03-13,livres,Livres,https://catalogue.ina.fr/doc/TV-RADIO/RD_6422325.001/livres,non
 2016-03-13,ina,RD_6422340.001,2016-03-14,,Le masque et la plume : émission du 14 mars 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6422340.001/le-masque-et-la-plume-emission-du-14-mars-2016,non
+2016-03-13,lmelp,les-livres-a-lire-ou-pas-9784788,2016-03-13,livres,Le Masque et la Plume du 13 mars 2016,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-9784788,non
 2016-03-13,radiofrance,il-est-avantageux-d-avoir-ou-aller-d-emmanuel-carrere-5725440,2016-03-13,livres,"""Il est avantageux d'avoir où aller"", articles et textes éblouissants",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/il-est-avantageux-d-avoir-ou-aller-d-emmanuel-carrere-5725440,oui
 2016-03-13,radiofrance,les-livres-a-lire-ou-pas-9784788,2016-03-13,livres,Les livres à lire ou pas,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-9784788,non
 2016-03-13,wayback_podcast,ITEMA_20935098,2016-03-13,,,,oui
@@ -1101,13 +1102,16 @@ emission_id,source,source_id,date,themes,titre,url,extrait
 2016-03-27,wayback_podcast,ITEMA_20946575,2016-03-27,,,,non
 2016-04-24,ina,RD_6457350.001,2016-04-24,livres,Les livres à lire ou pas,https://catalogue.ina.fr/doc/TV-RADIO/RD_6457350.001/les-livres-a-lire-ou-pas,non
 2016-04-24,ina,RD_6457365.001,2016-04-25,,Le masque et la plume : émission du 25 avril 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6457365.001/le-masque-et-la-plume-emission-du-25-avril-2016,non
+2016-04-24,lmelp,les-livres-a-lire-ou-pas-4020760,2016-04-24,livres,Le Masque et la Plume du 24 avril 2016,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-4020760,non
 2016-04-24,radiofrance,les-livres-a-lire-ou-pas-4020760,2016-04-24,livres,Les livres à lire ou pas,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-4020760,non
 2016-04-24,radiofrance,memoire-de-fille-6819586,2016-04-24,livres,"""Mémoire de fille"" : enthousiasme et admiration chez les critiques du Masque",https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/memoire-de-fille-6819586,oui
 2016-05-15,ina,RD_6476511.001,2016-05-15,livres,Le masque et la plume : émission du 15 mai 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6476511.001/le-masque-et-la-plume-emission-du-15-mai-2016,non
 2016-05-15,ina,RD_6476526.001,2016-05-16,,Le masque et la plume : émission du 16 mai 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6476526.001/le-masque-et-la-plume-emission-du-16-mai-2016,non
+2016-05-15,lmelp,les-livres-a-lire-ou-pas-1440153,2016-05-15,livres,Le Masque et la Plume du 15 mai 2016,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-1440153,non
 2016-05-15,radiofrance,les-livres-a-lire-ou-pas-1440153,2016-05-15,livres,Les livres à lire ou pas,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/les-livres-a-lire-ou-pas-1440153,non
 2016-06-05,ina,RD_6482864.001,2016-06-05,livres,Le masque et la plume : émission du 05 juin 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6482864.001/le-masque-et-la-plume-emission-du-05-juin-2016,non
 2016-06-05,ina,RD_6482879.001,2016-06-06,,Le masque et la plume : émission du 06 juin 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6482879.001/le-masque-et-la-plume-emission-du-06-juin-2016,non
+2016-06-05,lmelp,et-si-on-lisait-4681667,2016-06-05,livres,Le Masque et la Plume du 5 juin 2016,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/et-si-on-lisait-4681667,non
 2016-06-05,radiofrance,et-si-on-lisait-4681667,2016-06-05,livres,Et si on lisait…,https://www.radiofrance.fr/franceinter/podcasts/le-masque-et-la-plume/et-si-on-lisait-4681667,non
 2016-06-05,wayback_podcast,ITEMA_21002286,2016-06-05,,,,non
 2016-07-03,ina,RD_6509634.001,2016-07-03,livres,Le masque et la plume : émission du 03 juillet 2016,https://catalogue.ina.fr/doc/TV-RADIO/RD_6509634.001/le-masque-et-la-plume-emission-du-03-juillet-2016,non
