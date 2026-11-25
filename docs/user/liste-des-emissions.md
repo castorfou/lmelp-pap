@@ -559,7 +559,7 @@ Une mise à disposition est **refusée**, sans rien écrire, quand :
 
 - un fichier de même nom, mais d'un autre contenu (autre empreinte SHA-256), existe déjà dans le dossier de lmelp (rien n'est écrasé) ;
 - l'émission est déjà dans lmelp ;
-- un épisode de lmelp (collection `episodes`) est daté à trois jours près de l'émission, quelle que soit sa voie d'entrée : c'est un doublon (« 2016-06-05 : doublon, épisode lmelp du 2016-06-06 (« … ») ») ;
+- un épisode de lmelp (collection `episodes`) est daté à trois jours près de l'émission, quelle que soit sa voie d'entrée : c'est un doublon (« 2016-06-05 : doublon, épisode lmelp du 2016-06-06 (« … ») »). Un épisode de moins de 30 minutes, comme les extraits « Le Masque et les Goncourt », n'est pas un doublon ;
 - l'émission n'a pas d'enregistrement qualifié, ou son fichier manque ou a changé depuis le rapatriement.
 
 Un fichier de même nom et de même empreinte que l'enregistrement est celui d'une mise à disposition interrompue après la copie (panne, redémarrage) : relancer la mise à disposition la termine, sans recopier le fichier (fiche écrite, passage à valide), et le journal le signale (« …, reprise : fichier déjà copié, même sha256 »).
