@@ -41,19 +41,26 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; }
   body { font: 14px/1.4 system-ui, sans-serif; background: var(--fond); color: var(--texte); }
-  header.app { display: flex; gap: 16px; align-items: baseline; padding: 12px 20px; background: var(--entete); color: var(--entete-texte); }
-  header.app .logo { font-size: 16px; font-weight: 700; color: var(--entete-texte); text-decoration: none; }
+  header.app { display: flex; gap: 16px; align-items: center; padding: 12px 20px; background: var(--entete); color: var(--entete-texte); }
+  header.app .logo { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; color: var(--entete-texte); text-decoration: none; }
+  header.app .logo img { display: block; border-radius: 6px; }
   header.app span { color: var(--entete-doux); font-size: 12px; }
   /* Onglets de navigation, communs à l'accueil et à la liste (bandeau recopié dans arbitrage.html) */
   header.app nav { margin-left: auto; display: flex; gap: 4px; }
-  header.app nav a { color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 10px; }
+  header.app nav a { white-space: nowrap; display: inline-grid; color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 10px; }
+  /* L'onglet réserve la largeur de son texte en gras : passer de l'un à l'autre ne bouge rien */
+  header.app nav a::after { content: attr(data-texte); font-weight: 600; height: 0; visibility: hidden; overflow: hidden; }
   header.app nav a:hover { background: #fff2; }
   header.app nav a[aria-current="page"] { border-color: #fff4; background: #fff1; font-weight: 600; }
   /* Collecte des sources : le bouton de l'en-tête suit la collecte en cours */
   header.app button.collecter { font: inherit; font-size: 13px; color: var(--entete-texte); background: none; border: 1px solid #fff4; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
   header.app button.collecter:hover { background: #fff2; }
   /* Les actions propres à l'accueil (Collecte, Publier), à part des onglets */
-  header.app .actions { display: flex; gap: 8px; border-left: 1px solid #fff3; padding-left: 16px; }
+  /* Largeur fixe, la même que la réserve de la liste (arbitrage.html) : les onglets
+     gardent leur place d'une page à l'autre et pendant une collecte */
+  header.app .actions { display: flex; gap: 8px; border-left: 1px solid #fff3; padding-left: 16px; flex: none; width: 190px; }
+  header.app .actions button { flex: none; white-space: nowrap; }
+  header.app .actions #collecter { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* Interrupteur de thème : auto ◐, clair ☀, sombre ☾ */
   header.app button.theme { font: inherit; font-size: 14px; line-height: 1; min-width: 30px; color: var(--entete-texte); background: none; border: 1px solid #fff4; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
   header.app button.theme:hover { background: #fff2; }
@@ -171,7 +178,7 @@
 </style>
 </head>
 <body>
-<header class="app"><a class="logo" href="/" id="logo">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><nav aria-label="Pages de pap"><a href="/" aria-current="page">Accueil</a><a href="/liste">Liste et arbitrages</a></nav><div class="actions" role="group" aria-label="Actions de l'accueil"><button class="collecter" id="collecter" title="Collecter les sources dans le cache">Collecte</button></div><button class="theme" id="interrupteur-theme" type="button"></button></header>
+<header class="app"><a class="logo" href="/" id="logo"><img src="/favicon-32x32.png" srcset="/apple-touch-icon.png 2x" alt="" width="32" height="32">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span><span id="resume"></span><nav aria-label="Pages de pap"><a href="/" aria-current="page" data-texte="Accueil">Accueil</a><a href="/liste" data-texte="Liste et arbitrages">Liste et arbitrages</a></nav><div class="actions" role="group" aria-label="Actions de l'accueil"><button class="collecter" id="collecter" title="Collecter les sources dans le cache">Collecte</button></div><button class="theme" id="interrupteur-theme" type="button"></button></header>
 <main id="accueil"></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog class="boite" id="boite" aria-labelledby="boite-titre"></dialog>
@@ -938,7 +945,9 @@ function ecrireAdresse() {
 }
 function rendre() {
   const n = compter(EMISSIONS);
-  $("resume").textContent = `${EMISSIONS.length} émissions · ${n.lmelp} dans lmelp · ${n.valide} valides`;
+  // « 0 valides » ne dit rien : le morceau n'apparaît qu'avec des valides.
+  $("resume").textContent = [`${EMISSIONS.length} émissions`, `${n.lmelp} dans lmelp`,
+    ...(n.valide ? [`${n.valide} valides`] : [])].join(" · ");
   ecrireAdresse();
   (vue.etat ? pageEtat : accueil)($("accueil"));
   afficherRefus($("accueil"));

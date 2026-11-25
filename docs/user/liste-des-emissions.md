@@ -420,7 +420,9 @@ Les deux requêtes `POST` renvoient les données à jour, comme `GET /api/donnee
 
 ### Accueil et pages d'état
 
-L'appli s'ouvre sur l'**accueil** (`/`) ; la liste et ses arbitrages sont sur `/liste`. Les deux pages ont le même bandeau : « pap », les onglets **Accueil** et **Liste et arbitrages** (la page courante en relief) et l'interrupteur de thème, toujours en bout de bandeau. **Collecte** et **Publier** sont des actions de l'accueil : elles n'apparaissent que là, groupées à droite des onglets, après un trait vertical. La page publiée de la liste n'a pas ce bandeau.
+L'appli s'ouvre sur l'**accueil** (`/`) ; la liste et ses arbitrages sont sur `/liste`. Les deux pages ont le même bandeau : l'icône de pap (le masque et la plume) suivie de « pap », les onglets **Accueil** et **Liste et arbitrages** (la page courante en relief) et l'interrupteur de thème, toujours en bout de bandeau. Ses éléments sont centrés en hauteur. **Collecte** et **Publier** sont des actions de l'accueil : elles n'apparaissent que là, groupées à droite des onglets, après un trait vertical. Les onglets occupent la même place sur les deux pages : la liste garde vide la place de ces actions, et pendant une collecte le texte du bouton **Collecte** est abrégé plutôt que de déplacer les onglets. La page publiée de la liste n'a pas ce bandeau.
+
+Sur l'accueil, le bandeau résume les données : le nombre d'émissions, celles qui sont dans lmelp, et celles qui sont valides (en attente de lmelp) quand il y en a.
 
 Chaque émission y a un **état** : « dans lmelp » si lmelp l'atteste ou si un épisode de lmelp porte le fichier (`audio_rel_filename`) d'un de ses enregistrements valides, sinon la maturité de son enregistrement le plus avancé (localisé, téléchargeable, rapatrié, qualifié, valide), sinon « sans enregistrement ».
 
