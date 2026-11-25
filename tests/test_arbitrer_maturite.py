@@ -1136,6 +1136,41 @@ def test_un_episode_lmelp_a_trois_jours_pres_refuse_la_remise(
     assert list(depot.base["pap_remises"].find()) == []
 
 
+def test_un_extrait_lmelp_du_meme_jour_ne_bloque_pas_la_remise(
+    url: str, tmp_path: Path, depot: Depot
+) -> None:
+    # issue #128 : lmelp porte des extraits de quelques minutes (« Le Masque
+    # et les Goncourt », 1 à 18 min) datés du jour de l'émission entière
+    _qualifier_2014(url)
+    depot.base["episodes"].insert_one(
+        {
+            "titre": 'Le Masque et les Goncourt : "Pas pleurer" de Lydie Salvayre',
+            "date": datetime(2014, 9, 28),
+            "audio_rel_filename": "2014/14007-28.09.2014-ITEMA-2024F4007E0060.m4a",
+            "duree": 540,
+        }
+    )
+
+    donnees = _remettre(url, "2014-09-28")
+
+    assert donnees["remise"]["refus"] == []
+    assert (tmp_path / "audios-lmelp" / FICHIER_2014).exists()
+
+
+def test_un_episode_lmelp_d_une_demi_heure_reste_un_doublon(
+    url: str, depot: Depot
+) -> None:
+    _qualifier_2014(url)
+    depot.base["episodes"].insert_one(
+        {"titre": "Les livres", "date": datetime(2014, 9, 28), "duree": 1800}
+    )
+
+    donnees = _remettre(url, "2014-09-28")
+
+    (refus,) = donnees["remise"]["refus"]
+    assert "doublon" in refus["detail"]
+
+
 def test_un_episode_lmelp_d_une_autre_semaine_ne_bloque_rien(
     url: str, depot: Depot
 ) -> None:

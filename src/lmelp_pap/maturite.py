@@ -84,6 +84,10 @@ ECHANGES = "pap_echanges"
 REMISES = "pap_remises"  # fiches des mises à disposition, lues par lmelp
 EPISODES_LMELP = "episodes"  # les épisodes de lmelp, dans la même base
 DOUBLON = 3  # jours d'écart entre une émission et un épisode lmelp de doublon
+# Durée (s) sous laquelle un épisode lmelp est un extrait, jamais un doublon :
+# les extraits (« Le Masque et les Goncourt ») durent 1 à 18 min, les
+# émissions entières plus de 40 min (issue #128).
+EXTRAIT = 30 * 60
 ETAT = "pap_etat"  # état de l'appli : date de la dernière vérification complète
 SOURCE = "radiofrance"
 ENTETES = {"User-Agent": "lmelp-pap (https://github.com/castorfou/lmelp-pap)"}
@@ -766,12 +770,16 @@ class Depot:
         (collection ``episodes``) : la date d'un épisode est parfois celle de
         sa publication, un ou deux jours après la diffusion, ou un autre jour
         de la semaine pour les anciens ; une fenêtre de trois jours ne touche
-        jamais l'émission de la semaine voisine."""
+        jamais l'émission de la semaine voisine. Un extrait (``duree`` sous
+        ``EXTRAIT``) n'en est pas un ; un épisode sans durée, si."""
         debut = datetime(jour.year, jour.month, jour.day) - timedelta(days=jours)
         fin = debut + timedelta(days=2 * jours + 1)
         return list(
             self.base[EPISODES_LMELP].find(
-                {"date": {"$gte": debut, "$lt": fin}},
+                {
+                    "date": {"$gte": debut, "$lt": fin},
+                    "duree": {"$not": {"$lt": EXTRAIT}},
+                },
                 {"date": True, "titre": True, "audio_rel_filename": True},
             )
         )
