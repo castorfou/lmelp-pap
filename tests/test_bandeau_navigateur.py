@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from lmelp_pap.page import construire_page, donnees_page
+from lmelp_pap.page import construire_page, donnees_page, icone
 
 
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -48,6 +48,8 @@ def contexte(navigateur: Any) -> Iterator[Any]:
         chemin = "/" + route.request.url.split("/", 3)[-1].split("?")[0].split("#")[0]
         if chemin in pages:
             route.fulfill(body=pages[chemin], content_type="text/html; charset=utf-8")
+        elif chemin == "/favicon-32x32.png":
+            route.fulfill(body=icone("favicon-32x32.png"), content_type="image/png")
         elif chemin == "/api/donnees":
             route.fulfill(body=json.dumps(donnees), content_type="application/json")
         elif chemin.startswith("/api/"):
@@ -125,6 +127,80 @@ def test_les_bandeaux_des_deux_pages_ont_la_meme_allure(contexte: Any) -> None:
     assert styles[0] == styles[1]
     # Le bandeau occupe toute la largeur, en haut de la page.
     assert styles[0][3:6] == [0, 0, 1280]
+
+
+def test_le_logo_porte_l_icone_de_pap(contexte: Any) -> None:
+    for chemin in ("/", "/liste"):
+        page = _ouvrir(contexte, chemin)
+        logo = page.locator("header.app .logo")
+        image = logo.locator("img")
+        image.wait_for()
+        assert image.get_attribute("src") == "/favicon-32x32.png"
+        # Décorative : le lien reste nommé « pap ».
+        assert image.get_attribute("alt") == ""
+        assert logo.inner_text() == "pap"
+        assert page.wait_for_function(
+            "() => document.querySelector('header.app .logo img').naturalWidth > 0"
+        )
+        # L'icône est devant « pap ».
+        assert logo.evaluate("a => a.firstElementChild.tagName") == "IMG"
+
+
+@pytest.mark.parametrize("largeur", [1280, 1386, 900])
+def test_les_elements_du_bandeau_sont_centres_en_hauteur(
+    contexte: Any, largeur: int
+) -> None:
+    for chemin in ("/", "/liste"):
+        page = _ouvrir(contexte, chemin)
+        page.set_viewport_size({"width": largeur, "height": 900})
+        page.locator(".compteur, .arbitrage").first.wait_for()
+        ecarts = page.evaluate(
+            """() => {
+                 const b = document.querySelector("header.app");
+                 const s = getComputedStyle(b), r = b.getBoundingClientRect();
+                 const haut = r.top + parseFloat(s.paddingTop);
+                 const bas = r.bottom - parseFloat(s.paddingBottom);
+                 const milieu = (haut + bas) / 2;
+                 return [...b.children].map(e => {
+                   const c = e.getBoundingClientRect();
+                   return [e.className || e.id, (c.top + c.bottom) / 2 - milieu];
+                 });
+               }"""
+        )
+        decales = [(nom, ecart) for nom, ecart in ecarts if abs(ecart) > 1]
+        assert decales == [], f"{chemin} à {largeur}px"
+
+
+def _place_des_onglets(page: Any) -> list[list[int]]:
+    """[gauche, largeur] du menu et de chacun de ses onglets."""
+    places: list[list[int]] = page.evaluate(
+        """() => [document.querySelector("header.app nav"),
+                  ...document.querySelectorAll("header.app nav a")]
+                 .map(e => { const r = e.getBoundingClientRect();
+                             return [Math.round(r.left), Math.round(r.width)]; })"""
+    )
+    return places
+
+
+@pytest.mark.parametrize("largeur", [1280, 1386, 1600])
+def test_les_onglets_restent_au_meme_endroit_d_une_page_a_l_autre(
+    contexte: Any, largeur: int
+) -> None:
+    places = []
+    for chemin in ("/", "/liste"):
+        page = _ouvrir(contexte, chemin)
+        page.set_viewport_size({"width": largeur, "height": 900})
+        places.append(_place_des_onglets(page))
+    assert places[0] == places[1]
+
+
+def test_une_collecte_en_cours_ne_deplace_pas_les_onglets(contexte: Any) -> None:
+    page = _ouvrir(contexte, "/")
+    avant = _place_des_onglets(page)
+    page.evaluate(
+        "document.getElementById('collecter').textContent = 'Collecte : radiofrance…'"
+    )
+    assert _place_des_onglets(page) == avant
 
 
 def test_collecte_reste_propre_a_l_accueil(contexte: Any) -> None:

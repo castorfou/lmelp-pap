@@ -145,6 +145,25 @@ def test_les_compteurs_comptent_les_emissions_par_etat(navigateur: Any) -> None:
     assert _compteurs(page) == {e: attendus[e] for e in ETATS}
 
 
+def test_le_resume_compte_les_valides(navigateur: Any) -> None:
+    page = _ouvrir(navigateur)
+    n = _comptes(_donnees())["valide"]
+    assert page.locator("#resume").inner_text().endswith(f" · {n} valides")
+
+
+def test_le_resume_omet_les_valides_quand_il_n_y_en_a_aucune(
+    navigateur: Any,
+) -> None:
+    donnees = _donnees()
+    for e in donnees["emissions"]:
+        if e["maturite"] == "valide":
+            e["maturite"] = "qualifie"
+    page = _ouvrir(navigateur, donnees)
+    resume = page.locator("#resume").inner_text()
+    assert "dans lmelp" in resume
+    assert "valide" not in resume
+
+
 def test_aucun_role_n_apparait(navigateur: Any) -> None:
     texte = _ouvrir(navigateur).locator("body").inner_text()
     assert "Archéologue" not in texte

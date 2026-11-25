@@ -6,12 +6,18 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --entete: #0d1014; --entete-doux: #8a93a0; } }
 :root[data-theme="dark"] { --entete: #0d1014; --entete-doux: #8a93a0; }
 body { margin: 0; }
-header.app { display: flex; gap: 16px; align-items: baseline; padding: 12px 20px; background: var(--entete); color: var(--entete-texte); font: 14px/1.4 system-ui, sans-serif;
+header.app { display: flex; gap: 16px; align-items: center; padding: 12px 20px; background: var(--entete); color: var(--entete-texte); font: 14px/1.4 system-ui, sans-serif;
   margin: -28px calc(-1 * max(16px, env(safe-area-inset-right, 0px))) 24px calc(-1 * max(16px, env(safe-area-inset-left, 0px))); }
-header.app .logo { font-size: 16px; font-weight: 700; color: var(--entete-texte); text-decoration: none; }
+header.app .logo { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; color: var(--entete-texte); text-decoration: none; }
+header.app .logo img { display: block; border-radius: 6px; }
 header.app span { color: var(--entete-doux); font-size: 12px; }
 header.app nav { margin-left: auto; display: flex; gap: 4px; }
-header.app nav a { color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 10px; }
+header.app nav a { white-space: nowrap; display: inline-grid; color: var(--entete-texte); font-size: 13px; text-decoration: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 10px; }
+/* L'onglet réserve la largeur de son texte en gras : passer de l'un à l'autre ne bouge rien */
+header.app nav a::after { content: attr(data-texte); font-weight: 600; height: 0; visibility: hidden; overflow: hidden; }
+/* La place des actions de l'accueil (Collecte, Publier : même largeur que
+   header.app .actions de accueil.html), pour que les onglets n'y bougent pas */
+header.app .reserve { flex: none; width: 190px; }
 header.app nav a:hover { background: #fff2; }
 header.app nav a[aria-current="page"] { border-color: #fff4; background: #fff1; font-weight: 600; }
 header.app button.theme { font: inherit; font-size: 14px; line-height: 1; min-width: 30px; color: var(--entete-texte); background: none; border: 1px solid #fff4; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
@@ -55,8 +61,8 @@ const RAISONS = ["titre explicite", "écouté l'enregistrement", "connaissance d
 // Le bandeau de l'accueil, onglet « Liste et arbitrages » courant ; l'interrupteur
 // de thème de l'en-tête de la page y passe (ses écouteurs le suivent).
 document.body.insertAdjacentHTML("afterbegin",
-  `<header class="app"><a class="logo" href="/">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span>` +
-  `<nav aria-label="Pages de pap"><a href="/">Accueil</a><a href="/liste" aria-current="page">Liste et arbitrages</a></nav></header>`);
+  `<header class="app"><a class="logo" href="/"><img src="/favicon-32x32.png" srcset="/apple-touch-icon.png 2x" alt="" width="32" height="32">pap</a><span>Le Masque &amp; la Plume, archivage patrimonial</span>` +
+  `<nav aria-label="Pages de pap"><a href="/" data-texte="Accueil">Accueil</a><a href="/liste" aria-current="page" data-texte="Liste et arbitrages">Liste et arbitrages</a></nav><div class="reserve" aria-hidden="true"></div></header>`);
 document.querySelector("header.app").append(document.getElementById("interrupteur-theme"));
 
 document.querySelector(".page > header").insertAdjacentHTML("afterend",
